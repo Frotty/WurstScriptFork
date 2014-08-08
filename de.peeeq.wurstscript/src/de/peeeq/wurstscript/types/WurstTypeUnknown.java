@@ -1,5 +1,7 @@
 package de.peeeq.wurstscript.types;
 
+import org.eclipse.jdt.annotation.Nullable;
+
 import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
@@ -46,13 +48,23 @@ public class WurstTypeUnknown extends WurstType {
 
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		throw new Error("not implemented");
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNoExpr();
+	}
+	
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other;
+	}
+	
+	@Override
+	public int hashCode() {
+		return System.identityHashCode(this);
 	}
 
 }

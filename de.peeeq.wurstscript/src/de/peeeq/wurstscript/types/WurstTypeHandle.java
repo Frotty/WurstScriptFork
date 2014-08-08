@@ -1,5 +1,7 @@
 package de.peeeq.wurstscript.types;
 
+import org.eclipse.jdt.annotation.Nullable;
+
 import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.JassIm;
@@ -19,16 +21,16 @@ public class WurstTypeHandle extends WurstTypePrimitive {
 		return other instanceof WurstTypeHandle;
 	}
 
-
-
 	public static WurstTypeHandle instance() {
 		return instance;
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
+	
+	
 
 	
 }

@@ -70,19 +70,10 @@ public abstract class WurstType {
 	@Override public String toString() {
 		return getName();
 	}
-	/**
-	 * @deprecated  use {@link #equalsType(WurstType, AstElement)}
-	 */
-	@Deprecated
-	@Override public boolean equals(@Nullable Object other) {
-		throw new Error("operation not supported");
-	}
+
+	@Override public abstract boolean equals(@Nullable Object other);
 	
-	@Deprecated
-	@Override public int hashCode() {
-		throw new Error("Hash code not implemented for types, because it could conflict with the custom equals operation.");
-	}
-	
+	@Override public abstract int hashCode();
 	
 
 	public WurstType dynamic() {
@@ -96,15 +87,15 @@ public abstract class WurstType {
 	}
 
 
-	public Map<TypeParamDef, WurstType> getTypeArgBinding() {
+	public Map<TypeParamDef, WurstType> getTypeArgBinding(AstElement loc) {
 		return Collections.emptyMap();
 	}
 
 
-	public abstract ImType imTranslateType();
+	public abstract ImType imTranslateType(AstElement location);
 
 
-	public abstract ImExprOpt getDefaultValue();
+	public abstract ImExprOpt getDefaultValue(AstElement location);
 
 	public boolean isVoid() {
 		return false;

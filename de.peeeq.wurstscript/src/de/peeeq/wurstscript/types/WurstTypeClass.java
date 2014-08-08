@@ -11,15 +11,14 @@ import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstTypeClass extends WurstTypeClassOrInterface {
-
-	ClassDef classDef;
-
+public class WurstTypeClass extends WurstTypeClassOrInterface<ClassDef> {
 
 	public WurstTypeClass(ClassDef classDef, List<WurstType> typeParameters, boolean staticRef) {
-		super(typeParameters, staticRef);
-		if (classDef == null) throw new IllegalArgumentException();
-		this.classDef = classDef;
+		super(TypeLink.to(classDef), typeParameters, staticRef);
+	}
+	
+	public WurstTypeClass(TypeLink<ClassDef> classDef, List<WurstType> typeParameters, boolean staticRef) {
+		super(classDef, typeParameters, staticRef);
 	}
 
 	@Override
@@ -27,58 +26,55 @@ public class WurstTypeClass extends WurstTypeClassOrInterface {
 		if (super.isSubtypeOfIntern(obj, location)) {
 			return true;
 		}
+		ClassDef c = typeLink.getDef(location);
 		if (obj instanceof WurstTypeInterface) {
 			WurstTypeInterface pti = (WurstTypeInterface) obj;
-			for (WurstTypeInterface implementedInterface : classDef.attrImplementedInterfaces()) {
-				if (implementedInterface.setTypeArgs(getTypeArgBinding()).isSubtypeOf(pti, location)) {
+			for (WurstTypeInterface implementedInterface : c.attrImplementedInterfaces()) {
+				if (implementedInterface.setTypeArgs(getTypeArgBinding(location)).isSubtypeOf(pti, location)) {
 					return true;
 				}
 			}
 		}
 		if (obj instanceof WurstTypeModuleInstanciation) {
 			WurstTypeModuleInstanciation n = (WurstTypeModuleInstanciation) obj;
-			return n.isParent(this);
+			return n.isParent(this, location);
 		}
-		if (classDef.getExtendedClass() instanceof TypeExpr) {
-			TypeExpr extendedClass = (TypeExpr) classDef.getExtendedClass();
+		if (c.getExtendedClass() instanceof TypeExpr) {
+			TypeExpr extendedClass = (TypeExpr) c.getExtendedClass();
 			WurstType superType = extendedClass.attrTyp();
 			return superType.isSubtypeOf(obj, location);
 		}
 		return false;
 	}
 	
-	@Override
-	public StructureDef getDef() {
-		return classDef;
-	}
-
-	public ClassDef getClassDef() {
-		return classDef;
-	}
 	
 	@Override
 	public String getName() {
-		return getDef().getName() + printTypeParams();
+		return getTypeLink().getName() + printTypeParams();
 	}
 	
 	@Override
 	public WurstType dynamic() {
-		return new WurstTypeClass(getClassDef(), getTypeParameters(), false);
+		return new WurstTypeClass(typeLink, getTypeParameters(), false);
 	}
 
 	@Override
 	public WurstType replaceTypeVars(List<WurstType> newTypes) {
-		return new WurstTypeClass(classDef, newTypes, isStaticRef());
+		return new WurstTypeClass(typeLink, newTypes, isStaticRef());
 	}
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImIntVal(0);
 	}
+
+	
+	
+	
 	
 }

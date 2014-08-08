@@ -69,7 +69,7 @@ public class CyclicFunctionRemover {
 
 		AstElement trace = funcs.get(0).getTrace();
 
-		ImVar choiceVar = JassIm.ImVar(trace, WurstTypeInt.instance().imTranslateType(), "funcChoice", false);
+		ImVar choiceVar = JassIm.ImVar(trace, WurstTypeInt.instance().imTranslateType(null), "funcChoice", false);
 
 		List<FunctionFlag> flags = Lists.newArrayList();
 		ImFunction newFunc = JassIm.ImFunction(trace, makeName(funcs), JassIm.ImVars(), JassIm.ImVoid(), JassIm.ImVars(), JassIm.ImStmts(), flags);

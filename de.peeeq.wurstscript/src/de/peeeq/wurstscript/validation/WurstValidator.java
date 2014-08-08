@@ -166,13 +166,13 @@ public class WurstValidator {
 		if (e instanceof Expr) {
 			WurstType typ = ((Expr) e).attrTyp();
 			if (typ instanceof WurstTypeNamedScope) {
-				WurstTypeNamedScope ns = (WurstTypeNamedScope) typ;
-				NamedScope def = ns.getDef();
+				WurstTypeNamedScope<?> ns = (WurstTypeNamedScope<?>) typ;
+				NamedScope def = ns.getDef(e);
 				if (def != null) {
 					unused.remove(def.attrNearestPackage());
 				}
 			} else if (typ instanceof WurstTypeTuple) {
-				TupleDef def = ((WurstTypeTuple) typ).getTupleDef();
+				TupleDef def = ((WurstTypeTuple) typ).getDef(e);
 				unused.remove(def.attrNearestPackage());
 			}
 		}
@@ -1067,7 +1067,7 @@ public class WurstValidator {
 		if (c.isStaticRef()) {
 			stmtDestroy.addError("Cannot destroy class " + c);
 		}
-		calledFunctions.put(stmtDestroy.attrNearestScope(), c.getClassDef().getOnDestroy());
+		calledFunctions.put(stmtDestroy.attrNearestScope(), c.getDef(stmtDestroy).getOnDestroy());
 	}
 
 	private void visit(ExprVarAccess e) {
@@ -1425,8 +1425,8 @@ public class WurstValidator {
 
 	private void checkInstanceDef(ClassDef classDef) {
 		for (WurstTypeInterface interfaceType : classDef.attrImplementedInterfaces()) {
-			InterfaceDef interfaceDef = interfaceType.getInterfaceDef();
-			Map<TypeParamDef, WurstType> typeParamMapping = interfaceType.getTypeArgBinding();
+			InterfaceDef interfaceDef = interfaceType.getDef(classDef);
+			Map<TypeParamDef, WurstType> typeParamMapping = interfaceType.getTypeArgBinding(classDef);
 			// TODO check type mapping
 
 			nextFunction: 
@@ -1630,7 +1630,7 @@ public class WurstValidator {
 		if(s.getExpr().attrTyp() instanceof WurstTypeEnum) {
 			WurstTypeEnum wurstTypeEnum = (WurstTypeEnum) s.getExpr().attrTyp();
 			if(s.getSwitchDefault() instanceof NoDefaultCase)
-				nextMember: for( EnumMember e : wurstTypeEnum.getDef().getMembers()) {
+				nextMember: for( EnumMember e : wurstTypeEnum.getDef(s).getMembers()) {
 					String name = e.getName();
 					for (SwitchCase c : s.getCases()) {		
 						if( c.getExpr() instanceof NameRef) {

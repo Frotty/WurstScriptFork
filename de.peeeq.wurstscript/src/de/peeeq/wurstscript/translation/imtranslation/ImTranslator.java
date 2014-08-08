@@ -588,7 +588,7 @@ public class ImTranslator {
 	public ImVar getVarFor(VarDef varDef) {
 		ImVar v = varMap.get(varDef);
 		if (v == null) {
-			ImType type = varDef.attrTyp().imTranslateType();
+			ImType type = varDef.attrTyp().imTranslateType(varDef);
 			String name = varDef.getName();
 			if (isNamedScopeVar(varDef)) {
 				name = varDef.attrNearestNamedScope().getName() + "_" + name;
@@ -818,7 +818,7 @@ public class ImTranslator {
 		for (CompilationUnit cu : wurstProg) {
 			for (ClassDef c : cu.attrGetByType().classes) {
 				for (WurstTypeInterface i : c.attrImplementedInterfaces()) {
-					interfaceInstances.put(i.getInterfaceDef(), c);
+					interfaceInstances.put(i.getDef(cu), c);
 				}
 			}
 		}
@@ -872,16 +872,17 @@ public class ImTranslator {
 
 	/**
 	 * returns all classes which are subtypes or equal to the given type 
+	 * @param location 
 	 */
-	public Collection<ClassDef> getConcreteSubtypes(WurstType t) {
+	public Collection<ClassDef> getConcreteSubtypes(WurstType t, AstElement location) {
 		if (t instanceof WurstTypeInterface) {
 			WurstTypeInterface ti = (WurstTypeInterface) t;
-			return getInterfaceInstances(ti.getInterfaceDef());
+			return getInterfaceInstances(ti.getDef(location));
 		}
 		if (t instanceof WurstTypeClass) {
 			WurstTypeClass tc = (WurstTypeClass) t;
-			ArrayList<ClassDef> result = Lists.newArrayList(getSubClasses(tc.getClassDef()));
-			result.add(tc.getClassDef());
+			ArrayList<ClassDef> result = Lists.newArrayList(getSubClasses(tc.getDef(location)));
+			result.add(tc.getDef(location));
 			return result;
 		}
 		throw new Error("not implemented");

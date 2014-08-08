@@ -1,11 +1,13 @@
 package de.peeeq.wurstscript.types;
 
+import org.eclipse.jdt.annotation.Nullable;
+
 import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstTypeCode extends WurstTypePrimitive {
+public final class WurstTypeCode extends WurstTypePrimitive {
 
 	private static final WurstTypeCode instance = new WurstTypeCode();
 
@@ -24,9 +26,9 @@ public class WurstTypeCode extends WurstTypePrimitive {
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 
-
+	
 }

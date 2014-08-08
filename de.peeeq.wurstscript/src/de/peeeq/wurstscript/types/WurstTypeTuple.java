@@ -19,12 +19,11 @@ import de.peeeq.wurstscript.jassIm.JassIm;
 
 public class WurstTypeTuple extends WurstType {
 
-	TupleDef tupleDef;
-
+	TypeLink<TupleDef> tupleDef;
 
 	public WurstTypeTuple(TupleDef tupleDef) {
 		Preconditions.checkNotNull(tupleDef);
-		this.tupleDef = tupleDef;
+		this.tupleDef = TypeLink.to(tupleDef);
 	}
 
 	@Override
@@ -37,8 +36,8 @@ public class WurstTypeTuple extends WurstType {
 	}
 	
 
-	public TupleDef getTupleDef() {
-		return tupleDef;
+	public TupleDef getTupleDef(AstElement location) {
+		return tupleDef.getDef(location);
 	}
 	
 	@Override
@@ -54,11 +53,11 @@ public class WurstTypeTuple extends WurstType {
 
 	
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		List<ImType> types = Lists.newArrayList();
 		List<String> names = Lists.newArrayList();
-		for (WParameter p : tupleDef.getParameters()) {
-			ImType pt = p.attrTyp().imTranslateType();
+		for (WParameter p : getTupleDef(location).getParameters()) {
+			ImType pt = p.attrTyp().imTranslateType(location);
 			types.add(pt);
 			names.add(p.getName());
 		}
@@ -66,11 +65,43 @@ public class WurstTypeTuple extends WurstType {
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		ImExprs exprs = JassIm.ImExprs();
-		for (WParameter p : tupleDef.getParameters()) {
-			exprs.add((ImExpr) p.attrTyp().getDefaultValue());
+		for (WParameter p : getTupleDef(location).getParameters()) {
+			exprs.add((ImExpr) p.attrTyp().getDefaultValue(location));
 		}
 		return JassIm.ImTupleExpr(exprs);
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((tupleDef == null) ? 0 : tupleDef.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeTuple other = (WurstTypeTuple) obj;
+		if (tupleDef == null) {
+			if (other.tupleDef != null)
+				return false;
+		} else if (!tupleDef.equals(other.tupleDef))
+			return false;
+		return true;
+	}
+
+	public TupleDef getDef(AstElement location) {
+		return tupleDef.getDef(location);
+	}
+	
+	
+	
 }

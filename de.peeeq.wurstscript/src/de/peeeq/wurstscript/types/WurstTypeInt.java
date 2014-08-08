@@ -31,7 +31,7 @@ public class WurstTypeInt extends WurstTypePrimitive {
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImIntVal(0);
 	}
 	

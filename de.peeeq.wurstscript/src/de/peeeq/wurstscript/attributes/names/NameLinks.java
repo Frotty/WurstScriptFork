@@ -190,8 +190,8 @@ public class NameLinks {
 
 	private static void addNamesFromImplementedInterfaces(Multimap<String, NameLink> result, ClassDef classDef) {
 		for (WurstTypeInterface interfaceType : classDef.attrImplementedInterfaces()) {
-			Map<TypeParamDef, WurstType> binding = interfaceType.getTypeArgBinding();
-			InterfaceDef i = interfaceType.getInterfaceDef();
+			Map<TypeParamDef, WurstType> binding = interfaceType.getTypeArgBinding(classDef);
+			InterfaceDef i = interfaceType.getDef(classDef);
 			for (Entry<String, NameLink> e : i.attrNameLinks().entries()) {
 				result.put(e.getKey(), e.getValue().withTypeArgBinding(binding));
 			}
@@ -201,8 +201,8 @@ public class NameLinks {
 	private static void addNamesFormSuperClass(Multimap<String, NameLink> result, ClassDef classDef) {
 		if (classDef.getExtendedClass().attrTyp() instanceof WurstTypeClass) {
 			WurstTypeClass wurstTypeClass = (WurstTypeClass) classDef.getExtendedClass().attrTyp();
-			ClassDef extendedClass = wurstTypeClass.getClassDef();
-			Map<TypeParamDef, WurstType> binding = wurstTypeClass.getTypeArgBinding();
+			ClassDef extendedClass = wurstTypeClass.getDef(classDef);
+			Map<TypeParamDef, WurstType> binding = wurstTypeClass.getTypeArgBinding(classDef);
 			addHidingPrivate(result, extendedClass.attrNameLinks(), binding);
 		}
 	}

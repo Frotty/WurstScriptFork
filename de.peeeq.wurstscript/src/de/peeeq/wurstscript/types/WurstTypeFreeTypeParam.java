@@ -9,12 +9,12 @@ import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
-public class WurstTypeFreeTypeParam extends WurstType {
+public final class WurstTypeFreeTypeParam extends WurstType {
 
-	private TypeParamDef def;
+	private TypeLink<TypeParamDef> def;
 
 	public WurstTypeFreeTypeParam(TypeParamDef t) {
-		this.def = t;
+		this.def = TypeLink.to(t);
 	}
 
 	@Override
@@ -36,12 +36,8 @@ public class WurstTypeFreeTypeParam extends WurstType {
 		return getName() + " (free type parameter)";
 	}
 
-	public TypeParamDef  getDef() {
-		return def;
-	}
-
 	@Override
-	public Map<TypeParamDef, WurstType> getTypeArgBinding() {
+	public Map<TypeParamDef, WurstType> getTypeArgBinding(AstElement loc) {
 		return Collections.emptyMap();
 	}
 
@@ -55,15 +51,41 @@ public class WurstTypeFreeTypeParam extends WurstType {
 	}
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((def == null) ? 0 : def.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeFreeTypeParam other = (WurstTypeFreeTypeParam) obj;
+		if (def == null) {
+			if (other.def != null)
+				return false;
+		} else if (!def.equals(other.def))
+			return false;
+		return true;
+	}
+	
+	
 	
 	
 }

@@ -145,7 +145,7 @@ public class ClassTranslator {
 		}
 		if (sc.getOnDestroy().attrHasEmptyBody()) {
 			WurstTypeClass superClass = (WurstTypeClass) sc.getExtendedClass().attrTyp();
-			return hasOwnDestroy(superClass.getClassDef(), classDef2);
+			return hasOwnDestroy(superClass.getDef(sc), classDef2);
 		} else {
 			return true;
 		}
@@ -252,7 +252,7 @@ public class ClassTranslator {
 		ImVar v = translator.getVarFor(s);
 		if (s.attrIsDynamicClassMember()) {
 			// for dynamic class members create an array
-			ImType t = s.attrTyp().imTranslateType();
+			ImType t = s.attrTyp().imTranslateType(s);
 			v.setType(ImHelper.toArray(t));
 			dynamicInits.add(Pair.create(v, s.getInitialExpr()));
 		} else { // static class member
@@ -293,7 +293,7 @@ public class ClassTranslator {
 		f.getBody().addAll(translator.translateStatements(f, funcDef.getBody()));
 		// TODO add return for abstract function
 		if (funcDef.attrIsAbstract() && !(funcDef.attrReturnType() instanceof WurstTypeVoid)) {
-			f.getBody().add(ImReturn(funcDef, funcDef.attrReturnType().getDefaultValue()));
+			f.getBody().add(ImReturn(funcDef, funcDef.attrReturnType().getDefaultValue(funcDef)));
 		}
 		return f;
 	}
@@ -312,7 +312,7 @@ public class ClassTranslator {
 		Map<ImVar, ImVar> varReplacements = Maps.newLinkedHashMap();
 		
 		for (WParameter p : constr.getParameters()) {
-			ImVar imP = ImVar(p, p.attrTyp().imTranslateType(), p.getName(), false);
+			ImVar imP = ImVar(p, p.attrTyp().imTranslateType(constr), p.getName(), false);
 			varReplacements.put(translator.getVarFor(p), imP);
 			f.getParameters().add(imP);
 		}

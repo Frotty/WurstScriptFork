@@ -45,24 +45,24 @@ public class AttrNameDef {
 		AstElement parent = term.getParent();
 		if (parent instanceof SwitchCase) {
 			SwitchStmt s = (SwitchStmt) parent.getParent().getParent();
-			result = lookupEnumConst(term.getVarName(), s.getExpr().attrTyp());
+			result = lookupEnumConst(term.getVarName(), s.getExpr().attrTyp(), term);
 		} else if (parent instanceof StmtSet) {
 			StmtSet s = (StmtSet) parent;
 			if (s.getRight() == term) {
-				result = lookupEnumConst(term.getVarName(), s.getUpdatedExpr().attrTyp());
+				result = lookupEnumConst(term.getVarName(), s.getUpdatedExpr().attrTyp(), term);
 			}
 		} else if (parent instanceof GlobalOrLocalVarDef) {
 			GlobalOrLocalVarDef v = (GlobalOrLocalVarDef) parent;
-			result = lookupEnumConst(term.getVarName(), v.getOptTyp().attrTyp());
+			result = lookupEnumConst(term.getVarName(), v.getOptTyp().attrTyp(), term);
 		}
 		return result;
 	}
 
-	public static @Nullable NameDef lookupEnumConst(String varName, WurstType t) {
+	public static @Nullable NameDef lookupEnumConst(String varName, WurstType t, AstElement location) {
 		if (t instanceof WurstTypeEnum) {
 			WurstTypeEnum e = (WurstTypeEnum) t;
 			// if we expect an enum type we can as well directly look into the enum
-			EnumDef eDef = e.getDef();
+			EnumDef eDef = e.getDef(location);
 			return eDef.lookupMemberVar(e, varName, false);
 		}
 		return null;
@@ -109,7 +109,7 @@ public class AttrNameDef {
 		if (receiverType instanceof WurstTypeModule) {
 			WurstTypeModule wurstTypeModule = (WurstTypeModule) receiverType;
 			ClassOrModule nearestStructure = left.attrNearestClassOrModule();
-			ModuleDef module = wurstTypeModule.getDef();
+			ModuleDef module = wurstTypeModule.getDef(node);
 			if (nearestStructure != module) {
 				node.addError("Can only reference module variables from within the module.");
 			}

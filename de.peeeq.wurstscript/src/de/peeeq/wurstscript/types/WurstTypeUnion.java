@@ -42,13 +42,13 @@ public class WurstTypeUnion extends WurstType {
 	}
 
 	@Override
-	public ImType imTranslateType() {
-		return typeA.imTranslateType();
+	public ImType imTranslateType(AstElement location) {
+		return typeA.imTranslateType(location);
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
-		return typeA.getDefaultValue();
+	public ImExprOpt getDefaultValue(AstElement location) {
+		return typeA.getDefaultValue(location);
 	}
 
 	public WurstType getTypeA() {
@@ -59,4 +59,37 @@ public class WurstTypeUnion extends WurstType {
 		return typeB;
 	}
 
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((typeA == null) ? 0 : typeA.hashCode());
+		result = prime * result + ((typeB == null) ? 0 : typeB.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeUnion other = (WurstTypeUnion) obj;
+		if (typeA == null) {
+			if (other.typeA != null)
+				return false;
+		} else if (!typeA.equals(other.typeA))
+			return false;
+		if (typeB == null) {
+			if (other.typeB != null)
+				return false;
+		} else if (!typeB.equals(other.typeB))
+			return false;
+		return true;
+	}
+
+	
+	
 }

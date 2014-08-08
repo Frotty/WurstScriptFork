@@ -48,6 +48,7 @@ import de.peeeq.wurstio.mpq.MpqEditor;
 import de.peeeq.wurstio.mpq.MpqEditorFactory;
 import de.peeeq.wurstscript.RunArgs;
 import de.peeeq.wurstscript.WLogger;
+import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.ast.ClassDef;
 import de.peeeq.wurstscript.ast.CompilationUnit;
 import de.peeeq.wurstscript.ast.FuncDef;
@@ -292,7 +293,7 @@ public class WurstREPL {
 				
 				
 				
-				String valueTranslated = getTranslatedValue(typ, value);
+				String valueTranslated = getTranslatedValue(typ, value, assignment);
 				if (valueTranslated == null) return;
 				
 				if (value instanceof ILconstReal) {
@@ -689,7 +690,7 @@ public class WurstREPL {
 		pw.flush();
 	}
 
-	private String getTranslatedValue(WurstType typ, ILconst value) {
+	private String getTranslatedValue(WurstType typ, ILconst value, AstElement location) {
 		String valueTranslated = null;
 		if (typ instanceof WurstTypePrimitive) {
 			valueTranslated = value + "";
@@ -698,7 +699,7 @@ public class WurstREPL {
 			valueTranslated = value + " castTo " + ct.getName();
 		} else if (typ instanceof WurstTypeTuple) {
 			WurstTypeTuple tt = (WurstTypeTuple) typ;
-			TupleDef def = tt.getTupleDef();
+			TupleDef def = tt.getDef(location);
 			valueTranslated = def.getName() + "(";
 			if (value instanceof ILconstTuple) {
 				ILconstTuple tuple = (ILconstTuple) value;
@@ -708,7 +709,7 @@ public class WurstREPL {
 					if (i > 0) {
 						valueTranslated += ", ";
 					}
-					valueTranslated += getTranslatedValue(p.attrTyp(), argVal);
+					valueTranslated += getTranslatedValue(p.attrTyp(), argVal, location);
 				}
 			}
 			valueTranslated += ")";

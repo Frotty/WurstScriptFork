@@ -13,10 +13,10 @@ public class Level {
 		int level = 1;
 		if (classDef.getExtendedClass().attrTyp() instanceof WurstTypeClass) {
 			WurstTypeClass wtc = (WurstTypeClass) classDef.getExtendedClass().attrTyp();
-			level = Math.max(level, 1 + wtc.getClassDef().attrLevel());
+			level = Math.max(level, 1 + wtc.getDef(classDef).attrLevel());
 		}
 		for (WurstTypeInterface in : classDef.attrImplementedInterfaces()) {
-			level = Math.max(level, 1 + in.getInterfaceDef().attrLevel());
+			level = Math.max(level, 1 + in.getDef(classDef).attrLevel());
 		}
 		for (ModuleInstanciation m : classDef.getModuleInstanciations()) {
 			level = Math.max(level, 1 + m.attrLevel());
@@ -27,7 +27,7 @@ public class Level {
 	public static int get(InterfaceDef in) {
 		int level = 1;
 		for (WurstTypeInterface in2 : in.attrExtendedInterfaces()) {
-			level = Math.max(level, 1 + in2.getInterfaceDef().attrLevel());
+			level = Math.max(level, 1 + in2.getDef(in).attrLevel());
 		}
 		return level;
 	}

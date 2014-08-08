@@ -10,20 +10,22 @@ import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstTypeModuleInstanciation extends WurstTypeNamedScope {
-
-	private ModuleInstanciation moduleInst;
+public class WurstTypeModuleInstanciation extends WurstTypeNamedScope<ModuleInstanciation> {
 
 	public WurstTypeModuleInstanciation(ModuleInstanciation moduleInst, boolean isStaticRef) {
-		super(isStaticRef);
-		if (moduleInst == null) throw new IllegalArgumentException();
-		this.moduleInst = moduleInst;
+		super(TypeLink.to(moduleInst), isStaticRef);
 	}
 
-	public WurstTypeModuleInstanciation(ModuleInstanciation moduleInst2, List<WurstType> newTypes) {
-		super(newTypes);
-		if (moduleInst2 == null) throw new IllegalArgumentException();
-		moduleInst = moduleInst2;
+	public WurstTypeModuleInstanciation(ModuleInstanciation moduleInst, List<WurstType> newTypes) {
+		super(TypeLink.to(moduleInst), newTypes);
+	}
+	
+	public WurstTypeModuleInstanciation(TypeLink<ModuleInstanciation> moduleInst, boolean isStaticRef) {
+		super(moduleInst, isStaticRef);
+	}
+
+	public WurstTypeModuleInstanciation(TypeLink<ModuleInstanciation> moduleInst, List<WurstType> newTypes) {
+		super(moduleInst, newTypes);
 	}
 
 	@Override
@@ -33,7 +35,7 @@ public class WurstTypeModuleInstanciation extends WurstTypeNamedScope {
 		}
 		if (obj instanceof WurstTypeModuleInstanciation) {
 			WurstTypeModuleInstanciation n = (WurstTypeModuleInstanciation) obj;
-			return n.isParent(this);
+			return n.isParent(this, location);
 		}
 		return false;
 	}
@@ -41,49 +43,45 @@ public class WurstTypeModuleInstanciation extends WurstTypeNamedScope {
 	/**
 	 * check if n is a parent of this
 	 */
-	boolean isParent(WurstTypeNamedScope n) {
-		NamedScope ns = this.getDef();
+	boolean isParent(WurstTypeNamedScope<?> n, AstElement loc) {
+		NamedScope ns = typeLink.getDef(loc);
 		while (true) {
 			ns = ns.getParent().attrNearestNamedScope();
 			if (ns == null) {
 				return false;
 			}
-			if (ns == n.getDef()) {
+			if (ns == n.getDef(loc)) {
 				return true;
 			}
 		}
 	}
 	
-	@Override
-	public NamedScope getDef() {
-		return moduleInst; 
-	}
 	
 	@Override
 	public String getName() {
-		return getDef().getName() + printTypeParams() + " (module instanciation)";
+		return typeLink.getName() + printTypeParams() + " (module instanciation)";
 	}
 	
 	@Override
 	public WurstType dynamic() {
 		if (isStaticRef()) {
-			return new WurstTypeModuleInstanciation(moduleInst, false);
+			return new WurstTypeModuleInstanciation(typeLink, false);
 		}
 		return this;
 	}
 
 	@Override
 	public WurstType replaceTypeVars(List<WurstType> newTypes) {
-		return new WurstTypeModuleInstanciation(moduleInst, newTypes);
+		return new WurstTypeModuleInstanciation(typeLink, newTypes);
 	}
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 

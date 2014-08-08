@@ -22,17 +22,17 @@ public class FuncSkeleton {
 
 	public static void create(ExtensionFuncDef funcDef, ImTranslator translator, ImFunction f) {
 		// return type:
-		f.setReturnType(funcDef.getReturnTyp().attrTyp().imTranslateType());
+		f.setReturnType(funcDef.getReturnTyp().attrTyp().imTranslateType(funcDef));
 		// parameters
 		ImVar thisVar = translator.getThisVar(funcDef);
-		thisVar.setType(funcDef.getExtendedType().attrTyp().imTranslateType());
+		thisVar.setType(funcDef.getExtendedType().attrTyp().imTranslateType(funcDef));
 		f.getParameters().add(thisVar);
 		ImHelper.translateParameters(funcDef.getParameters(), f.getParameters(), translator);
 	}
 
 	public static void create(FuncDef funcDef, ImTranslator translator, ImFunction f) {
 		// return type:
-		f.setReturnType(funcDef.getReturnTyp().attrTyp().imTranslateType());
+		f.setReturnType(funcDef.getReturnTyp().attrTyp().imTranslateType(funcDef));
 		// parameters
 		if (funcDef.attrIsDynamicClassMember()) {
 			ImVar thisVar = translator.getThisVar(funcDef);
@@ -45,7 +45,7 @@ public class FuncSkeleton {
 	}
 
 	public static void create(NativeFunc funcDef, ImTranslator translator, ImFunction f) {
-		f.setReturnType(funcDef.getReturnTyp().attrTyp().imTranslateType());
+		f.setReturnType(funcDef.getReturnTyp().attrTyp().imTranslateType(funcDef));
 		ImHelper.translateParameters(funcDef.getParameters(), f.getParameters(), translator);
 	}
 
@@ -65,7 +65,7 @@ public class FuncSkeleton {
 		for (WParameter p : e.getParameters()) {
 			f.getParameters().add(tr.getVarFor(p));
 		}
-		f.setReturnType(e.getImplementation().attrTyp().imTranslateType());
+		f.setReturnType(e.getImplementation().attrTyp().imTranslateType(e));
 		
 	}
 

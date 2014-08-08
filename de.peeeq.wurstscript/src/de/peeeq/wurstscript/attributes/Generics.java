@@ -82,8 +82,8 @@ public class Generics {
 			TypeParamDefs typeParams) {
 		if (paramTyp instanceof WurstTypeTypeParam) {
 			WurstTypeTypeParam paramTyp2 = (WurstTypeTypeParam) paramTyp;
-			if (typeParams.contains(paramTyp2.getDef())) {
-				WurstType previousType = result.put(paramTyp2.getDef(), argType);
+			if (typeParams.contains(paramTyp2.getDef(pos))) {
+				WurstType previousType = result.put(paramTyp2.getDef(pos), argType);
 				if (previousType != null && !previousType.equalsType(argType, pos)) {
 					pos.addError("Cannot infer type parameters, there is a conflict between "
 					+ previousType + " and " + argType + " for type parameter " + paramTyp2.getName());

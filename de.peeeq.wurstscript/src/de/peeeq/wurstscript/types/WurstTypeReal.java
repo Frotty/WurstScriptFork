@@ -26,7 +26,7 @@ public class WurstTypeReal extends WurstTypePrimitive {
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImRealVal("0.");
 	}
 

@@ -48,7 +48,7 @@ public class UsedGlobalVariables {
 			WurstType t = stmtDestroy.getDestroyedObj().attrTyp();
 			if (t instanceof WurstTypeClass) {
 				WurstTypeClass ct = (WurstTypeClass) t;
-				OnDestroyDef ondestr = ct.getClassDef().getOnDestroy();
+				OnDestroyDef ondestr = ct.getDef(e).getOnDestroy();
 				result.addAll(ondestr.getBody().attrUsedGlobalVariables());
 			}
 		} else if (e instanceof NameRef) {
@@ -112,7 +112,7 @@ public class UsedGlobalVariables {
 			WurstType t = stmtDestroy.getDestroyedObj().attrTyp();
 			if (t instanceof WurstTypeClass) {
 				WurstTypeClass ct = (WurstTypeClass) t;
-				OnDestroyDef ondestr = ct.getClassDef().getOnDestroy();
+				OnDestroyDef ondestr = ct.getDef(e).getOnDestroy();
 				result.addAll(ondestr.getBody().attrReadGlobalVariables());
 			}
 		} else if (e instanceof NameRef) {

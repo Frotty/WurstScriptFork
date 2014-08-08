@@ -56,7 +56,7 @@ public class ClosureTranslator {
 			return translateAnonFunc();
 		} else {
 			ImClass c = createClass();
-			ImVar clVar = JassIm.ImVar(e, WurstTypeInt.instance().imTranslateType(), "clVar", false);
+			ImVar clVar = JassIm.ImVar(e, WurstTypeInt.instance().imTranslateType(e), "clVar", false);
 			f.getLocals().add(clVar);
 			ImStmts stmts = JassIm.ImStmts();
 			// allocate closure
@@ -82,10 +82,10 @@ public class ClosureTranslator {
 		
 		if (e.getImplementation().attrTyp() instanceof WurstTypeBool) {
 			impl.getBody().add(JassIm.ImReturn(e, translated));
-			impl.setReturnType(WurstTypeBool.instance().imTranslateType());
+			impl.setReturnType(WurstTypeBool.instance().imTranslateType(e));
 		} else {
 			impl.getBody().add(translated);
-			impl.setReturnType(WurstTypeVoid.instance().imTranslateType());
+			impl.setReturnType(WurstTypeVoid.instance().imTranslateType(e));
 		}
 		return JassIm.ImFuncRef(impl);
 	}
@@ -259,10 +259,10 @@ public class ClosureTranslator {
 		WurstType t = e.attrExpectedTyp();
 		if (t instanceof WurstTypeInterface) {
 			WurstTypeInterface it = (WurstTypeInterface) t;
-			return tr.getClassFor(it.getDef());
+			return tr.getClassFor(it.getDef(e));
 		} else if (t instanceof WurstTypeClass) {
 			WurstTypeClass ct = (WurstTypeClass) t;
-			return tr.getClassFor(ct.getDef());
+			return tr.getClassFor(ct.getDef(e));
 		}
 		throw new CompileError(e.getSource(), "Could not get super class for closure");
 	}

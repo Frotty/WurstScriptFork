@@ -9,14 +9,19 @@ import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
-public class WurstTypeBoundTypeParam extends WurstType {
+public final class WurstTypeBoundTypeParam extends WurstType {
 
 	
-	private TypeParamDef typeParamDef;
-	private WurstType baseType;
+	private final TypeLink<TypeParamDef> typeParamDef;
+	private final WurstType baseType;
 
-	public WurstTypeBoundTypeParam(TypeParamDef def, WurstType baseType) {
+	public WurstTypeBoundTypeParam(TypeLink<TypeParamDef> def, WurstType baseType) {
 		this.typeParamDef = def;
+		this.baseType = baseType;
+	}
+	
+	public WurstTypeBoundTypeParam(TypeParamDef def, WurstType baseType) {
+		this.typeParamDef = TypeLink.to(def);
 		this.baseType = baseType;
 	}
 
@@ -41,12 +46,12 @@ public class WurstTypeBoundTypeParam extends WurstType {
 	}
 
 	@Override
-	public ImType imTranslateType() {
-		return baseType.imTranslateType();
+	public ImType imTranslateType(AstElement location) {
+		return baseType.imTranslateType(location);
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImIntVal(0);
 	}
 
@@ -87,4 +92,38 @@ public class WurstTypeBoundTypeParam extends WurstType {
 	public WurstType normalize() {
 		return baseType.normalize();
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((baseType == null) ? 0 : baseType.hashCode());
+		result = prime * result + ((typeParamDef == null) ? 0 : typeParamDef.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeBoundTypeParam other = (WurstTypeBoundTypeParam) obj;
+		if (baseType == null) {
+			if (other.baseType != null)
+				return false;
+		} else if (!baseType.equals(other.baseType))
+			return false;
+		if (typeParamDef == null) {
+			if (other.typeParamDef != null)
+				return false;
+		} else if (!typeParamDef.equals(other.typeParamDef))
+			return false;
+		return true;
+	}
+	
+	
+	
 }

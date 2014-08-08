@@ -209,41 +209,36 @@ public class AttrExprType {
 		if (c != null) {
 			return c.match(new NamedScope.Matcher<WurstType>() {
 
-				@SuppressWarnings("null")
 				@Override
 				public WurstType case_ModuleDef(ModuleDef moduleDef) {
 					return new WurstTypeModule(moduleDef, false);
 				}
 
-				@SuppressWarnings("null")
 				@Override	
 				public WurstType case_ClassDef(ClassDef classDef) {
 					WurstTypeClass result = (WurstTypeClass) classDef.attrTyp().dynamic();
 					return result.replaceTypeVars(classDef.getTypeParameters().attrTypes());
 				}
 
-				@SuppressWarnings("null")
 				@Override
 				public WurstType case_ModuleInstanciation(ModuleInstanciation moduleInstanciation) {
 					ClassOrModule parent = moduleInstanciation.attrNearestClassOrModule();
+					assert parent != null; // Module instantiations are always in a class or module
 					return parent.attrTyp().dynamic();
 				}
 
-				@SuppressWarnings("null")
 				@Override
 				public WurstType case_WPackage(WPackage wPackage) {
 					// 'this' cannot be used on package level
 					return WurstTypeUnknown.instance();
 				}
 
-				@SuppressWarnings("null")
 				@Override
 				public WurstType case_InterfaceDef(InterfaceDef interfaceDef) {
 					WurstTypeInterface result = (WurstTypeInterface) interfaceDef.attrTyp().dynamic();
 					return result.replaceTypeVars(interfaceDef.getTypeParameters().attrTypes());
 				}
 
-				@SuppressWarnings("null")
 				@Override
 				public WurstType case_EnumDef(EnumDef enumDef) {
 					// 'this' cannot be used in enums
@@ -446,7 +441,7 @@ public class AttrExprType {
 		if (varDef.attrIsStatic() && !term.getLeft().attrTyp().isStaticRef()) {
 			term.addError("Cannot access static variable " + term.getVarName() + " via a dynamic reference.");
 		}
-		return varDef.attrTyp().setTypeArgs(term.getLeft().attrTyp().getTypeArgBinding());
+		return varDef.attrTyp().setTypeArgs(term.getLeft().attrTyp().getTypeArgBinding(term));
 	}
 
 
@@ -540,12 +535,12 @@ public class AttrExprType {
 	public static WurstType calculate(ExprTypeId e) {
 		WurstType exprTyp = e.getLeft().attrTyp();
 		if (exprTyp instanceof WurstTypeClassOrInterface) {
-			WurstTypeClassOrInterface t = (WurstTypeClassOrInterface) exprTyp;
+			WurstTypeClassOrInterface<?> t = (WurstTypeClassOrInterface<?>) exprTyp;
 			if (t.isStaticRef()) {
 				// static reference to a type --> only concrete classes allowed
 				if (t instanceof WurstTypeClass) {
 					WurstTypeClass wtc = (WurstTypeClass) exprTyp;
-					if (wtc.getClassDef().attrIsAbstract()) {
+					if (wtc.getDef(e).attrIsAbstract()) {
 						e.addError("abstract classes do not have a typeId");
 					}		
 				} else {
@@ -575,7 +570,7 @@ public class AttrExprType {
 
 
 	public static WurstType calculate(ExprStatementsBlock e) {
-		StmtReturn r = (StmtReturn) e.getReturnStmt();
+		StmtReturn r = e.getReturnStmt();
 		if (r != null) {
 			if (r.getReturnedObj() instanceof Expr) {
 				Expr re = (Expr) r.getReturnedObj();

@@ -8,7 +8,7 @@ import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
-public class WurstTypeClosure extends WurstType {
+public final class WurstTypeClosure extends WurstType {
 
 	private final List<WurstType> paramTypes;
 	private final WurstType returnType;
@@ -39,7 +39,7 @@ public class WurstTypeClosure extends WurstType {
 		} else if (other instanceof WurstTypeCode) {
 			return paramTypes.size() == 0;
 		} else {
-			FunctionSignature abstractMethod = AttrClosureAbstractMethod.getAbstractMethodSignature(other);
+			FunctionSignature abstractMethod = AttrClosureAbstractMethod.getAbstractMethodSignature(other, location);
 			if (abstractMethod != null) {
 				return closureImplementsAbstractMethod(abstractMethod, location);
 			}
@@ -102,13 +102,44 @@ public class WurstTypeClosure extends WurstType {
 	}
 
 	@Override
-	public ImType imTranslateType() {
-		return WurstTypeInt.instance().imTranslateType();
+	public ImType imTranslateType(AstElement location) {
+		return WurstTypeInt.instance().imTranslateType(location);
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImIntVal(0);
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((paramTypes == null) ? 0 : paramTypes.hashCode());
+		result = prime * result + ((returnType == null) ? 0 : returnType.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeClosure other = (WurstTypeClosure) obj;
+		if (paramTypes == null) {
+			if (other.paramTypes != null)
+				return false;
+		} else if (!paramTypes.equals(other.paramTypes))
+			return false;
+		if (returnType == null) {
+			if (other.returnType != null)
+				return false;
+		} else if (!returnType.equals(other.returnType))
+			return false;
+		return true;
 	}
 
 	

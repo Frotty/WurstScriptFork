@@ -30,11 +30,11 @@ public class SubClasses {
 	public static @Nullable ClassDef getExtendedClass(ClassDef classDef) {
 		if (classDef.getExtendedClass().attrTyp() instanceof WurstTypeClass) {
 			WurstTypeClass c = (WurstTypeClass) classDef.getExtendedClass().attrTyp();
-			if (classDef == c.getClassDef()) {
+			if (classDef == c.getDef(classDef)) {
 				classDef.getExtendedClass().addError("Classes must not extend themselves");
 				return null;
 			}
-			return c.getClassDef();
+			return c.getDef(classDef);
 		} else if (classDef.getExtendedClass() instanceof TypeExpr) {
 			classDef.getExtendedClass().addError("Cannot extend " + classDef.getExtendedClass().attrTyp() + ", because it is not a class.");
 		}

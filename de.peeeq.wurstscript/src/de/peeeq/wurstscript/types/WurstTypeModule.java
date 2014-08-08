@@ -9,20 +9,23 @@ import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstTypeModule extends WurstTypeNamedScope {
+public class WurstTypeModule extends WurstTypeNamedScope<ModuleDef> {
 
-	private ModuleDef moduleDef;
 
 	public WurstTypeModule(ModuleDef moduleDef, boolean isStaticRef) {
-		super(isStaticRef);
-		if (moduleDef == null) throw new IllegalArgumentException();
-		this.moduleDef = moduleDef;
+		super(TypeLink.to(moduleDef), isStaticRef);
 	}
 
-	public WurstTypeModule(ModuleDef moduleDef2, List<WurstType> newTypes) {
-		super(newTypes);
-		if (moduleDef2 == null) throw new IllegalArgumentException();
-		moduleDef = moduleDef2;
+	public WurstTypeModule(ModuleDef moduleDef, List<WurstType> newTypes) {
+		super(TypeLink.to(moduleDef), newTypes);
+	}
+	
+	public WurstTypeModule(TypeLink<ModuleDef> moduleDef, boolean isStaticRef) {
+		super(moduleDef, isStaticRef);
+	}
+
+	public WurstTypeModule(TypeLink<ModuleDef> moduleDef, List<WurstType> newTypes) {
+		super(moduleDef, newTypes);
 	}
 	
 	@Override
@@ -32,41 +35,37 @@ public class WurstTypeModule extends WurstTypeNamedScope {
 		}
 		if (obj instanceof WurstTypeModuleInstanciation) {
 			WurstTypeModuleInstanciation n = (WurstTypeModuleInstanciation) obj;
-			return n.isParent(this);
+			return n.isParent(this, location);
 		}
 		return false;
 	}
 
-	@Override
-	public ModuleDef getDef() {
-		return moduleDef;
-	}
 	
 	@Override
 	public String getName() {
-		return getDef().getName() + printTypeParams() + " (module)";
+		return typeLink.getName() + printTypeParams() + " (module)";
 	}
 
 	@Override
 	public WurstType dynamic() {
 		if (isStaticRef()) {
-			return new WurstTypeModule(moduleDef, false);
+			return new WurstTypeModule(typeLink, false);
 		}
 		return this;
 	}
 
 	@Override
 	public WurstType replaceTypeVars(List<WurstType> newTypes) {
-		return new WurstTypeModule(moduleDef, newTypes);
+		return new WurstTypeModule(typeLink, newTypes);
 	}
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 	

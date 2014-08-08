@@ -285,7 +285,7 @@ public class ExprTranslation {
 					WurstTypeTuple tupleType = (WurstTypeTuple) implicitParam.attrTyp();
 					if (e instanceof ExprMemberVar) {
 						ExprMemberVar e2 = (ExprMemberVar) e;
-						int tupleIndex = t.getTupleIndex(tupleType.getTupleDef(), varDef);
+						int tupleIndex = t.getTupleIndex(tupleType.getTupleDef(e), varDef);
 						return ImTupleSelection(e2.getLeft().imTranslateExpr(t, f), tupleIndex);
 					} else {
 						throw new CompileError(e.getSource(), "Cannot create tuple access");
@@ -423,7 +423,7 @@ public class ExprTranslation {
 		ImVar tempVar = null;
 		if (returnReveiver) {
 			if (leftExpr == null) throw new Error("impossible");
-			tempVar = JassIm.ImVar(leftExpr, leftExpr.attrTyp().imTranslateType(), "receiver", false);
+			tempVar = JassIm.ImVar(leftExpr, leftExpr.attrTyp().imTranslateType(e), "receiver", false);
 			f.getLocals().add(tempVar);
 			stmts = JassIm.ImStmts(
 					JassIm.ImSet(e, tempVar, receiver)
@@ -492,7 +492,7 @@ public class ExprTranslation {
 		WurstType targetType = e.getTyp().attrTyp();
 		if (targetType instanceof WurstTypeNamedScope) {
 			WurstTypeNamedScope t = (WurstTypeNamedScope) targetType;
-			ImClass clazz = translator.getClassFor((StructureDef) t.getDef());
+			ImClass clazz = translator.getClassFor((StructureDef) t.getDef(e));
 			return JassIm.ImInstanceof(e.getExpr().imTranslateExpr(translator, f), clazz);
 		}
 		throw new Error("Cannot compile instanceof " + targetType);
@@ -501,9 +501,9 @@ public class ExprTranslation {
 	public static ImExpr translate(ExprTypeId e, ImTranslator translator, ImFunction f) {
 		WurstType leftType = e.getLeft().attrTyp();
 		if (leftType instanceof WurstTypeClassOrInterface) {
-			WurstTypeClassOrInterface wtc = (WurstTypeClassOrInterface) leftType;
+			WurstTypeClassOrInterface<?> wtc = (WurstTypeClassOrInterface<?>) leftType;
 			
-			ImClass c = translator.getClassFor(wtc.getDef());
+			ImClass c = translator.getClassFor(wtc.getDef(e));
 			if (wtc.isStaticRef()) {
 				return JassIm.ImTypeIdOfClass(c);
 			} else {
@@ -546,13 +546,13 @@ public class ExprTranslation {
 		WurstType typ = s.getDestroyedObj().attrTyp();
 		if (typ instanceof WurstTypeClass) {
 			WurstTypeClass classType = (WurstTypeClass) typ;
-			return destroyClass(s, t, f, classType.getClassDef());
+			return destroyClass(s, t, f, classType.getDef(s));
 		} else if (typ instanceof WurstTypeInterface) {
 			WurstTypeInterface wti = (WurstTypeInterface) typ;
-			return destroyClass(s, t, f, wti.getDef());
+			return destroyClass(s, t, f, wti.getDef(s));
 		} else if (typ instanceof WurstTypeModuleInstanciation) {
 			WurstTypeModuleInstanciation minsType = (WurstTypeModuleInstanciation) typ;
-			ClassDef classDef = minsType.getDef().attrNearestClassDef();
+			ClassDef classDef = minsType.getDef(s).attrNearestClassDef();
 			return destroyClass(s, t, f, classDef);
 		}
 		// TODO destroy interfaces?

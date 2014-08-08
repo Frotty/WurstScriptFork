@@ -470,7 +470,7 @@ AstElement.attrNearestExprStatementsBlock
 
 
 ExprStatementsBlock.getReturnStmt()
-	returns StmtReturn
+	returns @Nullable StmtReturn
 	implemented by de.peeeq.wurstscript.attributes.SmallHelpers.getReturnStatement
 
 

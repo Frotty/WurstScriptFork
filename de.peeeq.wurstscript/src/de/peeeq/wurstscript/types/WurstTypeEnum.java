@@ -2,37 +2,32 @@ package de.peeeq.wurstscript.types;
 
 import java.util.List;
 
+import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.ast.EnumDef;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstTypeEnum extends WurstTypeNamedScope {
+public class WurstTypeEnum extends WurstTypeNamedScope<EnumDef> {
 
-	
-
-	private EnumDef edef;
 
 	public WurstTypeEnum(boolean isStaticRef, EnumDef edef) {
-		super(isStaticRef);
-		if (edef == null) throw new IllegalArgumentException();
-		this.edef = edef;
+		super(TypeLink.to(edef), isStaticRef);
+	}
+	
+	public WurstTypeEnum(boolean isStaticRef, TypeLink<EnumDef> edef) {
+		super(edef, isStaticRef);
 	}
 
 	@Override
-	public EnumDef getDef() {
-		return edef;
-	}
-	
-	@Override
 	public String getName() {
-		return getDef().getName();
+		return typeLink.getName();
 	}
 	
 	@Override
 	public WurstType dynamic() {
-		return new WurstTypeEnum(false, edef);
+		return new WurstTypeEnum(false, typeLink);
 	}
 
 	@Override
@@ -42,12 +37,12 @@ public class WurstTypeEnum extends WurstTypeNamedScope {
 
 	
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImIntVal(0);
 	}
 	
@@ -56,5 +51,6 @@ public class WurstTypeEnum extends WurstTypeNamedScope {
 	public boolean isCastableToInt() {
 		return true;
 	}
+	
 
 }

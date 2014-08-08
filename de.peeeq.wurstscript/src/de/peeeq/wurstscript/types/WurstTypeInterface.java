@@ -9,10 +9,8 @@ import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstTypeInterface extends WurstTypeClassOrInterface {
+public class WurstTypeInterface extends WurstTypeClassOrInterface<InterfaceDef> {
 
-
-	private final InterfaceDef interfaceDef;
 
 //	public PscriptTypeInterface(InterfaceDef interfaceDef, boolean staticRef) {
 //		super(staticRef);
@@ -21,42 +19,37 @@ public class WurstTypeInterface extends WurstTypeClassOrInterface {
 //	}
 
 	public WurstTypeInterface(InterfaceDef interfaceDef, List<WurstType> newTypes, boolean isStaticRef) {
-		super(newTypes, isStaticRef);
-		if (interfaceDef == null) throw new IllegalArgumentException();
-		this.interfaceDef = interfaceDef;
+		super(TypeLink.to(interfaceDef), newTypes, isStaticRef);
 	}
 	
 	public WurstTypeInterface(InterfaceDef interfaceDef, List<WurstType> newTypes) {
-		super(newTypes);
-		if (interfaceDef == null) throw new IllegalArgumentException();
-		this.interfaceDef = interfaceDef;
+		super(TypeLink.to(interfaceDef), newTypes);
+	}
+	
+	public WurstTypeInterface(TypeLink<InterfaceDef> interfaceDef, List<WurstType> newTypes, boolean isStaticRef) {
+		super(interfaceDef, newTypes, isStaticRef);
 	}
 
-	@Override
-	public InterfaceDef getDef() {
-		return interfaceDef;
-	}
-
-	public InterfaceDef getInterfaceDef() {
-		return interfaceDef;
+	public WurstTypeInterface(TypeLink<InterfaceDef> interfaceDef, List<WurstType> newTypes) {
+		super(interfaceDef, newTypes);
 	}
 	
 	@Override
 	public String getName() {
-		return getDef().getName() + printTypeParams();
+		return typeLink.getName() + printTypeParams();
 	}
 	
 	@Override
 	public WurstType dynamic() {
 		if (isStaticRef()) {
-			return new WurstTypeInterface(getInterfaceDef(), getTypeParameters(), false);
+			return new WurstTypeInterface(typeLink, getTypeParameters(), false);
 		}
 		return this;
 	}
 
 	@Override
 	public WurstType replaceTypeVars(List<WurstType> newTypes) {
-		return new WurstTypeInterface(getInterfaceDef(), newTypes);
+		return new WurstTypeInterface(typeLink, newTypes);
 	}
 
 	@Override
@@ -67,10 +60,11 @@ public class WurstTypeInterface extends WurstTypeClassOrInterface {
 		
 		if (other instanceof WurstTypeInterface) {
 			WurstTypeInterface other2 = (WurstTypeInterface) other;
-			if (interfaceDef == other2.interfaceDef) {
+			if (typeLink.equals(other2.typeLink)) {
 				// same interface -> check if type params are equal
 				return checkTypeParametersEqual(getTypeParameters(), other2.getTypeParameters(), location);
 			} else {
+				InterfaceDef interfaceDef = typeLink.getDef(location);
 				// test super interfaces:
 				for (WurstTypeInterface extended : interfaceDef.attrExtendedInterfaces() ) {
 					if (extended.isSubtypeOf(other, location)) {
@@ -85,12 +79,12 @@ public class WurstTypeInterface extends WurstTypeClassOrInterface {
 	
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 	

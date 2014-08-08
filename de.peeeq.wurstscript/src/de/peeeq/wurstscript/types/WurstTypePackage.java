@@ -2,32 +2,27 @@ package de.peeeq.wurstscript.types;
 
 import java.util.List;
 
+import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.ast.NamedScope;
 import de.peeeq.wurstscript.ast.WPackage;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 
 
-public class WurstTypePackage extends WurstTypeNamedScope {
+public class WurstTypePackage extends WurstTypeNamedScope<WPackage> {
 
-	
-
-	private WPackage pack;
 
 	public WurstTypePackage(WPackage pack) {
-		super(true);
-		if (pack == null) throw new IllegalArgumentException();
-		this.pack = pack;
+		super(TypeLink.to(pack), true);
 	}
 
-	@Override
-	public NamedScope getDef() {
-		return pack;
+	public WurstTypePackage(TypeLink<WPackage> pack) {
+		super(pack, true);
 	}
 	
 	@Override
 	public String getName() {
-		return getDef().getName() + printTypeParams() + " (package)";
+		return typeLink.getName() + printTypeParams() + " (package)";
 	}
 	
 	@Override
@@ -41,12 +36,12 @@ public class WurstTypePackage extends WurstTypeNamedScope {
 	}
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		throw new Error("not implemented");
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		throw new Error("not implemented");
 	}
 

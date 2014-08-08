@@ -31,12 +31,12 @@ public class WurstTypeIntLiteral extends WurstTypePrimitive {
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImIntVal(0);
 	}
 	
 	@Override
-	public ImSimpleType imTranslateType() {
+	public ImSimpleType imTranslateType(AstElement location) {
 		return JassIm.ImSimpleType("integer");
 	}
 	

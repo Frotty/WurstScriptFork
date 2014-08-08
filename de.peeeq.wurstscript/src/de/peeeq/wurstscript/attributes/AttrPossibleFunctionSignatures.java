@@ -31,7 +31,7 @@ public class AttrPossibleFunctionSignatures {
 			
 			if (fc.attrImplicitParameter() instanceof Expr) {
 				Expr expr = (Expr) fc.attrImplicitParameter();
-				sig = sig.setTypeArgs(expr.attrTyp().getTypeArgBinding());
+				sig = sig.setTypeArgs(expr.attrTyp().getTypeArgBinding(fc));
 			}
 			sig = sig.setTypeArgs(fc.attrTypeParameterBindings());
 			result.add(sig);

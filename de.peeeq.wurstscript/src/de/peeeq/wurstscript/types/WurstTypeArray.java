@@ -1,5 +1,6 @@
 package de.peeeq.wurstscript.types;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -13,10 +14,10 @@ import de.peeeq.wurstscript.jassIm.JassIm;
 import de.peeeq.wurstscript.utils.Utils;
 
 
-public class WurstTypeArray extends WurstType {
+public final class WurstTypeArray extends WurstType {
 
-	private WurstType baseType;
-	private int[] sizes;
+	private final WurstType baseType;
+	private final int[] sizes;
 	
 	public WurstTypeArray(WurstType baseType, int[] sizes) {
 		if (baseType instanceof WurstTypeArray) {
@@ -77,8 +78,8 @@ public class WurstTypeArray extends WurstType {
 
 
 	@Override
-	public ImType imTranslateType() {
-		ImType bt = baseType.imTranslateType();
+	public ImType imTranslateType(AstElement location) {
+		ImType bt = baseType.imTranslateType(location);
 		
 		if (bt instanceof ImSimpleType) {
 			String typename = ((ImSimpleType) bt).getTypename();
@@ -106,8 +107,42 @@ public class WurstTypeArray extends WurstType {
 
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		throw new Error();
 	}
+
+
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((baseType == null) ? 0 : baseType.hashCode());
+		result = prime * result + Arrays.hashCode(sizes);
+		return result;
+	}
+
+
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeArray other = (WurstTypeArray) obj;
+		if (baseType == null) {
+			if (other.baseType != null)
+				return false;
+		} else if (!baseType.equals(other.baseType))
+			return false;
+		if (!Arrays.equals(sizes, other.sizes))
+			return false;
+		return true;
+	}
+	
+	
 
 }

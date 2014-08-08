@@ -2,22 +2,20 @@ package de.peeeq.wurstscript.types;
 
 import java.util.List;
 
+import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.ast.StructureDef;
 
-public abstract class WurstTypeClassOrInterface extends WurstTypeNamedScope {
+public abstract class WurstTypeClassOrInterface<T extends StructureDef> extends WurstTypeNamedScope<T> {
 
-	public WurstTypeClassOrInterface(List<WurstType> typeParameters,
+	public WurstTypeClassOrInterface(TypeLink<T> typeLink, List<WurstType> typeParameters,
 			boolean isStaticRef) {
-		super(typeParameters, isStaticRef);
+		super(typeLink, typeParameters, isStaticRef);
 	}
 
-	public WurstTypeClassOrInterface(List<WurstType> newTypes) {
-		super(newTypes);
+	public WurstTypeClassOrInterface(TypeLink<T> typeLink, List<WurstType> newTypes) {
+		super(typeLink, newTypes);
 	}
 
-	
-	@Override
-	public abstract StructureDef getDef();
 	
 	
 	@Override

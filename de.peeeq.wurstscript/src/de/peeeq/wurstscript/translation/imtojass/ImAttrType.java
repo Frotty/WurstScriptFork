@@ -43,11 +43,11 @@ import de.peeeq.wurstscript.types.WurstTypeString;
 public class ImAttrType {
 
 	public static ImType getType(ImBoolVal e) {
-		return WurstTypeBool.instance().imTranslateType();
+		return WurstTypeBool.instance().imTranslateType(null);
 	}
 
 	public static ImType getType(ImFuncRef e) {
-		return WurstTypeCode.instance().imTranslateType();
+		return WurstTypeCode.instance().imTranslateType(null);
 	}
 
 	public static ImType getType(ImFunctionCall e) {
@@ -62,20 +62,20 @@ public class ImAttrType {
 	}
 
 	public static ImType getType(ImIntVal e) {
-		return WurstTypeInt.instance().imTranslateType();
+		return WurstTypeInt.instance().imTranslateType(null);
 	}
 
 	public static ImType getType(ImNull e) {
-		return WurstTypeHandle.instance().imTranslateType();
+		return WurstTypeHandle.instance().imTranslateType(null);
 	}
 
 	public static ImType getType(ImOperatorCall e) {
 		switch (e.getOp()) {
 		case MOD_REAL:
-			return WurstTypeReal.instance().imTranslateType();
+			return WurstTypeReal.instance().imTranslateType(null);
 		case DIV_INT:
 		case MOD_INT:
-			return WurstTypeInt.instance().imTranslateType();
+			return WurstTypeInt.instance().imTranslateType(null);
 		case AND:
 		case OR:
 		case EQ:
@@ -85,7 +85,7 @@ public class ImAttrType {
 		case LESS:
 		case LESS_EQ:
 		case NOT:
-			return WurstTypeBool.instance().imTranslateType();
+			return WurstTypeBool.instance().imTranslateType(null);
 		case DIV_REAL:
 		case PLUS:
 		case MINUS:
@@ -93,7 +93,7 @@ public class ImAttrType {
 			ImType leftType = e.getArguments().get(0).attrTyp();
 			ImType rightType = e.getArguments().get(1).attrTyp();
 			if (typeReal(leftType) || typeReal(rightType)) {
-				return WurstTypeReal.instance().imTranslateType();
+				return WurstTypeReal.instance().imTranslateType(null);
 			}
 		}
 		case UNARY_MINUS: 
@@ -110,7 +110,7 @@ public class ImAttrType {
 	}
 
 	public static ImType getType(ImRealVal e) {
-		return WurstTypeReal.instance().imTranslateType();
+		return WurstTypeReal.instance().imTranslateType(null);
 	}
 
 	public static ImType getType(ImStatementExpr e) {
@@ -118,7 +118,7 @@ public class ImAttrType {
 	}
 
 	public static ImType getType(ImStringVal e) {
-		return WurstTypeString.instance().imTranslateType();
+		return WurstTypeString.instance().imTranslateType(null);
 	}
 
 	public static ImType getType(ImTupleSelection e) {

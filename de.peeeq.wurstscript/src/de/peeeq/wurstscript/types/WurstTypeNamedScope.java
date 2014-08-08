@@ -14,44 +14,51 @@ import de.peeeq.wurstscript.ast.AstElementWithTypeParameters;
 import de.peeeq.wurstscript.ast.ClassDef;
 import de.peeeq.wurstscript.ast.InterfaceDef;
 import de.peeeq.wurstscript.ast.ModuleDef;
+import de.peeeq.wurstscript.ast.NameDef;
 import de.peeeq.wurstscript.ast.NamedScope;
 import de.peeeq.wurstscript.ast.TypeParamDef;
-import de.peeeq.wurstscript.ast.TypeParamDefs;
 import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.attributes.names.NameLinkType;
 
-public abstract class WurstTypeNamedScope extends WurstType {
+public abstract class WurstTypeNamedScope<T extends NamedScope & NameDef> extends WurstType {
 
 	private final boolean isStaticRef;
+	protected final TypeLink<T> typeLink;
 	private final List<WurstType> typeParameters;
 	
 	
-	public WurstTypeNamedScope(List<WurstType> typeParameters, boolean isStaticRef) {
+	public WurstTypeNamedScope(TypeLink<T> typeLink, List<WurstType> typeParameters, boolean isStaticRef) {
+		this.typeLink = typeLink;
 		this.isStaticRef = isStaticRef;
 		this.typeParameters = typeParameters;
 	}
 
-	public WurstTypeNamedScope(List<WurstType> typeParameters) {
+	public WurstTypeNamedScope(TypeLink<T> typeLink, List<WurstType> typeParameters) {
+		this.typeLink = typeLink;
 		this.isStaticRef = false;
 		this.typeParameters = typeParameters;
 	}
 
 	
-	public WurstTypeNamedScope(boolean isStaticRef) {
+	public WurstTypeNamedScope(TypeLink<T> typeLink, boolean isStaticRef) {
+		this.typeLink = typeLink;
 		this.isStaticRef = isStaticRef;
 		this.typeParameters = Collections.emptyList();
 	}
 
 	@Override
 	public String getName() {
-		NamedScope def = getDef();
-		if (def == null) {
-			return "not found";
-		}
+		TypeLink<T> def = getTypeLink();
 		return def.getName();
 	}
 
-	public abstract @Nullable NamedScope getDef();
+	public TypeLink<T> getTypeLink() {
+		return typeLink;
+	}
+	
+	public T getDef(AstElement loc) {
+		return typeLink.getDef(loc);
+	}
 
 	@Override
 	public String getFullName() {
@@ -69,8 +76,8 @@ public abstract class WurstTypeNamedScope extends WurstType {
 			return false;
 		}
 		if (obj instanceof WurstTypeNamedScope) {
-			WurstTypeNamedScope other = (WurstTypeNamedScope) obj;
-			if (other.getDef() == this.getDef()) {
+			WurstTypeNamedScope<?> other = (WurstTypeNamedScope<?>) obj;
+			if (other.getTypeLink().equals(getTypeLink())) {
 				return checkTypeParametersEqual(getTypeParameters(), other.getTypeParameters(), location);
 			}
 		}
@@ -87,18 +94,15 @@ public abstract class WurstTypeNamedScope extends WurstType {
 	}
 	
 	
-	@Nullable Map<TypeParamDef, WurstType> cache_typeParamBounds;
-	private Map<TypeParamDef, WurstType> getTypeParamBounds() {
-		Map<TypeParamDef, WurstType> cache = cache_typeParamBounds;
+	@Nullable Map<TypeLink<TypeParamDef>, WurstType> cache_typeParamBounds;
+	private Map<TypeLink<TypeParamDef>, WurstType> getTypeParamBounds() {
+		Map<TypeLink<TypeParamDef>, WurstType> cache = cache_typeParamBounds;
 		if (cache == null) {
 			cache_typeParamBounds = cache = Maps.newLinkedHashMap();
-			NamedScope def = getDef();
-			if (def instanceof AstElementWithTypeParameters) {
-				AstElementWithTypeParameters wtp = (AstElementWithTypeParameters) def;
-				TypeParamDefs tps = wtp.getTypeParameters();
-				for (int index = 0; index < typeParameters.size(); index++) {
-					cache.put(tps.get(index), typeParameters.get(index));
-				}
+			TypeLink<T> def = getTypeLink();
+			List<TypeLink<TypeParamDef>> tps = def.getTypeParameters();
+			for (int index = 0; index < typeParameters.size(); index++) {
+				cache.put(tps.get(index), typeParameters.get(index));
 			}
 		}
 		return cache;
@@ -136,9 +140,9 @@ public abstract class WurstTypeNamedScope extends WurstType {
 
 
 	@Override
-	public Map<TypeParamDef, WurstType> getTypeArgBinding() {
+	public Map<TypeParamDef, WurstType> getTypeArgBinding(AstElement loc) {
 		
-		NamedScope def2 = getDef();
+		T def2 = getDef(loc);
 		if (def2 instanceof AstElementWithTypeParameters) {
 			AstElementWithTypeParameters def = (AstElementWithTypeParameters) def2;
 			Map<TypeParamDef, WurstType> result = Maps.newLinkedHashMap();
@@ -153,41 +157,41 @@ public abstract class WurstTypeNamedScope extends WurstType {
 				
 				// type binding for extended class
 				result.putAll(c.getExtendedClass().attrTyp()
-						.getTypeArgBinding());
+						.getTypeArgBinding(loc));
 				// type binding for implemented interfaces:
 				for (WurstTypeInterface i : c.attrImplementedInterfaces()) {
-					result.putAll(i.getTypeArgBinding());
+					result.putAll(i.getTypeArgBinding(loc));
 				}
 			} else if (def instanceof InterfaceDef) {
 				InterfaceDef i = (InterfaceDef) def;
 				// type binding for implemented interfaces:
 				for (WurstTypeInterface ii : i.attrExtendedInterfaces()) {
-					result.putAll(ii.getTypeArgBinding());
+					result.putAll(ii.getTypeArgBinding(loc));
 				}
 			}
-			normalizeTypeArgsBinding(result);
+			normalizeTypeArgsBinding(result, loc);
 			return result ;
 		}
-		return super.getTypeArgBinding();
+		return super.getTypeArgBinding(loc);
 	}
 
-	private void normalizeTypeArgsBinding(Map<TypeParamDef, WurstType> b) {
+	private void normalizeTypeArgsBinding(Map<TypeParamDef, WurstType> b, AstElement location) {
 		List<TypeParamDef> keys = Lists.newArrayList(b.keySet());
 		for (TypeParamDef p : keys) {
 			WurstType t = b.get(p);
-			b.put(p, normalizeType(t,b));
+			b.put(p, normalizeType(t,b, location));
 		}
 	}
 
-	private WurstType normalizeType(WurstType t, Map<TypeParamDef, WurstType> b) {
+	private WurstType normalizeType(WurstType t, Map<TypeParamDef, WurstType> b, AstElement location) {
 		t = t.normalize();
 		if (t instanceof WurstTypeTypeParam) {
 			WurstTypeTypeParam tp = (WurstTypeTypeParam) t;
-			TypeParamDef tpDef = tp.getDef();
+			TypeParamDef tpDef = tp.getDef(location);
 			if (b.containsKey(tpDef)) {
 				WurstType t2 = b.get(tpDef);
 				if (t != t2) {
-					return normalizeType(t2, b);
+					return normalizeType(t2, b, location);
 				}
 			}
 		}
@@ -235,7 +239,7 @@ public abstract class WurstTypeNamedScope extends WurstType {
 	@Override
 	public void addMemberMethods(AstElement node, String name,
 			List<NameLink> result) {
-		NamedScope scope = getDef();
+		NamedScope scope = getDef(node);
 		if (scope instanceof ModuleDef) {
 			// cannot access functions from outside of module 
 		} else if (scope != null) {
@@ -249,5 +253,41 @@ public abstract class WurstTypeNamedScope extends WurstType {
 			}
 		}
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + (isStaticRef ? 1231 : 1237);
+		result = prime * result + ((typeLink == null) ? 0 : typeLink.hashCode());
+		result = prime * result + ((typeParameters == null) ? 0 : typeParameters.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeNamedScope other = (WurstTypeNamedScope) obj;
+		if (isStaticRef != other.isStaticRef)
+			return false;
+		if (typeLink == null) {
+			if (other.typeLink != null)
+				return false;
+		} else if (!typeLink.equals(other.typeLink))
+			return false;
+		if (typeParameters == null) {
+			if (other.typeParameters != null)
+				return false;
+		} else if (!typeParameters.equals(other.typeParameters))
+			return false;
+		return true;
+	}
+	
+	
 	
 }

@@ -1,16 +1,18 @@
 package de.peeeq.wurstscript.types;
 
+import java.util.Arrays;
+
 import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
 
 
-public class WurstFuncType extends WurstType {
+public final class WurstFuncType extends WurstType {
 
 
-	private WurstType returnType;
-	private WurstType[] paramTypes;
+	private final WurstType returnType;
+	private final WurstType[] paramTypes;
 
 	public WurstFuncType(WurstType returnType, WurstType ... paramTypes ) {
 		this.returnType = returnType;
@@ -56,14 +58,45 @@ public class WurstFuncType extends WurstType {
 
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return JassIm.ImSimpleType("code");
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + Arrays.hashCode(paramTypes);
+		result = prime * result + ((returnType == null) ? 0 : returnType.hashCode());
+		return result;
+	}
 
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstFuncType other = (WurstFuncType) obj;
+		if (!Arrays.equals(paramTypes, other.paramTypes))
+			return false;
+		if (returnType == null) {
+			if (other.returnType != null)
+				return false;
+		} else if (!returnType.equals(other.returnType))
+			return false;
+		return true;
+	}
+
+
+	
+	
+	
 }

@@ -229,7 +229,7 @@ public class StmtTranslation {
 
 	public static ImStmt translate(SwitchStmt switchStmt, ImTranslator t, ImFunction f) {
 		List<ImStmt> result = Lists.newArrayList();
-		ImType type = switchStmt.getExpr().attrTyp().imTranslateType();
+		ImType type = switchStmt.getExpr().attrTyp().imTranslateType(switchStmt);
 		ImExpr tempVar = addCacheVariableSmart(t, f, result, switchStmt.getExpr(), type);
 		// generate ifs
 		// leerer Block:

@@ -4,9 +4,9 @@ import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 
-public class WurstTypeError extends WurstType {
+public final class WurstTypeError extends WurstType {
 
-	private String msg;
+	private final String msg;
 
 	public WurstTypeError(String msg) {
 		this.msg = msg;
@@ -30,13 +30,40 @@ public class WurstTypeError extends WurstType {
 
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		throw new Error("not implemented");
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		throw new Error("not implemented");
 	}
 
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((msg == null) ? 0 : msg.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeError other = (WurstTypeError) obj;
+		if (msg == null) {
+			if (other.msg != null)
+				return false;
+		} else if (!msg.equals(other.msg))
+			return false;
+		return true;
+	}
+
+	
+	
 }

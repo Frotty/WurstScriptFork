@@ -8,7 +8,7 @@ import de.peeeq.wurstscript.jassIm.ImType;
 
 public class TypesHelper {
 
-	private static final ImSimpleType intType = WurstTypeInt.instance().imTranslateType();
+	private static final ImSimpleType intType = WurstTypeInt.instance().imTranslateType(null);
 
 	public static WurstType typeOf(ClassOrModule classOrModule, final boolean isStatic) {
 		return classOrModule.match(new ClassOrModule.Matcher<WurstType>() {
@@ -35,16 +35,16 @@ public class TypesHelper {
 	}
 	
 	public static ImSimpleType imString() {
-		return WurstTypeString.instance().imTranslateType();
+		return WurstTypeString.instance().imTranslateType(null);
 	}
 
 	public static ImType imVoid() {
-		return WurstTypeVoid.instance().imTranslateType();
+		return WurstTypeVoid.instance().imTranslateType(null);
 	}
 
 
 	public static ImType imBool() {
-		return WurstTypeBool.instance().imTranslateType();
+		return WurstTypeBool.instance().imTranslateType(null);
 	}
 
 //	public static boolean checkTypeArgs(InstanceDef iDef, List<PscriptType> classParams, List<PscriptType> interfaceParams) {

@@ -11,10 +11,10 @@ import de.peeeq.wurstscript.jassIm.JassIm;
 
 public class WurstTypeTypeParam extends WurstType {
 
-	private TypeParamDef def;
+	private TypeLink<TypeParamDef> def;
 
 	public WurstTypeTypeParam(TypeParamDef t) {
-		this.def = t;
+		this.def = TypeLink.to(t);
 	}
 
 	@Override
@@ -36,12 +36,8 @@ public class WurstTypeTypeParam extends WurstType {
 		return getName() + " (type parameter)";
 	}
 
-	public TypeParamDef  getDef() {
-		return def;
-	}
-
 	@Override
-	public Map<TypeParamDef, WurstType> getTypeArgBinding() {
+	public Map<TypeParamDef, WurstType> getTypeArgBinding(AstElement location) {
 		return Collections.emptyMap();
 	}
 
@@ -55,12 +51,12 @@ public class WurstTypeTypeParam extends WurstType {
 	}
 
 	@Override
-	public ImType imTranslateType() {
+	public ImType imTranslateType(AstElement location) {
 		return TypesHelper.imInt();
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
+	public ImExprOpt getDefaultValue(AstElement location) {
 		return JassIm.ImNull();
 	}
 	
@@ -69,5 +65,36 @@ public class WurstTypeTypeParam extends WurstType {
 	public boolean isCastableToInt() {
 		return true;
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((def == null) ? 0 : def.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeTypeParam other = (WurstTypeTypeParam) obj;
+		if (def == null) {
+			if (other.def != null)
+				return false;
+		} else if (!def.equals(other.def))
+			return false;
+		return true;
+	}
+
+	public TypeParamDef getDef(AstElement location) {
+		return def.getDef(location);
+	}
+	
+	
 	
 }

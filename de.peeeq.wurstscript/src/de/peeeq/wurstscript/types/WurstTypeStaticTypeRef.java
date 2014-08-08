@@ -4,7 +4,7 @@ import de.peeeq.wurstscript.ast.AstElement;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 
-public class WurstTypeStaticTypeRef extends WurstType {
+public final class WurstTypeStaticTypeRef extends WurstType {
 
 	private final WurstType base;
 	
@@ -28,18 +28,45 @@ public class WurstTypeStaticTypeRef extends WurstType {
 	}
 
 	@Override
-	public ImType imTranslateType() {
-		return base.imTranslateType();
+	public ImType imTranslateType(AstElement location) {
+		return base.imTranslateType(location);
 	}
 
 	@Override
-	public ImExprOpt getDefaultValue() {
-		return base.getDefaultValue();
+	public ImExprOpt getDefaultValue(AstElement location) {
+		return base.getDefaultValue(location);
 	}
 	
 	@Override
 	public WurstType dynamic() {
 		return base;
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((base == null) ? 0 : base.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WurstTypeStaticTypeRef other = (WurstTypeStaticTypeRef) obj;
+		if (base == null) {
+			if (other.base != null)
+				return false;
+		} else if (!base.equals(other.base))
+			return false;
+		return true;
+	}
+
+	
 
 }
