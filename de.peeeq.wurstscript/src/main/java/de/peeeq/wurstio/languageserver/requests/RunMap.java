@@ -1,23 +1,9 @@
 package de.peeeq.wurstio.languageserver.requests;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import javax.swing.filechooser.FileSystemView;
-
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
-
 import de.peeeq.wurstio.CompiletimeFunctionRunner;
 import de.peeeq.wurstio.WurstCompilerJassImpl;
 import de.peeeq.wurstio.gui.WurstGuiImpl;
@@ -39,6 +25,18 @@ import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum;
 import de.peeeq.wurstscript.utils.LineOffsets;
 import de.peeeq.wurstscript.utils.Utils;
+
+import javax.swing.filechooser.FileSystemView;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Created by peter on 16.05.16.
@@ -107,7 +105,7 @@ public class RunMap extends UserRequest {
             File outputMapscript = compiledScript;
 
             gui.sendProgress("Injecting mapscript");
-            try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(testMap, runArgs)) {
+            try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(testMap)) {
                 mpqEditor.deleteFile("war3map.j");
                 mpqEditor.insertFile("war3map.j", Files.toByteArray(outputMapscript));
             }
@@ -191,7 +189,7 @@ public class RunMap extends UserRequest {
 
         //  try to get war3map.j from the map:
         byte[] mapScript;
-        try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(mapCopy, runArgs)) {
+        try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(mapCopy)) {
             mapScript = mpqEditor.extractFile("war3map.j");
         }
         if (new String(mapScript, StandardCharsets.UTF_8).startsWith(JassPrinter.WURST_COMMENT_RAW)) {
@@ -235,7 +233,7 @@ public class RunMap extends UserRequest {
 
         MpqEditor mpqEditor = null;
         if (mapCopy != null) {
-            mpqEditor = MpqEditorFactory.getEditor(mapCopy, runArgs);
+            mpqEditor = MpqEditorFactory.getEditor(mapCopy);
         }
 
         //WurstGui gui = new WurstGuiLogger();

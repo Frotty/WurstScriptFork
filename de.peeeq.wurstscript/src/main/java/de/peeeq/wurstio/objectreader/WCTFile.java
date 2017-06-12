@@ -1,17 +1,15 @@
 package de.peeeq.wurstio.objectreader;
 
+import com.google.common.base.Charsets;
+import com.google.common.collect.Lists;
+import de.peeeq.wurstio.mpq.MpqEditor;
+import de.peeeq.wurstio.mpq.MpqEditorFactory;
+
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-
-import com.google.common.base.Charsets;
-import com.google.common.collect.Lists;
-
-import de.peeeq.wurstio.mpq.MpqEditor;
-import de.peeeq.wurstio.mpq.MpqEditorFactory;
-import de.peeeq.wurstscript.RunArgs;
 
 public class WCTFile {
 	
@@ -85,7 +83,7 @@ public class WCTFile {
 	public static void main(String[] args) throws Exception {
 		
 		File mpq = new File("/home/peter/work/dvs/dvs.w3x");
-		try (MpqEditor ed = MpqEditorFactory.getEditor(mpq, RunArgs.defaults())) {
+		try (MpqEditor ed = MpqEditorFactory.getEditor(mpq)) {
 			byte[] wtc = ed.extractFile("war3map.wct");
 			try (BinaryDataInputStream bdin = new BinaryDataInputStream(new ByteArrayInputStream(wtc), true)) {
 				WCTFile tr = fromStream(bdin);

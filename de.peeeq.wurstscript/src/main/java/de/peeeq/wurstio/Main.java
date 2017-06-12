@@ -1,24 +1,8 @@
 package de.peeeq.wurstio;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.logging.FileHandler;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.SimpleFormatter;
-
-import javax.swing.JOptionPane;
-
-import org.eclipse.jdt.annotation.Nullable;
-
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.io.Files;
-
 import de.peeeq.wurstio.Pjass.Result;
 import de.peeeq.wurstio.compilationserver.WurstServer;
 import de.peeeq.wurstio.gui.About;
@@ -41,6 +25,19 @@ import de.peeeq.wurstscript.jassprinter.JassPrinter;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum;
 import de.peeeq.wurstscript.utils.Utils;
 import de.peeeq.wurstscript.utils.WinRegistry;
+import org.eclipse.jdt.annotation.Nullable;
+
+import javax.swing.*;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.logging.FileHandler;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.SimpleFormatter;
 
 public class Main {
 
@@ -131,7 +128,7 @@ public class Main {
                 }
 
                 if (mapFilePath != null) {
-                    try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(new File(mapFilePath), runArgs)) {
+                    try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(new File(mapFilePath))) {
                         CharSequence mapScript = doCompilation(gui, mpqEditor, runArgs);
                         if (mapScript != null) {
                             gui.sendProgress("Writing to map");
@@ -187,7 +184,7 @@ public class Main {
 
         File rocMpq = new File(wc3Path + "War3.mpq");
         File tftMpq = new File(wc3Path + "War3x.mpq");
-        MpqEditor roceditor = MpqEditorFactory.getEditor(rocMpq, runArgs);
+        MpqEditor roceditor = MpqEditorFactory.getEditor(rocMpq);
         boolean rocHasKeys = roceditor.hasFile("font\\font.ccd") && roceditor.hasFile("font\\font.gid") && roceditor.hasFile("font\\font.clh");
         if (!rocHasKeys) {
             JOptionPane.showMessageDialog(null, "Wurstpack has detected a 1.28+ install of RoC and needs to fix your installation.\n"
@@ -200,7 +197,7 @@ public class Main {
         } else {
             WLogger.info("Already has roc keys");
         }
-        MpqEditor tfteditor = MpqEditorFactory.getEditor(tftMpq, runArgs);
+        MpqEditor tfteditor = MpqEditorFactory.getEditor(tftMpq);
         boolean tftHasKeys = tfteditor.hasFile("font\\font.ccd") && tfteditor.hasFile("font\\font.exp");
         if (!tftHasKeys) {
             JOptionPane.showMessageDialog(null, "Wurstpack has detected a 1.28+ install of TFT and needs to fix your installation.\n"

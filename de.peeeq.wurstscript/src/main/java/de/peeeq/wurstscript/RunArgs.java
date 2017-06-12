@@ -1,14 +1,13 @@
 package de.peeeq.wurstscript;
 
+import com.google.common.collect.Lists;
+import org.eclipse.jdt.annotation.Nullable;
+
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-
-import org.eclipse.jdt.annotation.Nullable;
-
-import com.google.common.collect.Lists;
 
 public class RunArgs {
 
@@ -35,7 +34,6 @@ public class RunArgs {
 	private RunOption optionExtractImports;
 	private RunOption optionStartServer;
 	private RunOption optionGenerateLua;
-	private RunOption optionUseJmpq2;
 	private RunOption optionLanguageServer;
 	private RunOption optionNoExtractMapScript;
 	private RunOption optionInsertCDKey;
@@ -91,7 +89,6 @@ public class RunArgs {
 		optionGenerateLua = addOption("lua", "generate lua output");
 		// other
 		optionNoExtractMapScript = addOption("noExtractMapScript", "Do not extract the map script from the map and use the one from the Wurst folder instead.");
-		optionUseJmpq2 = addOption("-jmpq2", "Use JMpq-v2 as mpq editor");
 		optionGui = addOption("gui", "Show a graphical user interface (progress bar and error window).");
 		addOptionWithArg("lib", "The next argument should be a library folder which is lazily added to the build.", arg -> {
 			libDirs.add(new File(arg));
@@ -263,10 +260,6 @@ public class RunArgs {
 
 	public boolean isUncheckedDispatch() {
 		return uncheckedDispatch.isSet;
-	}
-
-	public boolean useJmpq2(){
-		return optionUseJmpq2.isSet;
 	}
 
 	public boolean isLanguageServer() {

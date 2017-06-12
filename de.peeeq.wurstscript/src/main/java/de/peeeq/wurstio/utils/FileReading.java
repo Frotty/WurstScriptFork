@@ -1,21 +1,12 @@
 package de.peeeq.wurstio.utils;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.Charset;
-
+import com.google.common.base.Charsets;
+import de.peeeq.wurstscript.WLogger;
 import org.mozilla.intl.chardet.nsDetector;
-import org.mozilla.intl.chardet.nsICharsetDetectionObserver;
 import org.mozilla.intl.chardet.nsPSMDetector;
 
-import com.google.common.base.Charsets;
-
-import de.peeeq.wurstscript.WLogger;
+import java.io.*;
+import java.nio.charset.Charset;
 
 public class FileReading {
 
@@ -42,13 +33,10 @@ public class FileReading {
 			final boolean[] found = new boolean[1];
 			final String[] charset = new String[1];
 
-			det.Init(new nsICharsetDetectionObserver() {
-				@Override
-				public void Notify(String cs) {
-					found[0] = true;
-					charset[0] = cs;
-				}
-			});
+			det.Init(cs -> {
+                found[0] = true;
+                charset[0] = cs;
+            });
 
 			byte[] buf = new byte[1024];
 			int len;

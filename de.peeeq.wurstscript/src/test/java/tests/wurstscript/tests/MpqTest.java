@@ -1,19 +1,15 @@
 package tests.wurstscript.tests;
 
-import java.io.File;
-import java.io.IOException;
-
+import com.google.common.io.Files;
+import de.peeeq.wurstio.mpq.MpqEditor;
+import de.peeeq.wurstio.mpq.MpqEditorFactory;
 import junit.framework.Assert;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.io.Files;
-
-import de.peeeq.wurstio.mpq.MpqEditor;
-import de.peeeq.wurstio.mpq.MpqEditorFactory;
-import de.peeeq.wurstscript.RunArgs;
+import java.io.File;
+import java.io.IOException;
 
 public class MpqTest {
 
@@ -38,7 +34,7 @@ public class MpqTest {
 
 	@Test
 	public void test_extract() throws Exception {
-		try (MpqEditor edit = MpqEditorFactory.getEditor(new File(TEST_W3X), RunArgs.defaults())) {
+		try (MpqEditor edit = MpqEditorFactory.getEditor(new File(TEST_W3X))) {
 			byte[] f = edit.extractFile("war3map.j");
 			// edit.insertFile(new File("./testscripts/mpq/test.w3x"), "war3map.j",
 			// f);
@@ -68,7 +64,7 @@ public class MpqTest {
 
 	@Test
 	public void test_insert() throws Exception {
-		try (MpqEditor edit = MpqEditorFactory.getEditor(new File(TEST_W3X), RunArgs.defaults())) {
+		try (MpqEditor edit = MpqEditorFactory.getEditor(new File(TEST_W3X))) {
 			edit.insertFile("test.txt", Files.toByteArray(new File(
 					"./testscripts/mpq/test.txt")));
 		}
@@ -78,7 +74,7 @@ public class MpqTest {
 
 	@Test
 	public void test_delete() throws Exception {
-		try (MpqEditor edit = MpqEditorFactory.getEditor(new File(TEST_W3X), RunArgs.defaults())) {
+		try (MpqEditor edit = MpqEditorFactory.getEditor(new File(TEST_W3X))) {
 			edit.deleteFile("test.txt");
 		}
 		Assert.assertTrue(true);

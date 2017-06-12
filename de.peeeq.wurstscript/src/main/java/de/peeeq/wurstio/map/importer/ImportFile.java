@@ -1,22 +1,20 @@
 package de.peeeq.wurstio.map.importer;
 
+import com.google.common.io.Files;
+import com.google.common.io.LittleEndianDataInputStream;
+import de.peeeq.wurstio.mpq.MpqEditor;
+import de.peeeq.wurstio.mpq.MpqEditorFactory;
+import de.peeeq.wurstscript.RunArgs;
+import de.peeeq.wurstscript.WLogger;
+import de.peeeq.wurstscript.utils.TempDir;
+
+import javax.swing.*;
 import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedList;
-
-import javax.swing.JOptionPane;
-
-import com.google.common.io.Files;
-import com.google.common.io.LittleEndianDataInputStream;
-
-import de.peeeq.wurstio.mpq.MpqEditor;
-import de.peeeq.wurstio.mpq.MpqEditorFactory;
-import de.peeeq.wurstscript.RunArgs;
-import de.peeeq.wurstscript.WLogger;
-import de.peeeq.wurstscript.utils.TempDir;
 
 public class ImportFile {
     private static final String DEFAULT_IMPORT_PATH = "war3mapImported\\";
@@ -42,7 +40,7 @@ public class ImportFile {
     }
 
     private static void extractImportsFrom(File importDirectory, File tempMap, RunArgs runArgs) throws IOException, Exception {
-        try (MpqEditor editor = MpqEditorFactory.getEditor(tempMap, runArgs)) {
+        try (MpqEditor editor = MpqEditorFactory.getEditor(tempMap)) {
             LinkedList<String> failed = extractImportedFiles(editor, importDirectory);
 
             if (failed.isEmpty()) {

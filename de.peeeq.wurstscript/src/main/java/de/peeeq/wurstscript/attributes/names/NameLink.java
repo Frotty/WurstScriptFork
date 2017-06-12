@@ -1,35 +1,16 @@
 package de.peeeq.wurstscript.attributes.names;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-import org.eclipse.jdt.annotation.Nullable;
-
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
-import de.peeeq.wurstscript.ast.Element;
-import de.peeeq.wurstscript.ast.ClassDef;
-import de.peeeq.wurstscript.ast.EnumDef;
-import de.peeeq.wurstscript.ast.EnumMember;
-import de.peeeq.wurstscript.ast.ExtensionFuncDef;
-import de.peeeq.wurstscript.ast.FuncDef;
-import de.peeeq.wurstscript.ast.FunctionDefinition;
-import de.peeeq.wurstscript.ast.GlobalVarDef;
-import de.peeeq.wurstscript.ast.InterfaceDef;
-import de.peeeq.wurstscript.ast.ModuleDef;
-import de.peeeq.wurstscript.ast.ModuleInstanciation;
-import de.peeeq.wurstscript.ast.NameDef;
-import de.peeeq.wurstscript.ast.StructureDef;
-import de.peeeq.wurstscript.ast.TupleDef;
-import de.peeeq.wurstscript.ast.TypeParamDef;
-import de.peeeq.wurstscript.ast.WPackage;
-import de.peeeq.wurstscript.ast.WParameter;
-import de.peeeq.wurstscript.ast.WScope;
+import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.types.WurstType;
 import de.peeeq.wurstscript.types.WurstTypeBoundTypeParam;
 import de.peeeq.wurstscript.utils.Utils;
+import org.eclipse.jdt.annotation.Nullable;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 
 public class NameLink {
