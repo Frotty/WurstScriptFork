@@ -15,8 +15,8 @@ public class NameGenerator {
     /**
      * The given charmap
      */
-    private final String charmapFirst = "wurstiScoOlbypeqandfRTYGghFkjxvmQWEZUIPADHJKLXCVBNM";
-    private final String charmap = charmapFirst + "3142567890";
+    private final String charmapFirst = "lLoOiI";
+    private final String charmap = charmapFirst + "0";
     private final String charmapMid = charmap + "_";
 
     private String TEcharmap = "wurstqeiopadfghjklyxcvbnm";
