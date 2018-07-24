@@ -24,7 +24,7 @@ public class ExprPrinter {
         }
         if (Math.abs(i) > 99) {
             sb.append("$")
-                .append(Integer.toOctalString(i).replace("-", ""));
+                .append(Integer.toHexString(i).replace("-", ""));
         } else {
             sb.append(("" + i).replace("-", ""));
         }
