@@ -18,14 +18,16 @@ public class ExprPrinter {
     }
 
     public static void print(JassExprIntVal e, StringBuilder sb, boolean withSpace) {
-        String val = String.valueOf(e.getValI());
-
-        // Disabled due digitbug
-//		if(!withSpace) {
-//			val = intShort(val);
-//		}
-
-        sb.append(val);
+        int i = Integer.parseInt(e.getValI());
+        if (i < 0) {
+            sb.append("-");
+        }
+        if (Math.abs(i) > 99) {
+            sb.append("$")
+                .append(Integer.toOctalString(i).replace("-", ""));
+        } else {
+            sb.append(("" + i).replace("-", ""));
+        }
     }
 
 
@@ -34,7 +36,11 @@ public class ExprPrinter {
     }
 
     public static void print(JassExprRealVal e, StringBuilder sb, boolean withSpace) {
-        sb.append(e.getValR());
+        String valR = e.getValR();
+        if (valR.startsWith("0.")) {
+            valR = valR.substring(1);
+        }
+        sb.append(valR);
     }
 
     public static void print(JassExprStringVal e, StringBuilder sb, boolean withSpace) {
