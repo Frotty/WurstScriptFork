@@ -7,7 +7,6 @@ import de.peeeq.wurstio.gui.AboutDialog;
 import de.peeeq.wurstscript.jassAst.*;
 import de.peeeq.wurstscript.utils.Utils;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,7 +28,7 @@ public class JassPrinter {
         Preconditions.checkNotNull(sb);
         Preconditions.checkNotNull(prog);
 
-        Collections.shuffle(prog.getGlobals());
+//        Collections.shuffle(prog.getGlobals());
 
         printTypes(sb, prog.getDefs());
         printGlobals(sb, prog.getGlobals());
