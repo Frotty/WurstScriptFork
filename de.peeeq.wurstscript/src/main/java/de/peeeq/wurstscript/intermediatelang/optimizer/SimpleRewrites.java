@@ -197,6 +197,10 @@ public class SimpleRewrites implements OptimizerPass {
                     right.replaceBy(JassIm.ImIntVal(2));
                     wasViable = true;
                 }
+            } else if (left instanceof ImIntVal) {
+                wasViable = rewriteEquals(opc, (ImIntVal) left);
+            } else if (right instanceof ImIntVal) {
+                wasViable = rewriteEquals(opc, (ImIntVal) right);
             } else {
                 wasViable = false;
             }
@@ -266,6 +270,19 @@ public class SimpleRewrites implements OptimizerPass {
             }
         }
 
+    }
+
+    private boolean rewriteEquals(ImOperatorCall opc, ImIntVal right) {
+        if (opc.getOp() == WurstOperator.GREATER_EQ) {
+            right.setValI(right.getValI() - 1);
+            opc.setOp(WurstOperator.GREATER);
+            return true;
+        } else if (opc.getOp() == WurstOperator.LESS_EQ) {
+            right.setValI(right.getValI() + 1);
+            opc.setOp(WurstOperator.LESS);
+            return true;
+        }
+        return false;
     }
 
     private boolean optimizeStringString(ImOperatorCall opc, ImStringVal left, ImStringVal right) {
