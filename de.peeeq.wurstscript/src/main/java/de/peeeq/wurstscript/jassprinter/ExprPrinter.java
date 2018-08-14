@@ -37,7 +37,7 @@ public class ExprPrinter {
 
     public static void print(JassExprRealVal e, StringBuilder sb, boolean withSpace) {
         String valR = e.getValR();
-        if (valR.startsWith("0.")) {
+        if (valR.startsWith("0.") && valR.length() > 2) {
             valR = valR.substring(1);
         }
         sb.append(valR);
