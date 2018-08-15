@@ -422,6 +422,15 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             optimizer.localOptimizations();
         }
 
+        // inliner
+        if (runArgs.isInline()) {
+            beginPhase(11, "inlining");
+            optimizer.doInlining();
+            imTranslator2.assertProperties();
+
+            printDebugImProg("./test-output/im " + stage++ + "_afterinline.im");
+        }
+
         printDebugImProg("./test-output/im " + stage++ + "_afterlocalopts.im");
 
         if (runArgs.isNullsetting()) {
