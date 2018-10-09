@@ -4,9 +4,12 @@ import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
+import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.types.TypesHelper;
+import net.moonlightflower.wc3libs.misc.StringHash;
 
+import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Iterator;
@@ -15,12 +18,16 @@ import java.util.Locale;
 
 public class SimpleRewrites implements OptimizerPass {
     private SideEffectAnalyzer sideEffectAnalysis;
+    public static boolean doHashing = false;
     private int totalRewrites = 0;
     private boolean showRewrites = false;
+    private ImProg prog;
+    private ImFunction stringHashFunc;
 
     @Override
     public int optimize(ImTranslator trans) {
-        ImProg prog = trans.getImProg();
+        prog = trans.getImProg();
+        stringHashFunc = trans.getNativeFunc("StringHash");
         this.sideEffectAnalysis = new SideEffectAnalyzer(prog);
         totalRewrites = 0;
         optimizeElement(prog);
@@ -190,7 +197,12 @@ public class SimpleRewrites implements OptimizerPass {
                     opc.replaceBy(left);
                     wasViable = true;
                 } else {
-                    wasViable = false;
+                    if(opc.getOp() == WurstOperator.EQ && doHashing) {
+                        replaceStringCompareWithHash(left, (ImStringVal) right);
+                        wasViable = true;
+                    } else {
+                        wasViable = false;
+                    }
                 }
             } else if (opc.getOp() == WurstOperator.PLUS
                     && (left.attrTyp().equalsType(TypesHelper.imInt()) || left.attrTyp().equalsType(TypesHelper.imReal()))
@@ -274,6 +286,17 @@ public class SimpleRewrites implements OptimizerPass {
             }
         }
 
+    }
+
+
+    private void replaceStringCompareWithHash(ImExpr left, ImStringVal right) {
+        ImExpr copy = left.copy();
+        left.replaceBy(JassIm.ImFunctionCall(left.attrTrace(), stringHashFunc, JassIm.ImExprs(copy), true, CallType.NORMAL));
+        try {
+            right.replaceBy(JassIm.ImIntVal(StringHash.hash(right.getValS())));
+        } catch (UnsupportedEncodingException e) {
+            WLogger.severe(e);
+        }
     }
 
     private boolean rewriteEquals(ImOperatorCall opc, ImIntVal right) {

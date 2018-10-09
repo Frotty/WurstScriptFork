@@ -354,7 +354,7 @@ public class ImTranslator {
     }
 
 
-    private ImFunction getNativeFunc(String funcName) {
+    public ImFunction getNativeFunc(String funcName) {
         ImmutableCollection<FuncLink> wurstFunc = wurstProg.lookupFuncs(funcName);
         if (wurstFunc.isEmpty()) {
             return null;
