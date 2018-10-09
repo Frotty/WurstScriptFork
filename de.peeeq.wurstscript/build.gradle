@@ -67,7 +67,7 @@ dependencies {
     antlr "org.antlr:antlr4:4.7"
 
     // tool for generating AST-classes
-    compileOnly 'com.github.peterzeller:abstractsyntaxgen:0.3.0'
+    compileOnly 'com.github.peterzeller:abstractsyntaxgen:0.3.1'
 
     // JUnit for testing
     testCompile group: 'org.testng', name: 'testng', version: '6.14.3'
@@ -80,7 +80,7 @@ dependencies {
     compile group: 'org.functionaljava', name: 'functionaljava', version: '4.7'
 
     // Support for the vscode language server protocol
-    compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.4.0'
+    compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.5.0'
 
     // @Nullable annotations
     compile group: 'org.eclipse.jdt', name: 'org.eclipse.jdt.annotation', version: '2.1.0'
@@ -95,7 +95,7 @@ dependencies {
     compile group: 'net.sourceforge.jchardet', name: 'jchardet', version: '1.0'
 
     // Water's wc3 libs including Crigges' jmpq
-    compile 'com.github.inwc3:wc3libs:e2d29c34bf'
+    compile 'com.github.inwc3:wc3libs:90d1e401ed'
 
     // The setup tool for wurst.build handling
     compile 'com.github.wurstscript:wurstsetup:cc208dcc86'

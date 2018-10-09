@@ -572,7 +572,8 @@ public class ClassesTests extends WurstScriptTest {
                 "			return 7",
                 "	init",
                 "		A a = new A()",
-                "		destroy a",
+                "		let b = a",
+                "		destroy b",
                 "		if a.foo() == 7",
                 "			testSuccess()",
                 "endpackage");
@@ -1133,6 +1134,46 @@ public class ClassesTests extends WurstScriptTest {
                 "           new PowerLevel()",
                 "       if PowerLevel.amount > 9000 and PowerLevel.amount == 20001",
                 "	        testSuccess()",
+                "endpackage"
+        );
+    }
+
+    @Test
+    public void protectedInOtherPackage() {
+        testAssertOkLines(true,
+                "package A",
+                "    native testSuccess()",
+                "    public class A",
+                "        protected function show()",
+                "            testSuccess()",
+                "endpackage",
+                "package B",
+                "    import A",
+                "    class B extends A",
+                "        override protected function show()",
+                "            super.show()",
+                "    init",
+                "        new B().show()",
+                "endpackage"
+        );
+    }
+
+    @Test
+    public void protectedInOtherPackage2() {
+        testAssertOkLines(true,
+                "package A",
+                "    native testSuccess()",
+                "    public class A",
+                "        protected function show()",
+                "            testSuccess()",
+                "endpackage",
+                "package B",
+                "    import A",
+                "    class B extends A",
+                "        function blub()",
+                "            show()",
+                "    init",
+                "        new B().blub()",
                 "endpackage"
         );
     }

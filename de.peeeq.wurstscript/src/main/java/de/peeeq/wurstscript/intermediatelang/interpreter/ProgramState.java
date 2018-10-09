@@ -141,6 +141,15 @@ public class ProgramState extends State {
         lastStatements.push(stmt);
     }
 
+    public void pushStackframe(ImCompiletimeExpr f, WPos trace) {
+        stackFrames.push(new ILStackFrame(f, trace));
+        de.peeeq.wurstscript.jassIm.Element stmt = this.lastStatement;
+        if (stmt == null) {
+            stmt = f;
+        }
+        lastStatements.push(stmt);
+    }
+
     public void popStackframe() {
         if (!stackFrames.isEmpty()) {
             stackFrames.pop();
@@ -230,12 +239,11 @@ public class ProgramState extends State {
         if (r == null) {
             r = Maps.newLinkedHashMap();
             arrayValues.put(v, r);
-            ImExpr e = prog.getGlobalInits().get(v);
-            if (e instanceof ImTupleExpr) {
-                ImTupleExpr te = (ImTupleExpr) e;
+            List<ImExpr> e = prog.getGlobalInits().get(v);
+            if (e != null) {
                 LocalState ls = new LocalState();
-                for (int i = 0; i < te.getExprs().size(); i++) {
-                    ILconst val = te.getExprs().get(i).evaluate(this, ls);
+                for (int i = 0; i < e.size(); i++) {
+                    ILconst val = e.get(i).evaluate(this, ls);
                     r.put(i, val);
                 }
             }

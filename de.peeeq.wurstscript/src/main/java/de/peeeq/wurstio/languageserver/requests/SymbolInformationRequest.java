@@ -2,9 +2,10 @@ package de.peeeq.wurstio.languageserver.requests;
 
 import de.peeeq.wurstio.languageserver.Convert;
 import de.peeeq.wurstio.languageserver.ModelManager;
-import de.peeeq.wurstio.languageserver.WFile;
 import de.peeeq.wurstscript.ast.*;
-import org.eclipse.lsp4j.*;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.WorkspaceSymbolParams;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,12 +17,7 @@ import java.util.stream.Collectors;
  */
 public class SymbolInformationRequest extends UserRequest<List<? extends SymbolInformation>> {
 
-    private TextDocumentIdentifier textDocument;
     private String query;
-
-    public SymbolInformationRequest(DocumentSymbolParams params) {
-        textDocument = params.getTextDocument();
-    }
 
     public SymbolInformationRequest(WorkspaceSymbolParams params) {
         query = params.getQuery().toLowerCase();
@@ -29,11 +25,7 @@ public class SymbolInformationRequest extends UserRequest<List<? extends SymbolI
 
     @Override
     public List<SymbolInformation> execute(ModelManager modelManager) {
-        if (textDocument != null) {
-            return symbolsFromCu(modelManager.getCompilationUnit(WFile.create(textDocument.getUri())));
-        } else {
-            return symbolsFromModel(modelManager.getModel());
-        }
+        return symbolsFromModel(modelManager.getModel());
     }
 
     private List<SymbolInformation> symbolsFromModel(WurstModel model) {
@@ -132,7 +124,7 @@ public class SymbolInformationRequest extends UserRequest<List<? extends SymbolI
 
             @Override
             public void case_GlobalVarDef(GlobalVarDef g) {
-                SymbolKind kind = g.attrIsDynamicClassMember() ? SymbolKind.Method : SymbolKind.Function;
+                SymbolKind kind = g.attrIsDynamicClassMember() ? SymbolKind.Field : SymbolKind.Variable;
                 add(g.getName(), kind);
             }
 

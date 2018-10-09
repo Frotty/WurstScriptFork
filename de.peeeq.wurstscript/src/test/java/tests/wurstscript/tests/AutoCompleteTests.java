@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 
 /**
  * tests the autocomplete functionality.
@@ -84,10 +85,28 @@ public class AutoCompleteTests extends WurstScriptTest {
         );
 
         CompletionList completions = calculateCompletions(testData);
-        System.out.println("completions = " + completions);
         assertEquals(1, completions.getItems().size());
         CompletionItem c = completions.getItems().get(0);
         assertEquals("CreateGroup", c.getInsertText());
+    }
+
+
+    @Test
+    public void testWithParentheses2() {
+        CompletionTestData testData = input(
+                "package test",
+                "init",
+                "    CreateU|(x,y,z)",
+                ""
+        );
+
+        CompletionList completions = calculateCompletions(testData);
+        assertFalse(completions.getItems().isEmpty());
+        CompletionItem comp = completions.getItems().stream()
+                .filter(c -> c.getLabel().equals("CreateUnit"))
+                .findFirst()
+                .get();
+        assertEquals(comp.getInsertText(), "CreateUnit");
     }
 
     @Test
@@ -100,10 +119,28 @@ public class AutoCompleteTests extends WurstScriptTest {
         );
 
         CompletionList completions = calculateCompletions(testData);
-        System.out.println("completions = " + completions);
         assertEquals(1, completions.getItems().size());
         CompletionItem c = completions.getItems().get(0);
         assertEquals("CreateGroup()", c.getInsertText());
+    }
+
+
+    @Test
+    public void testWithoutParentheses2() {
+        CompletionTestData testData = input(
+                "package test",
+                "	init",
+                "		CreateU|",
+                "endpackage"
+        );
+
+        CompletionList completions = calculateCompletions(testData);
+        assertFalse(completions.getItems().isEmpty());
+        CompletionItem comp = completions.getItems().stream()
+                .filter(c -> c.getLabel().equals("CreateUnit"))
+                .findFirst()
+                .get();
+        assertEquals(comp.getInsertText(), "CreateUnit(${1:id}, ${2:unitid}, ${3:x}, ${4:y}, ${5:face})");
     }
 
 
@@ -352,9 +389,6 @@ public class AutoCompleteTests extends WurstScriptTest {
 
         CompletionList result = calculateCompletions(testData);
 
-        // debug output:
-//        System.out.println(new GsonBuilder().setPrettyPrinting().create().toJson(result));
-
         List<String> completionLabels = result.getItems().stream()
                 .sorted(Comparator.comparing(i -> i.getSortText()))
                 .map(completion -> completion.getLabel())
@@ -411,7 +445,7 @@ public class AutoCompleteTests extends WurstScriptTest {
         String input = String.join("\n", lines);
         WurstGui gui = new WurstGuiLogger();
         RunArgs runArgs = new RunArgs();
-        WurstCompilerJassImpl compiler = new WurstCompilerJassImpl(gui, null, runArgs);
+        WurstCompilerJassImpl compiler = new WurstCompilerJassImpl(null, gui, null, runArgs);
         compiler.getErrorHandler().enableUnitTestMode();
         Map<String, String> inputMap = ImmutableMap.of("test", input);
         return parseFiles(Collections.<File>emptyList(), inputMap, false, compiler);

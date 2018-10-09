@@ -2,10 +2,10 @@ package de.peeeq.wurstio;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import com.google.common.io.Files;
+import de.peeeq.wurstio.languageserver.requests.RequestFailedException;
+import de.peeeq.wurstio.map.importer.ImportFile;
 import de.peeeq.wurstio.mpq.MpqEditor;
 import de.peeeq.wurstio.utils.FileReading;
 import de.peeeq.wurstio.utils.FileUtils;
@@ -27,15 +27,14 @@ import de.peeeq.wurstscript.utils.NotNullList;
 import de.peeeq.wurstscript.utils.TempDir;
 import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.lsp4j.MessageType;
 
 import java.io.*;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import static com.google.common.io.Files.asCharSink;
+import static de.peeeq.wurstio.CompiletimeFunctionRunner.FunctionFlagToRun.CompiletimeFunctions;
 
 public class WurstCompilerJassImpl implements WurstCompiler {
 
@@ -46,6 +45,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     private boolean hasCommonJ;
     private RunArgs runArgs;
     private @Nullable File mapFile;
+    private @Nullable File projectFolder;
     private ErrorHandler errorHandler;
     private @Nullable Map<String, File> libCache = null;
     private @Nullable ImProg imProg;
@@ -56,7 +56,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     private List<File> dependencies = Lists.newArrayList();
     private final @Nullable MpqEditor mapFileMpq;
 
-    public WurstCompilerJassImpl(WurstGui gui, @Nullable MpqEditor mapFileMpq, RunArgs runArgs) {
+    public WurstCompilerJassImpl(@Nullable File projectFolder, WurstGui gui, @Nullable MpqEditor mapFileMpq, RunArgs runArgs) {
+        this.projectFolder = projectFolder;
         this.gui = gui;
         this.runArgs = runArgs;
         this.errorHandler = new ErrorHandler(gui);
@@ -82,6 +83,33 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         gui.sendProgress("Loading Files");
         for (File file : files) {
             loadFile(file);
+        }
+    }
+
+    @Override
+    public void runCompiletime() {
+        if (runArgs.runCompiletimeFunctions()) {
+            // compile & inject object-editor data
+            // TODO run optimizations later?
+            gui.sendProgress("Running compiletime functions");
+            CompiletimeFunctionRunner ctr = new CompiletimeFunctionRunner(getImProg(), getMapFile(), getMapfileMpqEditor(), gui,
+                    CompiletimeFunctions);
+            ctr.setInjectObjects(runArgs.isInjectObjects());
+            ctr.setOutputStream(new PrintStream(System.err));
+            ctr.run();
+        }
+
+        if (gui.getErrorCount() > 0) {
+            throw new RequestFailedException(MessageType.Error, "Could not compile project (error in running compiletime functions/expressions): " + gui
+                    .getErrorList().get(0));
+        }
+
+
+        if (runArgs.isInjectObjects()) {
+            Preconditions.checkNotNull(mapFileMpq);
+            Preconditions.checkNotNull(projectFolder);
+            // add the imports
+            ImportFile.importFilesFromImportDirectory(projectFolder, mapFileMpq);
         }
     }
 
@@ -139,13 +167,22 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         for (File file : files) {
             if (file.getName().endsWith(".w3x") || file.getName().endsWith(".w3m")) {
                 mapFile = file;
+            } else if (file.isDirectory()) {
+                if (projectFolder != null) {
+                    throw new RuntimeException("Cannot set projectFolder to " + file + " because it is already set to " + projectFolder);
+                }
+                projectFolder = file;
             }
         }
+
+
 
         // import wurst folder if it exists
         File l_mapFile = mapFile;
         if (l_mapFile != null) {
-            File projectFolder = l_mapFile.getParentFile();
+            if (projectFolder == null) {
+                projectFolder = l_mapFile.getParentFile();
+            }
             File relativeWurstDir = new File(projectFolder, "wurst");
             if (relativeWurstDir.exists()) {
                 WLogger.info("Importing wurst files from " + relativeWurstDir);
@@ -236,24 +273,22 @@ public class WurstCompilerJassImpl implements WurstCompiler {
      */
     public void addImportedLibs(List<CompilationUnit> compilationUnits) {
         Set<String> packages = Sets.newLinkedHashSet();
-        Map<String, WImport> imports = Maps.newLinkedHashMap();
+        Set<WImport> imports = new LinkedHashSet<>();
         for (CompilationUnit c : compilationUnits) {
             c.setCuErrorHandler(errorHandler);
             for (WPackage p : c.getPackages()) {
                 packages.add(p.getName());
-                for (WImport i : p.getImports()) {
-                    imports.put(i.getPackagename(), i);
-                }
+                imports.addAll(p.getImports());
             }
         }
 
-        for (WImport imp : imports.values()) {
-            resolveImport(compilationUnits, packages, imports, imp);
+        for (WImport imp : imports) {
+            resolveImport(compilationUnits, packages, imp);
         }
 
     }
 
-    private void resolveImport(List<CompilationUnit> compilationUnits, Set<String> packages, Map<String, WImport> imports, WImport imp) throws CompileError {
+    private void resolveImport(List<CompilationUnit> compilationUnits, Set<String> packages, WImport imp) throws CompileError {
         //		WLogger.info("resolving import: " + imp.getPackagename());
         if (!packages.contains(imp.getPackagename())) {
             if (getLibs().containsKey(imp.getPackagename())) {
@@ -265,7 +300,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                         foundPackage = true;
                     }
                     for (WImport i : p.getImports()) {
-                        resolveImport(compilationUnits, packages, imports, i);
+                        resolveImport(compilationUnits, packages, i);
                     }
                 }
                 if (!foundPackage) {
@@ -345,11 +380,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         }
 
         checker.checkProg(model, toCheck);
-    }
-
-    public @Nullable JassProg translateProg(WurstModel root) {
-        translateProgToIm(root);
-        return transformProgToJass();
     }
 
     public @Nullable JassProg transformProgToJass() {
@@ -506,11 +536,11 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         }
         try {
             // TODO remove test output
-            StringBuilder sb = new StringBuilder();
-            getImProg().print(sb, 0);
             File file = new File(debugFile);
             file.getParentFile().mkdirs();
-            asCharSink(file, Charsets.UTF_8).write(sb.toString());
+            try (Writer w = Files.newWriter(file, Charsets.UTF_8)) {
+                getImProg().print(w, 0);
+            }
         } catch (IOException e) {
             ErrorReporting.instance.handleSevere(e, getCompleteSourcecode());
         }

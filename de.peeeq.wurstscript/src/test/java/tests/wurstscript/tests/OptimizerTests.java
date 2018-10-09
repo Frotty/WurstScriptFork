@@ -540,10 +540,9 @@ public class OptimizerTests extends WurstScriptTest {
 
     @Test
     public void test_unreachableCodeRemover() throws IOException {
-        test().lines(
+        test().withStdLib().lines(
                 "package test",
                 "	import MagicFunctions",
-                "	native testSuccess()",
                 "	function foo()",
                 "		if not false",
                 "			return",
@@ -736,6 +735,48 @@ public class OptimizerTests extends WurstScriptTest {
         );
         String compiledAndOptimized = Files.toString(new File("test-output/OptimizerTests_optimizeDuplicateNullSets_opt.j"), Charsets.UTF_8);
         assertEquals(compiledAndOptimized.indexOf("u = null"), compiledAndOptimized.lastIndexOf("u = null"));
+    }
+
+    @Test
+    public void testInlineAnnotation() throws IOException {
+        testAssertOkLinesWithStdLib(false,
+                "package Test",
+                "@inline function over9000(int i, boolean b, real r)",
+                "	var s = \"\"",
+                "	s += r.toString()",
+                "	s += i.toString()",
+                "	s += b.toString()",
+                "	if s.length() > 5",
+                "		print(s)",
+                "	print(\"end\")",
+                "function over9001(int i, boolean b, real r)",
+                "	var s = \"\"",
+                "	s += r.toString()",
+                "	s += i.toString()",
+                "	s += b.toString()",
+                "	if s.length() > 5",
+                "		print(s)",
+                "	print(\"end\")",
+                "function foo()",
+                "	over9000(141, true and true, 12315.233)",
+                "	over9001(141, true and true, 12315.233)",
+                "function bar()",
+                "	print(\"end\")",
+                "@noinline function noot()",
+                "	print(\"end\")",
+                "init",
+                "	over9000(12412411, true and true, 12315.233)",
+                "	over9001(12412411, true and true, 12315.233)",
+                "	foo()",
+                "	bar()",
+                "	noot()"
+
+        );
+        String inlined = Files.toString(new File("test-output/OptimizerTests_testInlineAnnotation_inl.j"), Charsets.UTF_8);
+        assertFalse(inlined.contains("function bar"));
+        assertFalse(inlined.contains("function over9000"));
+        assertTrue(inlined.contains("function over9001"));
+        assertTrue(inlined.contains("function noot"));
     }
 
 }

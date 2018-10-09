@@ -6,7 +6,7 @@ abstract syntax:
 ImProg(ImVars globals, 
 	ImFunctions functions, 
 	ImClasses classes, 
-	java.util.Map<ImVar, ImExpr> globalInits)
+	java.util.Map<ImVar, java.util.List<ImExpr>> globalInits)
 
 ImVars * ImVar
 ImFunctions * ImFunction
@@ -137,7 +137,7 @@ ImType.defaultValue
 	returns de.peeeq.wurstscript.intermediatelang.ILconst
 	implemented by de.peeeq.wurstscript.translation.imtojass.DefaultValue.get
 
-ImPrintable.print(java.lang.StringBuilder sb, int indent)
+ImPrintable.print(java.lang.Appendable sb, int indent)
 	returns void
 	implemented by de.peeeq.wurstscript.translation.imtranslation.ImPrinter.print
 

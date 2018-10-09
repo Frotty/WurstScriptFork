@@ -1,5 +1,6 @@
 package tests.wurstscript.tests;
 
+import de.peeeq.wurstio.jassinterpreter.InterpreterException;
 import de.peeeq.wurstscript.ast.ClassDef;
 import de.peeeq.wurstscript.ast.FuncDef;
 import de.peeeq.wurstscript.ast.WurstModel;
@@ -839,7 +840,7 @@ public class BugTests extends WurstScriptTest {
                         "abstract class Hey\n" +
                         "	function foo()";
 
-        WurstModel model = testScript("testLine", input, "testLine", false, false);
+        WurstModel model = test().executeProg(false).withStdLib(false).withCu(compilationUnit("testLine", "testLine")).run().getModel();
 
         model.accept(new WurstModel.DefaultVisitor() {
             @Override
@@ -928,13 +929,14 @@ public class BugTests extends WurstScriptTest {
 
     @Test
     public void testCyclicDependencyError() {
-        testAssertErrorsLines(true, "type may not depend on each other",
+        testAssertErrorsLines(true, "For loop target int doesn't provide a iterator() function",
                 "package Test",
                 "native testSuccess()",
                 "function foo() returns bool",
                 "    var x = 0",
+                "    var sum = 0",
                 "    for x in x",
-                "        sum += i",
+                "        sum += x",
                 "    return true",
                 "init",
                 "    if foo()",
@@ -996,6 +998,95 @@ public class BugTests extends WurstScriptTest {
                 "class B extends A",
                 "init",
                 "    new B()"
+        );
+    }
+
+    @Test
+    public void ticket709() {
+        testAssertOkLinesWithStdLib(false,
+                "package Test",
+                "init",
+                "    var s = \".\"",
+                "    for i = 1 to 10",
+                "        s += s",
+                "    print(s)"
+        );
+    }
+
+
+    @Test
+    public void stringPlusNull1() {
+        testAssertOkLines(true,
+                "package Test",
+                "native testSuccess()",
+                "function nullString() returns string",
+                "    return null",
+                "init",
+                "    var s = \"a\" + nullString()",
+                "    if s == \"a\"",
+                "        testSuccess()"
+        );
+    }
+
+    @Test
+    public void stringPlusNull2() {
+        testAssertOkLines(true,
+                "package Test",
+                "native testSuccess()",
+                "function nullString() returns string",
+                "    return null",
+                "init",
+                "    var s = nullString() + nullString()",
+                "    if s == null",
+                "        testSuccess()"
+        );
+    }
+
+    @Test
+    public void stringPlusNull3() {
+        testAssertOkLines(true,
+                "package Test",
+                "native testSuccess()",
+                "function nullString() returns string",
+                "    return null",
+                "init",
+                "    var s = nullString() + \"a\"",
+                "    if s == \"a\"",
+                "        testSuccess()"
+        );
+    }
+
+    @Test
+    public void cyclicForLoop() { // #717
+        testAssertErrorsLines(true, "Could not find variable a",
+                "package Test",
+                "native testSuccess()",
+                "function nullString() returns string",
+                "    return null",
+                "init",
+                "    for a in a"
+        );
+    }
+
+    @Test
+    public void implementNothing() { // #719
+        testAssertErrorsLines(false, "mismatched input '\\n' expecting {'thistype', ID}",
+                "package Test",
+                "class A implements",
+                "init",
+                "    new A()"
+        );
+    }
+
+    @Test(expectedExceptions = {InterpreterException.class})
+    public void subStringError() { // #728
+        testAssertOkLines(true,
+                "package Test",
+                "native testSuccess()",
+                "@extern native SubString(string s, int s, int e) returns string",
+                "init",
+                "    if SubString(\"blubber\", 1000, 1002) == null",
+                "        testSuccess()"
         );
     }
 
