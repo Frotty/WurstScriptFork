@@ -5,6 +5,8 @@ import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import de.peeeq.datastructures.TransitiveClosure;
+import de.peeeq.wurstio.TimeTaker;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.ast.NameDef;
 import de.peeeq.wurstscript.jassIm.*;
@@ -25,14 +27,16 @@ public class StackTraceInjector2 {
     private ImProg prog;
     private ImVar stackSize;
     private ImVar stack;
+    private ImGetStackTrace dummyGetStackTrace = JassIm.ImGetStackTrace();
 
     public StackTraceInjector2(ImProg prog, ImTranslator imTranslator2) {
         this.prog = prog;
     }
 
-    public void transform() {
+    public void transform(TimeTaker timeTaker) {
         final Multimap<ImFunction, ImGetStackTrace> stackTraceGets = LinkedListMultimap.create();
         final Multimap<ImFunction, ImFunctionCall> calls = LinkedListMultimap.create();
+        // called function -> calling function
         final Multimap<ImFunction, ImFunction> callRelation = LinkedListMultimap.create();
         final List<ImFuncRef> funcRefs = Lists.newArrayList();
         prog.accept(new ImProg.DefaultVisitor() {
@@ -44,11 +48,19 @@ public class StackTraceInjector2 {
             }
 
             @Override
+            public void visit(ImVarArrayAccess va) {
+                super.visit(va);
+                if (va.getIndexes().size() > 1) {
+                    stackTraceGets.put(va.getNearestFunc(), dummyGetStackTrace);
+                }
+            }
+
+            @Override
             public void visit(ImFunctionCall c) {
                 super.visit(c);
                 calls.put(c.getFunc(), c);
                 ImFunction caller = c.getNearestFunc();
-                callRelation.put(caller, c.getFunc());
+                callRelation.put(c.getFunc(), caller);
             }
 
             @Override
@@ -59,20 +71,19 @@ public class StackTraceInjector2 {
         });
 
         de.peeeq.wurstscript.ast.Element trace = prog.attrTrace();
-        stackSize = JassIm.ImVar(trace, JassIm.ImSimpleType("integer"), "wurst_stack_depth", false);
+        stackSize = JassIm.ImVar(trace, TypesHelper.imInt(), "wurst_stack_depth", false);
         prog.getGlobals().add(stackSize);
-        stack = JassIm.ImVar(trace, JassIm.ImArrayType("string"), "wurst_stack", false);
+        stack = JassIm.ImVar(trace, TypesHelper.imStringArray(), "wurst_stack", false);
         prog.getGlobals().add(stack);
         prog.getGlobalInits().put(stackSize, Collections.singletonList(JassIm.ImIntVal(0)));
 
-        Multimap<ImFunction, ImFunction> callRelationTr = Utils.transientClosure(callRelation);
+
+        TransitiveClosure<ImFunction> callRelationTr = new TransitiveClosure<>(callRelation);
 
         // find affected functions
         Set<ImFunction> affectedFuncs = Sets.newHashSet(stackTraceGets.keySet());
-        for (Entry<ImFunction, ImFunction> e : callRelationTr.entries()) {
-            if (stackTraceGets.containsKey(e.getValue())) {
-                affectedFuncs.add(e.getKey());
-            }
+        for (ImFunction stackTraceUse : stackTraceGets.keys()) {
+            callRelationTr.get(stackTraceUse).forEach(affectedFuncs::add);
         }
 
         passStacktraceParams(calls, affectedFuncs);
@@ -94,7 +105,7 @@ public class StackTraceInjector2 {
             ImStmts stmts = f.getBody();
             de.peeeq.wurstscript.ast.Element trace = f.getTrace();
             stmts.add(0, increment(trace, stackSize));
-            stmts.add(0, JassIm.ImSetArray(trace, stack, JassIm.ImVarAccess(stackSize), getStackPosVar(f)));
+            stmts.add(0, JassIm.ImSet(trace, JassIm.ImVarArrayAccess(trace, stack, JassIm.ImExprs((ImExpr) JassIm.ImVarAccess(stackSize))), getStackPosVar(f)));
         }
     }
 
@@ -132,14 +143,14 @@ public class StackTraceInjector2 {
                     // temp = result
                     ImVar temp = JassIm.ImVar(trace, f.getReturnType(), "stackTrace_tempReturn", false);
                     f.getLocals().add(temp);
-                    stmts.add(JassIm.ImSet(trace, temp, (ImExpr) returnedValue));
+                    stmts.add(JassIm.ImSet(trace, JassIm.ImVarAccess(temp), (ImExpr) returnedValue));
                     newReturn = JassIm.ImReturn(trace, JassIm.ImVarAccess(temp));
                 }
                 // stackSize = stackSize - 1
                 stmts.add(decrement(trace, stackSize));
                 stmts.add(newReturn);
 
-                ret.replaceBy(JassIm.ImStatementExpr(stmts, JassIm.ImNull()));
+                ret.replaceBy(ImHelper.statementExprVoid(stmts));
             }
 
             // also decrement at end of function:
@@ -218,7 +229,7 @@ public class StackTraceInjector2 {
         return f.getName();
     }
 
-    private String getCallPos(WPos source) {
+    public static String getCallPos(WPos source) {
         String callPos;
         if (source.getFile().startsWith("<")) {
             callPos = "";
@@ -229,13 +240,11 @@ public class StackTraceInjector2 {
     }
 
     private ImStmt increment(de.peeeq.wurstscript.ast.Element trace, ImVar v) {
-        return JassIm.ImSet(trace, v,
-                JassIm.ImOperatorCall(WurstOperator.PLUS, JassIm.ImExprs(JassIm.ImVarAccess(v), JassIm.ImIntVal(1))));
+        return JassIm.ImSet(trace, JassIm.ImVarAccess(v), JassIm.ImOperatorCall(WurstOperator.PLUS, JassIm.ImExprs(JassIm.ImVarAccess(v), JassIm.ImIntVal(1))));
     }
 
     private ImStmt decrement(de.peeeq.wurstscript.ast.Element trace, ImVar v) {
-        return JassIm.ImSet(trace, v,
-                JassIm.ImOperatorCall(WurstOperator.MINUS, JassIm.ImExprs(JassIm.ImVarAccess(v), JassIm.ImIntVal(1))));
+        return JassIm.ImSet(trace, JassIm.ImVarAccess(v), JassIm.ImOperatorCall(WurstOperator.MINUS, JassIm.ImExprs(JassIm.ImVarAccess(v), JassIm.ImIntVal(1))));
     }
 
     private void rewriteFuncRefs(final List<ImFuncRef> funcRefs, Set<ImFunction> affectedFuncs) {
@@ -262,7 +271,7 @@ public class StackTraceInjector2 {
                 throw new RuntimeException("no trace");
             }
             // reset stack and add information for callback:
-            body.add(JassIm.ImSet(trace, stackSize, JassIm.ImIntVal(0)));
+            body.add(JassIm.ImSet(trace, JassIm.ImVarAccess(stackSize), JassIm.ImIntVal(0)));
 
             ImFunctionCall call = JassIm.ImFunctionCall(fr.attrTrace(), f, args, true, CallType.NORMAL);
             if (bridgeFunc.getReturnType() instanceof ImVoid) {
@@ -281,18 +290,21 @@ public class StackTraceInjector2 {
         for (Entry<ImFunction, ImGetStackTrace> e : stackTraceGets.entries()) {
             ImFunction f = e.getKey();
             ImGetStackTrace s = e.getValue();
+            if (s == dummyGetStackTrace) {
+                continue;
+            }
 
             de.peeeq.wurstscript.ast.Element trace = s.attrTrace();
-            ImVar traceStr = JassIm.ImVar(trace, JassIm.ImSimpleType("string"), "stacktraceStr", false);
+            ImVar traceStr = JassIm.ImVar(trace, TypesHelper.imString(), "stacktraceStr", false);
             f.getLocals().add(traceStr);
-            ImVar traceI = JassIm.ImVar(trace, JassIm.ImSimpleType("integer"), "stacktraceIndex", false);
+            ImVar traceI = JassIm.ImVar(trace, TypesHelper.imInt(), "stacktraceIndex", false);
             f.getLocals().add(traceI);
-            ImVar traceLimit = JassIm.ImVar(trace, JassIm.ImSimpleType("integer"), "stacktraceLimit", false);
+            ImVar traceLimit = JassIm.ImVar(trace, TypesHelper.imInt(), "stacktraceLimit", false);
             f.getLocals().add(traceLimit);
             ImStmts stmts = JassIm.ImStmts();
-            stmts.add(JassIm.ImSet(trace, traceStr, JassIm.ImStringVal("")));
-            stmts.add(JassIm.ImSet(trace, traceI, JassIm.ImVarAccess(stackSize)));
-            stmts.add(JassIm.ImSet(trace, traceLimit, JassIm.ImIntVal(0)));
+            stmts.add(JassIm.ImSet(trace, JassIm.ImVarAccess(traceStr), JassIm.ImStringVal("")));
+            stmts.add(JassIm.ImSet(trace, JassIm.ImVarAccess(traceI), JassIm.ImVarAccess(stackSize)));
+            stmts.add(JassIm.ImSet(trace, JassIm.ImVarAccess(traceLimit), JassIm.ImIntVal(0)));
             ImStmts loopBody = JassIm.ImStmts();
             stmts.add(JassIm.ImLoop(trace, loopBody));
             // i = i - 1
@@ -306,10 +318,10 @@ public class StackTraceInjector2 {
             loopBody.add(JassIm.ImExitwhen(trace, JassIm.ImOperatorCall(WurstOperator.LESS,
                     JassIm.ImExprs(JassIm.ImVarAccess(traceI), JassIm.ImIntVal(0)))));
             // s = s + "\n " + stack[i]
-            loopBody.add(JassIm.ImSet(trace, traceStr, JassIm.ImOperatorCall(WurstOperator.PLUS,
+            loopBody.add(JassIm.ImSet(trace, JassIm.ImVarAccess(traceStr), JassIm.ImOperatorCall(WurstOperator.PLUS,
                     JassIm.ImExprs(JassIm.ImVarAccess(traceStr),
                             JassIm.ImOperatorCall(WurstOperator.PLUS, JassIm.ImExprs(JassIm.ImStringVal("\n   "),
-                                    JassIm.ImVarArrayAccess(stack, JassIm.ImVarAccess(traceI))))))));
+                                    JassIm.ImVarArrayAccess(trace, stack, JassIm.ImExprs((ImExpr) JassIm.ImVarAccess(traceI)))))))));
 
             s.replaceBy(JassIm.ImStatementExpr(stmts, JassIm.ImVarAccess(traceStr)));
         }

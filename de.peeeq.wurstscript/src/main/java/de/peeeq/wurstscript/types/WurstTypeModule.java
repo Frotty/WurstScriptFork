@@ -1,19 +1,13 @@
 package de.peeeq.wurstscript.types;
 
-import com.google.common.collect.ImmutableMultimap;
 import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.ast.ModuleDef;
-import de.peeeq.wurstscript.ast.TypeParamDef;
-import de.peeeq.wurstscript.attributes.names.DefLink;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
-import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.ImType;
 import de.peeeq.wurstscript.jassIm.JassIm;
-import fj.data.TreeMap;
 import org.eclipse.jdt.annotation.Nullable;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -35,8 +29,8 @@ public class WurstTypeModule extends WurstTypeNamedScope {
     }
 
     @Override
-    @Nullable TreeMap<TypeParamDef, WurstTypeBoundTypeParam> matchAgainstSupertypeIntern(WurstType obj, @Nullable Element location, Collection<TypeParamDef> typeParams, TreeMap<TypeParamDef, WurstTypeBoundTypeParam> mapping) {
-        TreeMap<TypeParamDef, WurstTypeBoundTypeParam> superMapping = super.matchAgainstSupertypeIntern(obj, location, typeParams, mapping);
+    VariableBinding matchAgainstSupertypeIntern(WurstType obj, @Nullable Element location, VariableBinding mapping, VariablePosition variablePosition) {
+        VariableBinding superMapping = super.matchAgainstSupertypeIntern(obj, location, mapping, variablePosition);
         if (superMapping != null) {
             return superMapping;
         }
@@ -79,7 +73,7 @@ public class WurstTypeModule extends WurstTypeNamedScope {
 
     @Override
     public ImExprOpt getDefaultValue() {
-        return JassIm.ImNull();
+        return JassIm.ImNull(imTranslateType());
     }
 
     @Override

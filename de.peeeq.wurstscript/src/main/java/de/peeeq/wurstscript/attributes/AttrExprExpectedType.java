@@ -3,6 +3,7 @@ package de.peeeq.wurstscript.attributes;
 import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.types.*;
+import de.peeeq.wurstscript.utils.Utils;
 
 import java.util.Collection;
 
@@ -27,8 +28,8 @@ public class AttrExprExpectedType {
                 if (parent2 instanceof StmtCall) {
                     StmtCall stmtCall = (StmtCall) parent2;
                     return expectedType(expr, args, stmtCall);
-                } else if (parent2 instanceof ConstructorDef) {
-                    ConstructorDef constructorDef = (ConstructorDef) parent2;
+                } else if (parent2 instanceof SuperConstructorCall) {
+                    SuperConstructorCall constructorDef = (SuperConstructorCall) parent2;
                     return expectedTypeSuperCall(constructorDef, expr);
                 }
             } else if (parent instanceof StmtSet) {
@@ -90,16 +91,17 @@ public class AttrExprExpectedType {
                     return m.attrFunctionSignature().getReceiverType();
                 }
             }
-        } catch (
-                CompileError t)
-
-        {
+        } catch (CyclicDependencyError | CompileError t) {
+            WLogger.info("Something went wrong while computing the expected type for " + Utils.printElementWithSource(expr) + "\n" +
+                    "This is probably not a bug, but we are logging it anyway since it might help to improve error messages.");
             WLogger.info(t);
         }
+
         return WurstTypeUnknown.instance();
     }
 
-    private static WurstType expectedTypeSuperCall(ConstructorDef constr, Expr expr) {
+    private static WurstType expectedTypeSuperCall(SuperConstructorCall sc, Expr expr) {
+        ConstructorDef constr = (ConstructorDef) sc.getParent();
         ClassDef c = constr.attrNearestClassDef();
         if (c == null) {
             return WurstTypeUnknown.instance();
@@ -118,10 +120,10 @@ public class AttrExprExpectedType {
 
         WurstType res = WurstTypeUnknown.instance();
 
-        int paramIndex = constr.getSuperArgs().indexOf(expr);
+        int paramIndex = SmallHelpers.superArgs(constr).indexOf(expr);
 
         for (ConstructorDef superConstr : constructors) {
-            if (superConstr.getParameters().size() == constr.getSuperArgs().size()) {
+            if (superConstr.getParameters().size() == SmallHelpers.superArgs(constr).size()) {
                 res = res.typeUnion(superConstr.getParameters().get(paramIndex).getTyp().attrTyp(), expr);
             }
         }

@@ -1,22 +1,17 @@
 package tests.wurstscript.tests;
 
-import com.google.common.collect.ImmutableMap;
-import de.peeeq.wurstio.WurstCompilerJassImpl;
 import de.peeeq.wurstio.languageserver.BufferManager;
 import de.peeeq.wurstio.languageserver.ModelManager;
 import de.peeeq.wurstio.languageserver.ModelManagerImpl;
 import de.peeeq.wurstio.languageserver.WFile;
 import de.peeeq.wurstio.languageserver.requests.GetCompletions;
-import de.peeeq.wurstscript.RunArgs;
-import de.peeeq.wurstscript.ast.WurstModel;
-import de.peeeq.wurstscript.gui.WurstGui;
-import de.peeeq.wurstscript.gui.WurstGuiLogger;
 import org.eclipse.lsp4j.*;
-import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.io.File;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.testng.Assert.assertEquals;
@@ -27,7 +22,7 @@ import static org.testng.Assert.assertFalse;
  * <p>
  * the position of the cursor is denoted by a bar "|" in the test cases
  */
-public class AutoCompleteTests extends WurstScriptTest {
+public class AutoCompleteTests extends WurstLanguageServerTest {
 
 
     @Test
@@ -367,19 +362,25 @@ public class AutoCompleteTests extends WurstScriptTest {
         testCompletions(testData, "foo");
     }
 
+    @Test
+    public void testNestedClass() { // see https://github.com/wurstscript/WurstScript/issues/753
+        CompletionTestData testData = input(true,
+                "package test",
+                "public class SchoolSpell",
+                "    static let qinyun   = new QINYUN()",
+                "    static class QINYUN",
+                "        let leiyunjianqi  = '0000'",
+                "        let xuanbinjinqi  = '0000'",
+                "        let zhanguishen   = '0000'",
+                "        let shenjianyulei = '0000'",
+                "init",
+                "    let a = SchoolSpell.qinyun.|",
+                "    let x = 42"
 
-    static class CompletionTestData {
-        String buffer;
-        int line;
-        int column;
+        );
 
-        public CompletionTestData(String buffer, int line, int column) {
-            this.buffer = buffer;
-            this.line = line;
-            this.column = column;
-        }
+        testCompletions(testData, "leiyunjianqi", "shenjianyulei", "xuanbinjinqi", "zhanguishen");
     }
-
 
     private void testCompletions(CompletionTestData testData, String... expectedCompletions) {
         testCompletions(testData, Arrays.asList(expectedCompletions));
@@ -395,7 +396,7 @@ public class AutoCompleteTests extends WurstScriptTest {
                 .collect(Collectors.toList());
 
 
-        assertEquals(expectedCompletions, completionLabels);
+        assertEquals(completionLabels, expectedCompletions);
     }
 
     private CompletionList calculateCompletions(CompletionTestData testData) {
@@ -412,43 +413,6 @@ public class AutoCompleteTests extends WurstScriptTest {
         //new GetCompletions(1, "test", testData.buffer, testData.line, testData.column);
 
         return getCompletions.execute(modelManager);
-    }
-
-    private CompletionTestData input(String... lines) {
-        return input(true, lines);
-    }
-
-    private CompletionTestData input(boolean newLineAtEnd, String... lines) {
-        StringBuilder buffer = new StringBuilder();
-        int completionLine = -1;
-        int completionColumn = -1;
-        int lineNr = 0;
-        for (String line : lines) {
-            lineNr++;
-            int cursorIndex = line.indexOf('|');
-            if (cursorIndex >= 0) {
-                completionLine = lineNr;
-                completionColumn = cursorIndex + 1;
-                buffer.append(line.replaceFirst("\\|", ""));
-            } else {
-                buffer.append(line);
-            }
-            if (newLineAtEnd || lineNr < lines.length) {
-                buffer.append("\n");
-            }
-        }
-
-        return new CompletionTestData(buffer.toString(), completionLine - 1, completionColumn - 1);
-    }
-
-    private WurstModel compile(String... lines) {
-        String input = String.join("\n", lines);
-        WurstGui gui = new WurstGuiLogger();
-        RunArgs runArgs = new RunArgs();
-        WurstCompilerJassImpl compiler = new WurstCompilerJassImpl(null, gui, null, runArgs);
-        compiler.getErrorHandler().enableUnitTestMode();
-        Map<String, String> inputMap = ImmutableMap.of("test", input);
-        return parseFiles(Collections.<File>emptyList(), inputMap, false, compiler);
     }
 
 

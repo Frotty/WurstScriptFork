@@ -3,15 +3,12 @@ package de.peeeq.wurstscript.types;
 import com.google.common.collect.Lists;
 import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.ast.Expr;
-import de.peeeq.wurstscript.ast.TypeParamDef;
 import de.peeeq.wurstscript.attributes.AttrConstantValue;
 import de.peeeq.wurstscript.intermediatelang.ILconst;
 import de.peeeq.wurstscript.intermediatelang.ILconstInt;
 import de.peeeq.wurstscript.jassIm.*;
-import fj.data.TreeMap;
 import org.eclipse.jdt.annotation.Nullable;
 
-import java.util.Collection;
 import java.util.List;
 
 
@@ -75,10 +72,10 @@ public class WurstTypeArray extends WurstType {
 
 
     @Override
-    @Nullable TreeMap<TypeParamDef, WurstTypeBoundTypeParam> matchAgainstSupertypeIntern(WurstType other, @Nullable Element location, Collection<TypeParamDef> typeParams, TreeMap<TypeParamDef, WurstTypeBoundTypeParam> mapping) {
+    VariableBinding matchAgainstSupertypeIntern(WurstType other, @Nullable Element location, VariableBinding mapping, VariablePosition variablePosition) {
         if (other instanceof WurstTypeArray) {
             WurstTypeArray otherArray = (WurstTypeArray) other;
-            mapping = baseType.matchTypes(otherArray.baseType, location, typeParams, mapping);
+            mapping = baseType.matchTypes(otherArray.baseType, location, mapping, VariablePosition.RIGHT);
             if (mapping == null) {
                 return null;
             }
@@ -112,27 +109,18 @@ public class WurstTypeArray extends WurstType {
     public ImType imTranslateType() {
         initSizes();
         ImType bt = baseType.imTranslateType();
-
-        if (bt instanceof ImSimpleType) {
-            String typename = ((ImSimpleType) bt).getTypename();
-            if (sizes.length > 0) {
-                if (sizes[0] == 0) {
-                    return JassIm.ImArrayType(typename);
-                }
-                List<Integer> nsizes = Lists.<Integer>newArrayList();
-                for (int size : sizes) {
-                    nsizes.add(size);
-                }
-
-                return JassIm.ImArrayTypeMulti(typename, nsizes);
+        if (sizes.length > 0) {
+            if (sizes[0] == 0) {
+                return JassIm.ImArrayType(bt);
             }
-            return JassIm.ImArrayType(typename);
-        } else if (bt instanceof ImTupleType) {
-            ImTupleType tt = (ImTupleType) bt;
-            return JassIm.ImTupleArrayType(tt.getTypes(), tt.getNames());
-        } else {
-            throw new Error("cannot translate array type " + getName() + "  " + bt);
+            List<Integer> nsizes = Lists.newArrayList();
+            for (int size : sizes) {
+                nsizes.add(size);
+            }
+
+            return JassIm.ImArrayTypeMulti(bt, nsizes);
         }
+        return JassIm.ImArrayType(bt);
     }
 
 

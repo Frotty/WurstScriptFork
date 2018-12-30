@@ -1,13 +1,10 @@
 package de.peeeq.wurstscript.types;
 
 import de.peeeq.wurstscript.ast.Element;
-import de.peeeq.wurstscript.ast.TypeParamDef;
 import de.peeeq.wurstscript.jassIm.ImExprOpt;
 import de.peeeq.wurstscript.jassIm.JassIm;
-import fj.data.TreeMap;
+import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
-
-import java.util.Collection;
 
 
 public class WurstTypeNull extends WurstTypePrimitive {
@@ -20,7 +17,7 @@ public class WurstTypeNull extends WurstTypePrimitive {
     }
 
     @Override
-    @Nullable TreeMap<TypeParamDef, WurstTypeBoundTypeParam> matchAgainstSupertypeIntern(WurstType other, @Nullable Element location, Collection<TypeParamDef> typeParams, TreeMap<TypeParamDef, WurstTypeBoundTypeParam> mapping) {
+    VariableBinding matchAgainstSupertypeIntern(WurstType other, @Nullable Element location, VariableBinding mapping, VariablePosition variablePosition) {
         if (other instanceof WurstTypeNull
                 || other instanceof WurstTypeHandle
                 || other instanceof WurstNativeType
@@ -31,7 +28,8 @@ public class WurstTypeNull extends WurstTypePrimitive {
                 || other instanceof WurstTypeModule
                 || other instanceof WurstTypeModuleInstanciation
                 || other instanceof WurstTypeTypeParam
-                || other instanceof WurstTypeBoundTypeParam) {
+                || other instanceof WurstTypeBoundTypeParam
+                || Utils.isJassCode(location) && (other instanceof WurstTypeInt || other instanceof WurstTypeIntLiteral)) {
             return mapping;
         }
         return null;

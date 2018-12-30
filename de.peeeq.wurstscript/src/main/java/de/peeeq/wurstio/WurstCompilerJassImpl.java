@@ -55,8 +55,14 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     private @Nullable ImTranslator imTranslator;
     private List<File> dependencies = Lists.newArrayList();
     private final @Nullable MpqEditor mapFileMpq;
+    private TimeTaker timeTaker;
 
     public WurstCompilerJassImpl(@Nullable File projectFolder, WurstGui gui, @Nullable MpqEditor mapFileMpq, RunArgs runArgs) {
+        this(new TimeTaker.Default(), projectFolder, gui, mapFileMpq, runArgs);
+    }
+
+    public WurstCompilerJassImpl(TimeTaker timeTaker, @Nullable File projectFolder, WurstGui gui, @Nullable MpqEditor mapFileMpq, RunArgs runArgs) {
+        this.timeTaker = timeTaker;
         this.projectFolder = projectFolder;
         this.gui = gui;
         this.runArgs = runArgs;
@@ -382,7 +388,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         checker.checkProg(model, toCheck);
     }
 
-    public @Nullable JassProg transformProgToJass() {
+    public JassProg transformProgToJass() {
         ImTranslator imTranslator2 = getImTranslator();
         ImProg imProg2 = getImProg();
         imTranslator2.assertProperties();
@@ -394,8 +400,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         new EliminateClasses(imTranslator2, imProg2, !runArgs.isUncheckedDispatch()).eliminateClasses();
         imTranslator2.assertProperties();
         printDebugImProg("./test-output/im " + stage++ + "_classesEliminated.im");
-        new MultiArrayEliminator(imProg2, imTranslator2).run();
-        imTranslator2.assertProperties();
 
         new VarargEliminator(imProg2).run();
         printDebugImProg("./test-output/im " + stage++ + "_varargEliminated.im");
@@ -407,12 +411,12 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             // debug: add stacktraces
             if (runArgs.isIncludeStacktraces()) {
                 beginPhase(4, "add stack traces");
-                new StackTraceInjector2(imProg2, imTranslator2).transform();
+                new StackTraceInjector2(imProg2, imTranslator2).transform(timeTaker);
             }
         }
         imTranslator2.assertProperties();
 
-        ImOptimizer optimizer = new ImOptimizer(imTranslator2);
+        ImOptimizer optimizer = new ImOptimizer(timeTaker, imTranslator2);
 
         // inliner
         if (runArgs.isInline()) {
@@ -426,10 +430,14 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         // eliminate tuples
         beginPhase(6, "eliminate tuples");
         getImProg().flatten(imTranslator2);
-        getImProg().eliminateTuples(imTranslator2);
+        EliminateTuples.eliminateTuplesProg(getImProg(), imTranslator2);
         getImTranslator().assertProperties(AssertProperty.NOTUPLES);
 
         printDebugImProg("./test-output/im " + stage++ + "_withouttuples.im");
+
+        new MultiArrayEliminator(imProg2, imTranslator2, runArgs.isIncludeStacktraces() && !runArgs.isNoDebugMessages()).run();
+        printDebugImProg("./test-output/im " + stage++ + "_withoutmultiarrays.im");
+        imTranslator2.assertProperties();
 
         beginPhase(7, "remove func refs");
         new FuncRefRemover(imProg2, imTranslator2).run();
@@ -469,10 +477,12 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             beginPhase(12, "froptimize");
             optimizer.optimize();
 
+            optimizer.removeGarbage();
+            imProg.flatten(imTranslator);
             printDebugImProg("./test-output/im " + stage++ + "_afteroptimize.im");
         }
 
-        optimizer.removeGarbage();
+
 
         // translate flattened intermediate lang to jass:
 
@@ -484,6 +494,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         if (errorHandler.getErrorCount() > 0) {
             prog = null;
         }
+        timeTaker.endPhase();
         return prog;
     }
 
@@ -513,11 +524,13 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         imProg = getImTranslator().translateProg();
         int stage = 1;
         printDebugImProg("./test-output/im " + stage++ + ".im");
+        timeTaker.endPhase();
         return imProg;
     }
 
     private void beginPhase(int phase, String description) {
         errorHandler.setProgress("Translating wurst. Phase " + phase + ": " + description, 0.6 + 0.01 * phase);
+        timeTaker.beginPhase(description);
     }
 
     private void printDebugImProg(String debugFile) {

@@ -5,6 +5,7 @@ import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
+import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.types.TypesHelper;
 import net.moonlightflower.wc3libs.misc.StringHash;
@@ -113,7 +114,7 @@ public class SimpleRewrites implements OptimizerPass {
     private void optimizeConsecutiveExitWhen(ImExitwhen lookback, ImExitwhen element) {
         element.getCondition().setParent(null);
         lookback.setCondition(JassIm.ImOperatorCall(WurstOperator.OR, JassIm.ImExprs(lookback.getCondition().copy(), element.getCondition())));
-        element.replaceBy(JassIm.ImNull());
+        element.replaceBy(ImHelper.nullExpr());
         totalRewrites++;
     }
 
@@ -122,7 +123,7 @@ public class SimpleRewrites implements OptimizerPass {
         if (expr instanceof ImBoolVal) {
             boolean b = ((ImBoolVal) expr).getValB();
             if (!b) {
-                imExitwhen.replaceBy(JassIm.ImNull());
+                imExitwhen.replaceBy(ImHelper.nullExpr());
                 totalRewrites++;
             }
         }
@@ -582,14 +583,14 @@ public class SimpleRewrites implements OptimizerPass {
                 // for the replaceBy function
                 // we need to copy the thenBlock because otherwise it would have
                 // two parents (we have not removed it from the old if-block)
-                imIf.replaceBy(JassIm.ImStatementExpr(imIf.getThenBlock().copy(), JassIm.ImNull()));
+                imIf.replaceBy(ImHelper.statementExprVoid(imIf.getThenBlock().copy()));
                 totalRewrites++;
             } else {
                 if (!imIf.getElseBlock().isEmpty()) {
-                    imIf.replaceBy(JassIm.ImStatementExpr(imIf.getElseBlock().copy(), JassIm.ImNull()));
+                    imIf.replaceBy(ImHelper.statementExprVoid(imIf.getElseBlock().copy()));
                     totalRewrites++;
                 } else {
-                    imIf.replaceBy(JassIm.ImNull());
+                    imIf.replaceBy(ImHelper.nullExpr());
                     totalRewrites++;
                 }
             }
@@ -611,8 +612,18 @@ public class SimpleRewrites implements OptimizerPass {
      * like code that is created by the branch merger
      */
     private void optimizeConsecutiveSet(ImSet imSet1, ImSet imSet2) {
-        ImVar leftVar1 = imSet1.getLeft();
-        ImVar leftVar2 = imSet2.getLeft();
+        ImVar leftVar1;
+        if (imSet1.getLeft() instanceof ImVarAccess) {
+            leftVar1 = ((ImVarAccess) imSet1.getLeft()).getVar();
+        } else {
+            return;
+        }
+        ImVar leftVar2;
+        if (imSet2.getLeft() instanceof ImVarAccess) {
+            leftVar2 = ((ImVarAccess) imSet2.getLeft()).getVar();
+        } else {
+            return;
+        }
 
         ImExpr rightExpr1 = imSet1.getRight();
         ImExpr rightExpr2 = imSet2.getRight();
@@ -627,7 +638,7 @@ public class SimpleRewrites implements OptimizerPass {
                             if (sideEffectAnalysis.cannotUseVar(rightOpCall2.getArguments().get(1), leftVar1)) {
                                 rightExpr1.setParent(null);
                                 imVarAccess2.replaceBy(rightExpr1);
-                                imSet1.replaceBy(JassIm.ImNull());
+                                imSet1.replaceBy(ImHelper.nullExpr());
                                 totalRewrites++;
                             }
                         }

@@ -6,6 +6,7 @@ import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.CofigOverridePackages;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.ImplicitFuncs;
+import de.peeeq.wurstscript.attributes.SmallHelpers;
 import de.peeeq.wurstscript.attributes.names.DefLink;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
@@ -21,6 +22,8 @@ import org.eclipse.jdt.annotation.Nullable;
 
 import java.util.*;
 import java.util.Map.Entry;
+
+import static de.peeeq.wurstscript.attributes.SmallHelpers.superArgs;
 
 /**
  * this class validates a wurstscript program
@@ -575,7 +578,7 @@ public class WurstValidator {
     }
 
     /**
-     *  Checks that module types are only used in valid places
+     * Checks that module types are only used in valid places
      */
     private void checkModuleTypeUsedCorrectly(TypeExpr e, ModuleDef md) {
         if (e instanceof TypeExprThis) {
@@ -604,7 +607,9 @@ public class WurstValidator {
         e.addError("Cannot use module type " + md.getName() + " in this context.");
     }
 
-    /** check that type parameters are used in correct contexts: */
+    /**
+     * check that type parameters are used in correct contexts:
+     */
     private void checkTypeparamsUsedCorrectly(TypeExpr e, TypeParamDef tp) {
         if (tp.isStructureDefTypeParam()) { // typeParamDef is for
             // structureDef
@@ -799,8 +804,8 @@ public class WurstValidator {
         return false;
     }
 
-    private void checkIfAssigningToConstant(final NameRef left) {
-        left.match(new NameRef.MatcherVoid() {
+    private void checkIfAssigningToConstant(final LExpr left) {
+        left.match(new LExpr.MatcherVoid() {
 
             @Override
             public void case_ExprVarArrayAccess(ExprVarArrayAccess e) {
@@ -809,7 +814,7 @@ public class WurstValidator {
 
             @Override
             public void case_ExprVarAccess(ExprVarAccess e) {
-                checkVarNotConstant(left, e.attrNameLink());
+                checkVarNotConstant(e, e.attrNameLink());
             }
 
             @Override
@@ -826,7 +831,7 @@ public class WurstValidator {
                                 "Ok, so you are trying to assign something to the return value of a function. This wont do nothing. Tuples are not classes.");
                     }
                 }
-                checkVarNotConstant(left, e.attrNameLink());
+                checkVarNotConstant(e, e.attrNameLink());
             }
 
             @Override
@@ -934,6 +939,14 @@ public class WurstValidator {
             if (arT.getDimensions() > 1) {
                 def.addError("Array initializer can only be used with one-dimensional arrays.");
             }
+            if (arT.getDimensions() == 1) {
+                int initialValues = arInit.getValues().size();
+                int size = arT.getSize(0);
+                if (size > 0 && size != initialValues) {
+                    def.addError("Array variable " + def.getName() + " is an array of size " + size + ", but is initialized with " + initialValues + " values here.");
+                }
+
+            }
             WurstType baseType = arT.getBaseType();
             for (Expr expr : arInit.getValues()) {
                 if (!expr.attrTyp().isSubtypeOf(baseType, expr)) {
@@ -971,7 +984,7 @@ public class WurstValidator {
         if (!isValidVarnameStart(varName) // first letter not lower case
                 && !Utils.isJassCode(s) // not in jass code
                 && !varName.matches("[A-Z0-9_]+") // not a constant
-                ) {
+        ) {
             s.addWarning("Variable names should start with a lower case character. (" + varName + ")");
         }
         if (varName.equals("handle")) {
@@ -1431,35 +1444,35 @@ public class WurstValidator {
     }
 
     private void checkTypeBinding(HasTypeArgs e) {
-        TreeMap<TypeParamDef, WurstTypeBoundTypeParam> mapping = e.match(new HasTypeArgs.Matcher<TreeMap<TypeParamDef, WurstTypeBoundTypeParam>>() {
+        VariableBinding mapping = e.match(new HasTypeArgs.Matcher<VariableBinding>() {
 
             @Override
-            public TreeMap<TypeParamDef, WurstTypeBoundTypeParam> case_ExprNewObject(ExprNewObject e) {
+            public VariableBinding case_ExprNewObject(ExprNewObject e) {
                 return e.attrTyp().getTypeArgBinding();
             }
 
             @Override
-            public TreeMap<TypeParamDef, WurstTypeBoundTypeParam> case_ModuleUse(ModuleUse moduleUse) {
+            public VariableBinding case_ModuleUse(ModuleUse moduleUse) {
                 return null;
             }
 
             @Override
-            public TreeMap<TypeParamDef, WurstTypeBoundTypeParam> case_TypeExprSimple(TypeExprSimple e) {
+            public VariableBinding case_TypeExprSimple(TypeExprSimple e) {
                 return e.attrTyp().getTypeArgBinding();
             }
 
             @Override
-            public TreeMap<TypeParamDef, WurstTypeBoundTypeParam> case_ExprFunctionCall(ExprFunctionCall e) {
+            public VariableBinding case_ExprFunctionCall(ExprFunctionCall e) {
                 return e.attrTyp().getTypeArgBinding();
             }
 
             @Override
-            public TreeMap<TypeParamDef, WurstTypeBoundTypeParam> case_ExprMemberMethodDot(ExprMemberMethodDot e) {
+            public VariableBinding case_ExprMemberMethodDot(ExprMemberMethodDot e) {
                 return e.attrTyp().getTypeArgBinding();
             }
 
             @Override
-            public TreeMap<TypeParamDef, WurstTypeBoundTypeParam> case_ExprMemberMethodDotDot(ExprMemberMethodDotDot e) {
+            public VariableBinding case_ExprMemberMethodDotDot(ExprMemberMethodDotDot e) {
                 return e.attrTyp().getTypeArgBinding();
             }
         });
@@ -1700,9 +1713,12 @@ public class WurstValidator {
                     } else {
                         check(VisibilityPublic.class, Annotation.class);
                     }
-                    if(f.attrIsCompiletime()) {
-                        if(f.getParameters().size() > 0) {
+                    if (f.attrIsCompiletime()) {
+                        if (f.getParameters().size() > 0) {
                             f.addError("Functions annotated '@compiletime' may not take parameters." +
+                                    "\nNote: The annotation marks functions to be executed by wurst at compiletime.");
+                        } else if (f.attrIsDynamicClassMember()) {
+                            f.addError("Functions annotated '@compiletime' must be static." +
                                     "\nNote: The annotation marks functions to be executed by wurst at compiletime.");
                         }
                     }
@@ -1789,7 +1805,8 @@ public class WurstValidator {
         if (s instanceof ClassDef) {
             ClassDef c = (ClassDef) s;
             WurstTypeClass ct = c.attrTypC();
-            if (ct.extendedClass() != null) {
+            WurstTypeClass extendedClass = ct.extendedClass();
+            if (extendedClass != null) {
                 // check if super constructor is called correctly...
                 // TODO check constr: get it from ct so that it has the correct type binding
                 ConstructorDef sc = d.attrSuperConstructor();
@@ -1800,16 +1817,17 @@ public class WurstValidator {
                     for (WParameter p : sc.getParameters()) {
                         paramTypes.add(p.attrTyp());
                     }
-                    if(!sc.getIsExplicit() && paramTypes.size() > 0 && d.getSuperArgs().size() == 0) {
-                        c.addError("The extended class <" + ct.extendedClass().getName() + "> does not expose a no-arg constructor. " +
+                    if (d.getSuperConstructorCall() instanceof NoSuperConstructorCall
+                            && paramTypes.size() > 0) {
+                        c.addError("The extended class <" + extendedClass.getName() + "> does not expose a no-arg constructor. " +
                                 "You must define a constructor that calls super(..) appropriately, in this class.");
                     } else {
-                        checkParams(d, "Incorrect call to super constructor: ", d.getSuperArgs(), paramTypes);
+                        checkParams(d, "Incorrect call to super constructor: ", superArgs(d), paramTypes);
                     }
                 }
             }
         } else {
-            if (!d.getSuperArgs().isEmpty()) {
+            if (d.getSuperConstructorCall() instanceof SomeSuperConstructorCall) {
                 d.addError("Module constructors cannot have super calls.");
             }
         }
@@ -1941,9 +1959,9 @@ public class WurstValidator {
             for (SwitchCase c : s.getCases()) {
                 // if ( i > 0 ) {
                 // for( int j = 0; j<i; j++) {
-                // WLogger.info(">>>>>>>>>>>>>>>>"+c.getExpr());
-                // WLogger.info(">>>>>>>>>>>>>>>>"+s.getCases().get(j).getExpr());
-                // if ( c.getExpr().attrN.equals(s.getCases().get(j).getExpr())
+                // WLogger.info(">>>>>>>>>>>>>>>>"+c.getExprs());
+                // WLogger.info(">>>>>>>>>>>>>>>>"+s.getCases().get(j).getExprs());
+                // if ( c.getExprs().attrN.equals(s.getCases().get(j).getExprs())
                 // )
                 // c.addError("Case " + j + " and " + i + " are the same.");
                 // }
@@ -2184,7 +2202,7 @@ public class WurstValidator {
     }
 
     private void checkConstructorSuperCall(ConstructorDef c) {
-        if (c.getIsExplicit()) {
+        if (c.getSuperConstructorCall() instanceof SomeSuperConstructorCall) {
             if (c.attrNearestClassDef() != null) {
                 ClassDef classDef = c.attrNearestClassDef();
                 if (classDef.getExtendedClass() instanceof NoTypeExpr) {

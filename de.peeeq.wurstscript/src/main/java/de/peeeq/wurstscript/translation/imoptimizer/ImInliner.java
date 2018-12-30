@@ -114,7 +114,7 @@ public class ImInliner {
             f.getLocals().add(tempVar);
             varSubtitutions.put(param, tempVar);
             // set temp var
-            stmts.add(JassIm.ImSet(arg.attrTrace(), tempVar, arg));
+            stmts.add(JassIm.ImSet(arg.attrTrace(), JassIm.ImVarAccess(tempVar), arg));
         }
         // add locals
         for (ImVar l : called.getLocals()) {
@@ -155,7 +155,7 @@ public class ImInliner {
             }
         }
         if (newExpr == null) {
-            newExpr = JassIm.ImStatementExpr(ImStmts(stmts), JassIm.ImNull());
+            newExpr = ImHelper.statementExprVoid(ImStmts(stmts));
         }
         parent.set(parentI, newExpr);
 

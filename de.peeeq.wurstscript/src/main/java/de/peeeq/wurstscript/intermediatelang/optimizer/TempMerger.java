@@ -1,15 +1,20 @@
 package de.peeeq.wurstscript.intermediatelang.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.AssertProperty;
+import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map.Entry;
 
 public class TempMerger implements OptimizerPass {
@@ -26,9 +31,6 @@ public class TempMerger implements OptimizerPass {
      */
     @Override
     public int optimize(ImTranslator trans) {
-        containsFuncCall.clear();
-        readsVar.clear();
-        readsGlobal.clear();
         ImProg prog = trans.getImProg();
         totalMerged = 0;
         trans.assertProperties(AssertProperty.FLAT, AssertProperty.NOTUPLES);
@@ -56,12 +58,14 @@ public class TempMerger implements OptimizerPass {
             for (ImStmt s : stmts) {
                 if (s instanceof ImSet) {
                     ImSet imSet = (ImSet) s;
-                    if (imSet.getRight() instanceof ImVarAccess) {
+                    if (imSet.getRight() instanceof ImVarAccess
+                            && imSet.getLeft() instanceof ImVarAccess) {
                         ImVarAccess right = (ImVarAccess) imSet.getRight();
-                        if (imSet.getLeft() == right.getVar()) {
+                        ImVarAccess left = (ImVarAccess) imSet.getLeft();
+                        if (left.getVar() == right.getVar()) {
                             // statement has the form 'x = x' so remove it
                             totalMerged++;
-                            imSet.replaceBy(JassIm.ImNull());
+                            imSet.replaceBy(ImHelper.nullExpr());
                             continue;
                         }
                     }
@@ -103,10 +107,14 @@ public class TempMerger implements OptimizerPass {
         }
         if (s instanceof ImSet) {
             ImSet imSet = (ImSet) s;
-            // update the knowledge with the new set statement
-            kn.update(imSet.getLeft(), imSet);
-        } else if (s instanceof ImSetArray) {
-            kn.invalidateVar(((ImSetArray) s).getLeft());
+            if (imSet.getLeft() instanceof ImVarAccess) {
+                ImVarAccess va = (ImVarAccess) imSet.getLeft();
+                // update the knowledge with the new set statement
+                kn.update(va.getVar(), imSet);
+            } else if (imSet.getLeft() instanceof ImVarArrayAccess) {
+                ImVarArrayAccess va = (ImVarArrayAccess) imSet.getLeft();
+                kn.invalidateVar(va.getVar());
+            }
         } else if (s instanceof ImExitwhen || s instanceof ImIf || s instanceof ImLoop) {
             kn.clear();
             // TODO this could be more precise for local variables,
@@ -121,7 +129,9 @@ public class TempMerger implements OptimizerPass {
         }
         if (elem instanceof ImVarAccess) {
             ImVarAccess va = (ImVarAccess) elem;
-            return kn.getReplacementIfPossible(va);
+            if (!va.isUsedAsLValue()) {
+                return kn.getReplacementIfPossible(va);
+            }
         } else if (elem instanceof ImLoop) {
             return null;
         } else if (elem instanceof ImIf) {
@@ -154,69 +164,55 @@ public class TempMerger implements OptimizerPass {
         return null;
     }
 
-    private HashMap<Element, Boolean> containsFuncCall = new HashMap<>();
 
     private boolean containsFuncCall(Element elem) {
-        if (!containsFuncCall.containsKey(elem)) {
-            if (elem instanceof ImFunctionCall) {
-                containsFuncCall.put(elem, true);
+        if (elem instanceof ImFunctionCall) {
+            return true;
+        }
+        // process children
+        boolean r = false;
+        for (int i = 0; i < elem.size(); i++) {
+            r = containsFuncCall(elem.get(i));
+            if (r) {
                 return true;
             }
-            // process children
-            boolean r = false;
-            for (int i = 0; i < elem.size(); i++) {
-                r = containsFuncCall(elem.get(i));
-                if (r) break;
-            }
-            containsFuncCall.put(elem, r);
-
         }
-        return containsFuncCall.get(elem);
+        return false;
     }
 
-    private HashMap<Element, Boolean> readsVar = new HashMap<>();
 
     private boolean readsVar(Element elem, ImVar left) {
-        if (!readsVar.containsKey(elem)) {
-            if (elem instanceof ImVarRead) {
-                ImVarRead va = (ImVarRead) elem;
-                if (va.getVar() == left) {
-                    readsVar.put(elem, true);
-                    return true;
-                }
+        if (elem instanceof ImVarRead) {
+            ImVarRead va = (ImVarRead) elem;
+            if (va.getVar() == left) {
+                return true;
             }
-            boolean r = false;
-            // process children
-            for (int i = 0; i < elem.size(); i++) {
-                r = readsVar(elem.get(i), left);
-                if (r) break;
-            }
-            readsVar.put(elem, r);
         }
-        return readsVar.get(elem);
+        // process children
+        for (int i = 0; i < elem.size(); i++) {
+            if (readsVar(elem.get(i), left)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private HashMap<Element, Boolean> readsGlobal = new HashMap<>();
 
     private boolean readsGlobal(Element elem) {
-        if (!readsGlobal.containsKey(elem)) {
-            if (elem instanceof ImVarRead) {
-                ImVarRead va = (ImVarRead) elem;
-                if (va.getVar().isGlobal()) {
-                    readsGlobal.put(elem, true);
-                    return true;
-                }
+        if (elem instanceof ImVarRead) {
+            ImVarRead va = (ImVarRead) elem;
+            if (va.getVar().isGlobal()) {
+                return true;
             }
-            boolean r = false;
-            // process children
-            for (int i = 0; i < elem.size(); i++) {
-                r = readsGlobal(elem.get(i));
-                if (r) break;
+        }
+        // process children
+        for (int i = 0; i < elem.size(); i++) {
+            if (readsGlobal(elem.get(i))) {
+                return true;
             }
-            readsGlobal.put(elem, r);
         }
 
-        return readsGlobal.get(elem);
+        return false;
     }
 
     class Replacement {
@@ -224,6 +220,7 @@ public class TempMerger implements OptimizerPass {
         public final ImVarAccess read;
 
         public Replacement(ImSet set, ImVarAccess read) {
+            Preconditions.checkArgument(set.getLeft() instanceof ImVarAccess);
             this.set = set;
             this.read = read;
         }
@@ -235,10 +232,10 @@ public class TempMerger implements OptimizerPass {
 
         public void apply() {
             ImExpr e = set.getRight();
-            if (set.getLeft().attrReads().size() <= 1) {
+            if (getAssignedVar().attrReads().size() <= 1) {
                 // make sure that an impure expression is only evaluated once
                 // by removing the assignment
-                set.replaceBy(JassIm.ImNull());
+                set.replaceBy(ImHelper.nullExpr());
 
                 // remove variables which are no longer read
                 for (ImVarRead r : readVariables(set)) {
@@ -249,13 +246,17 @@ public class TempMerger implements OptimizerPass {
             ImExpr newE = (ImExpr) e.copy();
             read.replaceBy(newE);
             // update attrReads:
-            set.getLeft().attrReads().remove(read);
+            getAssignedVar().attrReads().remove(read);
 
             // for all the variables in e: add to read
             for (ImVarRead r : readVariables(newE)) {
                 r.getVar().attrReads().add(r);
             }
 
+        }
+
+        private ImVar getAssignedVar() {
+            return ((ImVarAccess) set.getLeft()).getVar();
         }
 
     }

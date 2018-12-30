@@ -1,6 +1,7 @@
 package de.peeeq.wurstscript.attributes.names;
 
 import de.peeeq.wurstscript.ast.*;
+import de.peeeq.wurstscript.types.VariableBinding;
 import de.peeeq.wurstscript.types.WurstType;
 import de.peeeq.wurstscript.types.WurstTypeBoundTypeParam;
 import de.peeeq.wurstscript.types.WurstTypePackage;
@@ -8,6 +9,7 @@ import fj.data.TreeMap;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 
 public class TypeDefLink extends DefLink {
@@ -48,7 +50,7 @@ public class TypeDefLink extends DefLink {
     }
 
     @Override
-    public TypeDefLink withTypeArgBinding(Element context, TreeMap<TypeParamDef, WurstTypeBoundTypeParam> binding) {
+    public TypeDefLink withTypeArgBinding(Element context, VariableBinding binding) {
         // packages do not have type paramaters
         return this;
     }
@@ -77,4 +79,16 @@ public class TypeDefLink extends DefLink {
         return (TypeDefLink) super.hidingPrivateAndProtected();
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TypeDefLink that = (TypeDefLink) o;
+        return Objects.equals(def, that.def);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(def);
+    }
 }

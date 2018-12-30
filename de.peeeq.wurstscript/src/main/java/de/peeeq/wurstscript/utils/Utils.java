@@ -7,8 +7,11 @@ import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.io.Files;
 import de.peeeq.wurstio.Pjass;
 import de.peeeq.wurstscript.ast.*;
+import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.attributes.prettyPrint.DefaultSpacer;
+import de.peeeq.wurstscript.jassIm.ImExpr;
+import de.peeeq.wurstscript.jassIm.ImFunctionCall;
 import de.peeeq.wurstscript.jassIm.JassImElementWithName;
 import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.types.WurstType;
@@ -126,6 +129,10 @@ public class Utils {
         StringBuilder sb = new StringBuilder();
         printSep(sb, sep, args);
         return sb.toString();
+    }
+
+    public static String printSep(String sep, List<?> args) {
+        return args.stream().map(Object::toString).collect(Collectors.joining(sep));
     }
 
     /**
@@ -350,28 +357,6 @@ public class Utils {
     }
 
 
-    /**
-     * calculates the transient closure of a multimap
-     */
-    public static <T> Multimap<T, T> transientClosure(Multimap<T, T> start) {
-        Multimap<T, T> result = HashMultimap.create();
-        result.putAll(start);
-        Multimap<T, T> changes = HashMultimap.create();
-        boolean changed;
-        do {
-            changes.clear();
-            for (Entry<T, T> e1 : result.entries()) {
-                for (T t : result.get(e1.getValue())) {
-                    changes.put(e1.getKey(), t);
-                }
-            }
-            changed = result.putAll(changes);
-
-        } while (changed);
-
-        return result;
-    }
-
     public static Element getAstElementAtPos(Element elem,
                                              int caretPosition, boolean usesMouse) {
         List<Element> betterResults = Lists.newArrayList();
@@ -521,9 +506,17 @@ public class Utils {
     }
 
     public static <T, S> Multimap<T, S> inverse(Multimap<S, T> orig) {
-        Multimap<T, S> result = HashMultimap.create();
+        Multimap<T, S> result = LinkedHashMultimap.create();
         for (Entry<S, T> e : orig.entries()) {
             result.put(e.getValue(), e.getKey());
+        }
+        return result;
+    }
+
+    public static <T extends Comparable<? extends T>, S> TreeMap<T, Set<S>> inverseMapToSet(Map<S, T> orig) {
+        TreeMap<T, Set<S>> result = new TreeMap<>();
+        for (Entry<S, T> e : orig.entrySet()) {
+            result.computeIfAbsent(e.getValue(), x -> new LinkedHashSet<>()).add(e.getKey());
         }
         return result;
     }
@@ -606,9 +599,7 @@ public class Utils {
         return getFirst(c);
     }
 
-    public static String escapeString(String v) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("\"");
+    private static void escapeStringParts(String v, StringBuilder builder) {
         for (int i = 0; i < v.length(); i++) {
             char c = v.charAt(i);
             switch (c) {
@@ -631,6 +622,18 @@ public class Utils {
                     builder.append(c);
             }
         }
+    }
+
+    public static String escapeStringWithoutQuotes(String v) {
+        StringBuilder builder = new StringBuilder();
+        escapeStringParts(v, builder);
+        return builder.toString();
+    }
+
+    public static String escapeString(String v) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("\"");
+        escapeStringParts(v, builder);
         builder.append("\"");
         return builder.toString();
     }
@@ -995,5 +998,24 @@ public class Utils {
             return "???";
         }
         return wt.toString();
+    }
+
+    /**
+     * Replaces oldElement with newElement in parent
+     */
+    public static void replace(de.peeeq.wurstscript.jassIm.Element parent, de.peeeq.wurstscript.jassIm.Element oldElement, de.peeeq.wurstscript.jassIm.Element newElement) {
+        if (oldElement == newElement) {
+            return;
+        }
+        de.peeeq.wurstscript.jassIm.Element oldElementParent = oldElement.getParent();
+        for (int i=0; i<parent.size(); i++) {
+            if (parent.get(i) == oldElement) {
+                parent.set(i, newElement);
+                // reset parent, because might be changed
+                oldElement.setParent(oldElementParent);
+                return;
+            }
+        }
+        throw new CompileError(parent.attrTrace().attrSource(), "Could not find " + oldElement + " in " + parent);
     }
 }

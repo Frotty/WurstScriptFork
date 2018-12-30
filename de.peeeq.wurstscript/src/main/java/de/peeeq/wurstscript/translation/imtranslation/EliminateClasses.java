@@ -51,7 +51,7 @@ public class EliminateClasses {
         // for each field, create a global array variable
         for (ImVar f : c.getFields()) {
             ImVar v = JassIm
-                    .ImVar(f.getTrace(), toArrayType(f.getType()), f.getName(), false);
+                    .ImVar(f.getTrace(), JassIm.ImArrayType(f.getType()), f.getName(), false);
             prog.getGlobals().add(v);
             fieldToArray.put(f, v);
         }
@@ -89,28 +89,30 @@ public class EliminateClasses {
         dispatchFuncs.put(m, df);
 
 
+        ImType returnType = df.getReturnType();
         if (ranges.isEmpty()) {
-            if (df.getReturnType() instanceof ImSimpleType) {
-                ImSimpleType t = (ImSimpleType) df.getReturnType();
-                ImExpr rv = ImHelper.defaultValueForType(t);
+            // no implementations for method
+            if (!(returnType instanceof ImVoid)) {
+                // return default value if it is not void
+                ImExpr rv = ImHelper.defaultValueForComplexType(returnType);
                 df.getBody().add(JassIm.ImReturn(df.getTrace(), rv));
             }
             return;
         }
 
+
         ImVar resultVar;
-        if (df.getReturnType() instanceof ImVoid) {
+        if (returnType instanceof ImVoid) {
             resultVar = null;
         } else {
-            resultVar = JassIm.ImVar(df.getTrace(), df.getReturnType(), m.getName()
+            resultVar = JassIm.ImVar(df.getTrace(), returnType, m.getName()
                     + "_result", false);
             df.getLocals().add(resultVar);
         }
 
         ClassManagementVars mVars = translator.getClassManagementVarsFor(c);
         ImVar thisVar = df.getParameters().get(0);
-        ImExpr typeId = JassIm.ImVarArrayAccess(mVars.typeId,
-                JassIm.ImVarAccess(thisVar));
+        ImExpr typeId = JassIm.ImVarArrayAccess(m.getTrace(), mVars.typeId, JassIm.ImExprs((ImExpr) JassIm.ImVarAccess(thisVar)));
 
         // ckeck if destroyed or nullpointer
         if (checkedDispatch) {
@@ -172,7 +174,7 @@ public class EliminateClasses {
             if (resultVar == null) {
                 stmts.add(call);
             } else {
-                stmts.add(JassIm.ImSet(df.getTrace(), resultVar, call));
+                stmts.add(JassIm.ImSet(df.getTrace(), JassIm.ImVarAccess(resultVar), call));
             }
         } else {
             int mid = (start + end) / 2;
@@ -333,7 +335,7 @@ public class EliminateClasses {
         ImVar typeIdVar = translator.getClassManagementVarsFor(e.getClazz()).typeId;
         ImExpr obj = e.getObj();
         obj.setParent(null);
-        e.replaceBy(JassIm.ImVarArrayAccess(typeIdVar, obj));
+        e.replaceBy(JassIm.ImVarArrayAccess(e.attrTrace(), typeIdVar, JassIm.ImExprs(obj)));
     }
 
     private void replaceTypeIdOfClass(ImTypeIdOfClass e) {
@@ -351,7 +353,7 @@ public class EliminateClasses {
         obj.setParent(null);
         ImVar typeIdVar = translator.getClassManagementVarsFor(e.getClazz()).typeId;
 
-        ImExpr objTypeId = JassIm.ImVarArrayAccess(typeIdVar, obj);
+        ImExpr objTypeId = JassIm.ImVarArrayAccess(e.attrTrace(), typeIdVar, JassIm.ImExprs(obj));
 
         boolean useTempVar = idRanges.size() >= 2 || idRanges.get(0).start < idRanges.get(0).end;
         ImVar tempVar = null;
@@ -368,7 +370,7 @@ public class EliminateClasses {
         }
         if (useTempVar) {
             newExpr = JassIm.ImStatementExpr(JassIm.ImStmts(
-                    JassIm.ImSet(f.getTrace(), tempVar, objTypeId)
+                    JassIm.ImSet(f.getTrace(), JassIm.ImVarAccess(tempVar), objTypeId)
             ), newExpr);
         }
         e.replaceBy(newExpr);
@@ -437,19 +439,8 @@ public class EliminateClasses {
         ImExpr receiver = ma.getReceiver();
         receiver.setParent(null);
 
-        ma.replaceBy(JassIm.ImVarArrayAccess(fieldToArray.get(ma.getVar()),
-                receiver));
+        ma.replaceBy(JassIm.ImVarArrayAccess(ma.attrTrace(), fieldToArray.get(ma.getVar()), JassIm.ImExprs(receiver)));
 
-    }
-
-    private ImType toArrayType(ImType t) {
-        if (t instanceof ImSimpleType) {
-            return JassIm.ImArrayType(((ImSimpleType) t).getTypename());
-        } else if (t instanceof ImTupleType) {
-            return JassIm.ImTupleArrayType(((ImTupleType) t).getTypes(),
-                    ((ImTupleType) t).getNames());
-        }
-        throw new RuntimeException("unhandled case: " + t.getClass());
     }
 
 }

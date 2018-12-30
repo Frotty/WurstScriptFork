@@ -3,12 +3,14 @@ package de.peeeq.wurstscript.attributes.names;
 import com.google.common.collect.ImmutableList;
 import de.peeeq.datastructures.Deferred;
 import de.peeeq.wurstscript.ast.*;
+import de.peeeq.wurstscript.types.VariableBinding;
 import de.peeeq.wurstscript.types.WurstType;
 import de.peeeq.wurstscript.types.WurstTypeBoundTypeParam;
 import fj.data.TreeMap;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 
 public class TypeLink extends NameLink {
@@ -52,7 +54,7 @@ public class TypeLink extends NameLink {
     }
 
     @Override
-    public TypeLink withTypeArgBinding(Element context, TreeMap<TypeParamDef, WurstTypeBoundTypeParam> binding) {
+    public TypeLink withTypeArgBinding(Element context, VariableBinding binding) {
         // TODO
         return this;
     }
@@ -67,7 +69,7 @@ public class TypeLink extends NameLink {
         return new TypeLink(getVisibility(), getDefinedIn(), getTypeParams(), (TypeDef) def, type);
     }
 
-    public WurstType getTyp(TreeMap<TypeParamDef, WurstTypeBoundTypeParam> mapping) {
+    public WurstType getTyp(VariableBinding mapping) {
         // TODO only set the type parameters bound here
         return def.attrTyp().setTypeArgs(mapping);
     }
@@ -81,4 +83,16 @@ public class TypeLink extends NameLink {
         return (TypeLink) super.hidingPrivateAndProtected();
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TypeLink typeLink = (TypeLink) o;
+        return Objects.equals(def, typeLink.def);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(def);
+    }
 }
