@@ -7,6 +7,7 @@ import de.peeeq.wurstscript.attributes.AttrConstantValue;
 import de.peeeq.wurstscript.intermediatelang.ILconst;
 import de.peeeq.wurstscript.intermediatelang.ILconstInt;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import org.eclipse.jdt.annotation.Nullable;
 
 import java.util.List;
@@ -32,7 +33,15 @@ public class WurstTypeArray extends WurstType {
             throw new Error("cannot have array of arrays...");
         }
         this.baseType = baseType;
-        this.sizes = new int[1];
+        this.sizes = new int[] { -1 };
+    }
+
+    public WurstTypeArray(WurstType baseType, int size) {
+        if (baseType instanceof WurstTypeArray) {
+            throw new Error("cannot have array of arrays...");
+        }
+        this.baseType = baseType;
+        this.sizes = new int[] { size };
     }
 
     private void initSizes() {
@@ -47,8 +56,8 @@ public class WurstTypeArray extends WurstType {
             if (i instanceof ILconstInt) {
                 int val = ((ILconstInt) i).getVal();
                 sizes = new int[]{val};
-                if (val <= 0) {
-                    arSize.addError("Array size must be at least 1");
+                if (val < 0) {
+                    arSize.addError("Array size must be at least 0");
                 }
             } else {
                 arSize.addError("Array sizes should be integer...");
@@ -106,11 +115,11 @@ public class WurstTypeArray extends WurstType {
 
 
     @Override
-    public ImType imTranslateType() {
+    public ImType imTranslateType(ImTranslator tr) {
         initSizes();
-        ImType bt = baseType.imTranslateType();
+        ImType bt = baseType.imTranslateType(tr);
         if (sizes.length > 0) {
-            if (sizes[0] == 0) {
+            if (sizes[0] < 0) {
                 return JassIm.ImArrayType(bt);
             }
             List<Integer> nsizes = Lists.newArrayList();
@@ -125,8 +134,13 @@ public class WurstTypeArray extends WurstType {
 
 
     @Override
-    public ImExprOpt getDefaultValue() {
+    public ImExprOpt getDefaultValue(ImTranslator tr) {
         throw new Error();
+    }
+
+    @Override
+    protected boolean isNullable() {
+        return false;
     }
 
 }

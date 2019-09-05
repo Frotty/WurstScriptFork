@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import de.peeeq.immutablecollections.ImmutableList;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.names.NameLink;
+import de.peeeq.wurstscript.jassIm.ImArrayType;
 import de.peeeq.wurstscript.types.WurstTypeArray;
 import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
@@ -247,6 +248,13 @@ class VState {
 
 public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElementWithBody> {
 
+
+    private final boolean jassCode;
+
+    public DataflowAnomalyAnalysis(boolean jassCode) {
+        this.jassCode = jassCode;
+    }
+
     @Override
     VarStates calculate(WStatement s, VarStates incoming) {
         if (s instanceof StartFunctionStatement) {
@@ -269,13 +277,15 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
                 SwitchStmt swi = (SwitchStmt) s;
                 // switch statement must be handled separately, because expressions are not direct children:
                 for (SwitchCase switchCase : swi.getCases()) {
-                    incoming = handleExprInCompound(incoming, switchCase.getExpr());
+                    for (Expr switchCaseExpr : switchCase.getExpressions()) {
+                        incoming = handleExprInCompound(incoming, switchCaseExpr);
+                    }
                 }
             }
         } else {
             checkIfVarsInitialized(s, incoming);
             for (NameDef v : s.attrReadVariables()) {
-                if (v instanceof LocalVarDef) {
+                if (isLocalVarDef(v)) {
                     incoming = incoming.addRead((LocalVarDef) v, s);
                 }
             }
@@ -289,7 +299,7 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
             if (destr.getDestroyedObj() instanceof ExprVarAccess) {
                 ExprVarAccess destroyed = (ExprVarAccess) destr.getDestroyedObj();
                 NameDef destroyedVar = destroyed.attrNameDef();
-                if (destroyedVar instanceof LocalVarDef) {
+                if (isLocalVarDef(destroyedVar)) {
                     return incoming.addDestroy((LocalVarDef) destroyedVar);
                 }
             } else if (destr.getDestroyedObj() instanceof ExprThis) {
@@ -306,7 +316,7 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
 ////					s.addError("Assigning to " + Utils.printElement(n) + " overrides previous assignment in line " + wr.attrSource().getLine());
 //				}
 //			} 
-            if (n instanceof LocalVarDef) {
+            if (isLocalVarDef(n)) {
                 LocalVarDef lv = (LocalVarDef) n;
                 return incoming.addWrite(lv, s);
             }
@@ -322,16 +332,16 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
             }
         }
         if (s instanceof ExprThis) {
-            s.addError("Cannot access 'this' because it might already have been destroyed.");
+            reportError(s, "Cannot access 'this' because it might already have been destroyed.");
             return true;
         } if (s instanceof FunctionCall) {
             if (((FunctionCall) s).attrImplicitParameter() instanceof ExprThis) {
-                s.addError("Cannot access 'this' because it might already have been destroyed.");
+                reportError(s, "Cannot access 'this' because it might already have been destroyed.");
                 return true;
             }
         } else if (s instanceof NameRef) {
             if (((NameRef) s).attrImplicitParameter() instanceof ExprThis) {
-                s.addError("Cannot access 'this' because it might already have been destroyed.");
+                reportError(s, "Cannot access 'this' because it might already have been destroyed.");
                 return true;
             }
         }
@@ -341,7 +351,7 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
     private VarStates handleExprInCompound(VarStates incoming, Expr expr) {
         checkIfVarsInitialized(expr, incoming);
         for (NameDef v : expr.attrReadVariables()) {
-            if (v instanceof LocalVarDef) {
+            if (isLocalVarDef(v)) {
                 incoming = incoming.addRead((LocalVarDef) v, expr);
             }
         }
@@ -357,7 +367,7 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
                 n = link.getDef();
             }
 
-        } else if (s instanceof LocalVarDef) {
+        } else if (isLocalVarDef(s)) {
             LocalVarDef l = (LocalVarDef) s;
             if (l.getInitialExpr() instanceof Expr) {
                 n = l;
@@ -370,7 +380,7 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
     }
 
     private void collectLocalVars(Set<LocalVarDef> r, Element e) {
-        if (e instanceof LocalVarDef) {
+        if (isLocalVarDef(e)) {
             r.add((LocalVarDef) e);
         }
 
@@ -380,6 +390,17 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
                 collectLocalVars(r, c);
             }
         }
+    }
+
+    /**
+     * checks if this is a local variable and not an array
+     */
+    private boolean isLocalVarDef(Element e) {
+        if (e instanceof LocalVarDef) {
+            LocalVarDef l = (LocalVarDef) e;
+            return !l.attrTyp().isArray();
+        }
+        return false;
     }
 
     private void checkIfVarsInitialized(HasReadVariables s, VarStates incoming) {
@@ -400,8 +421,16 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
                 } else {
                     error += " may not have been initialized";
                 }
-                readingExpr.addError(error);
+                reportError(readingExpr, error);
             }
+        }
+    }
+
+    private void reportError(Element location, String error) {
+        if (jassCode) {
+            location.addWarning(error);
+        } else {
+            location.addError(error);
         }
     }
 

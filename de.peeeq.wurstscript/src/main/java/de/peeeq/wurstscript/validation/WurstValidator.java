@@ -1,12 +1,12 @@
 package de.peeeq.wurstscript.validation;
 
 import com.google.common.collect.*;
+import de.peeeq.wurstio.utils.FileUtils;
 import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.CofigOverridePackages;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.ImplicitFuncs;
-import de.peeeq.wurstscript.attributes.SmallHelpers;
 import de.peeeq.wurstscript.attributes.names.DefLink;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
@@ -17,11 +17,11 @@ import de.peeeq.wurstscript.utils.Utils;
 import de.peeeq.wurstscript.validation.controlflow.DataflowAnomalyAnalysis;
 import de.peeeq.wurstscript.validation.controlflow.ReturnsAnalysis;
 import fj.P2;
-import fj.data.TreeMap;
 import org.eclipse.jdt.annotation.Nullable;
 
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import static de.peeeq.wurstscript.attributes.SmallHelpers.superArgs;
 
@@ -217,6 +217,8 @@ public class WurstValidator {
 
     private void check(Element e) {
         try {
+            if (e instanceof Annotation)
+                checkAnnotation((Annotation) e);
             if (e instanceof AstElementWithTypeParameters)
                 checkTypeParameters((AstElementWithTypeParameters) e);
             if (e instanceof AstElementWithNameId)
@@ -645,7 +647,7 @@ public class WurstValidator {
 
         if (e.getImplementation() instanceof ExprStatementsBlock) {
             ExprStatementsBlock block = (ExprStatementsBlock) e.getImplementation();
-            new DataflowAnomalyAnalysis().execute(block);
+            new DataflowAnomalyAnalysis(false).execute(block);
         }
 
         if (e.attrExpectedTyp() instanceof WurstTypeClass) {
@@ -745,7 +747,6 @@ public class WurstValidator {
     }
 
     private void checkStmtSet(StmtSet s) {
-
         NameLink nameLink = s.getUpdatedExpr().attrNameLink();
         if (nameLink == null) {
             s.getUpdatedExpr().addError("Could not find variable " + s.getUpdatedExpr().getVarName() + ".");
@@ -771,7 +772,7 @@ public class WurstValidator {
     private void checkIfNoEffectAssignment(StmtSet s) {
         if (refersToSameVar(s.getUpdatedExpr(), s.getRight())) {
             s.addWarning("The assignment to " + Utils.printElement(s.getUpdatedExpr().attrNameDef())
-                    + "  probably has no effect.");
+                    + " probably has no effect.");
         }
 
     }
@@ -786,7 +787,9 @@ public class WurstValidator {
         if (a instanceof NameRef && b instanceof NameRef) {
             NameRef va = (NameRef) a;
             NameRef vb = (NameRef) b;
-            if (va.attrNameLink() == vb.attrNameLink()
+            NameLink nla = va.attrNameLink();
+            NameLink nlb = vb.attrNameLink();
+            if (nla != null && nlb != null && nla.getDef() == nlb.getDef()
                     && refersToSameVar(va.attrImplicitParameter(), vb.attrImplicitParameter())) {
                 if (va instanceof AstElementWithIndexes && vb instanceof AstElementWithIndexes) {
                     AstElementWithIndexes vai = (AstElementWithIndexes) va;
@@ -921,6 +924,13 @@ public class WurstValidator {
         checkVarName(s, false);
         if (s.getInitialExpr() instanceof Expr) {
             Expr initial = (Expr) s.getInitialExpr();
+            if ((s.getOptTyp() instanceof NoTypeExpr)) {
+                // TODO
+            } else {
+                if (initial instanceof ExprNewObject) {
+                    s.addWarning("Duplicated type information. Use 'var' or 'let' instead.");
+                }
+            }
             WurstType leftType = s.attrTyp();
             WurstType rightType = initial.attrTyp();
 
@@ -942,7 +952,7 @@ public class WurstValidator {
             if (arT.getDimensions() == 1) {
                 int initialValues = arInit.getValues().size();
                 int size = arT.getSize(0);
-                if (size > 0 && size != initialValues) {
+                if (size >= 0 && size != initialValues) {
                     def.addError("Array variable " + def.getName() + " is an array of size " + size + ", but is initialized with " + initialValues + " values here.");
                 }
 
@@ -1110,13 +1120,32 @@ public class WurstValidator {
                         // in jass this is just a warning, because
                         // the shitty code emitted by jasshelper sometimes
                         // contains unreachable code
-                        s.addWarning("unreachable code");
+                        s.addWarning("Unreachable code");
                     } else {
-                        s.addError("unreachable code");
+                        if (mightBeAffectedBySwitchThatCoversAllCases(s)) {
+                            // fow backwards compatibility just use a warning when
+                            // switch statements that handle all cases are involved:
+                            s.addWarning("Unreachable code");
+                        } else {
+                            s.addError("Unreachable code");
+                        }
                     }
                 }
             }
         }
+    }
+
+    private boolean mightBeAffectedBySwitchThatCoversAllCases(WStatement s) {
+        boolean[] containsSwitchAr = { false };
+        s.attrNearestNamedScope().accept(new Element.DefaultVisitor() {
+            @Override
+            public void visit(SwitchStmt switchStmt) {
+                if (switchStmt.calculateHandlesAllCases()) {
+                    containsSwitchAr[0] = true;
+                }
+            }
+        });
+        return containsSwitchAr[0];
     }
 
     private void visit(FuncDef func) {
@@ -1148,8 +1177,12 @@ public class WurstValidator {
         }
         if (!isAbstract) { // not abstract
             checkReturn(f);
-            if (!Utils.isJassCode(f)) {
-                new DataflowAnomalyAnalysis().execute(f);
+
+            if (!f.getSource().getFile().endsWith("common.j")
+                    && !f.getSource().getFile().endsWith("blizzard.j")
+                    && !f.getSource().getFile().endsWith("war3map.j")
+                    && !FileUtils.getWPosParent(f.getSource()).equals("jassdoc")) {
+                new DataflowAnomalyAnalysis(Utils.isJassCode(f)).execute(f);
             }
         }
     }
@@ -1165,6 +1198,25 @@ public class WurstValidator {
         }
 
         call.attrCallSignature().checkSignatureCompatibility(call.attrFunctionSignature(), funcName, call);
+    }
+
+    private void checkAnnotation(Annotation a) {
+        FuncLink fl = a.attrFuncLink();
+        if (fl != null) {
+            if (a.getArgs().size() < fl.getParameterTypes().size()) {
+                a.addWarning("not enough arguments");
+            } else if (a.getArgs().size() > fl.getParameterTypes().size()) {
+                a.addWarning("too many enough arguments");
+            } else {
+                for (int i = 0; i < a.getArgs().size(); i++) {
+                    WurstType actual = a.getArgs().get(i).attrTyp();
+                    WurstType expected = fl.getParameterType(i);
+                    if (!actual.isSubtypeOf(expected, a)) {
+                        a.getArgs().get(i).addWarning("Expected " + expected + " but found " + actual + ".");
+                    }
+                }
+            }
+        }
     }
 
     private void visit(ExprFunctionCall stmtCall) {
@@ -1483,63 +1535,70 @@ public class WurstValidator {
         for (P2<TypeParamDef, WurstTypeBoundTypeParam> t : mapping) {
             WurstTypeBoundTypeParam boundTyp = t._2();
             WurstType typ = boundTyp.getBaseType();
-            if (!typ.isTranslatedToInt() && !(e instanceof ModuleUse)) {
-                String toIndexFuncName = ImplicitFuncs.toIndexFuncName(typ);
-                String fromIndexFuncName = ImplicitFuncs.fromIndexFuncName(typ);
-                Collection<FuncLink> toIndexFuncs = ImplicitFuncs.findToIndexFuncs(typ, e);
-                Collection<FuncLink> fromIndexFuncs = ImplicitFuncs.findFromIndexFuncs(typ, e);
-                if (toIndexFuncs.isEmpty()) {
-                    e.addError("Type parameters can only be bound to ints and class types, but " + "not to " + typ
-                            + ".\n" + "You can provide functions " + toIndexFuncName + " and " + fromIndexFuncName
-                            + " to use this type " + "with generics.");
-                } else if (fromIndexFuncs.isEmpty()) {
-                    e.addError("Could not find function " + fromIndexFuncName + " which is required to use " + typ
-                            + " with generics.");
-                } else {
-                    if (toIndexFuncs.size() > 1) {
-                        e.addError("There is more than one function named " + toIndexFuncName);
-                    }
-                    if (fromIndexFuncs.size() > 1) {
-                        e.addError("There is more than one function named " + fromIndexFuncName);
-                    }
-                    NameDef toIndex = Utils.getFirst(toIndexFuncs).getDef();
-                    if (toIndex instanceof FuncDef) {
-                        FuncDef toIndexF = (FuncDef) toIndex;
 
-                        if (toIndexF.getParameters().size() != 1) {
-                            toIndexF.addError("Must have exactly one parameter");
+            TypeParamDef tp = t._1();
+            if (tp.getTypeParamConstraints() instanceof TypeExprList) {
+                // new style generics
+            } else { // old style generics
 
-                        } else if (!toIndexF.getParameters().get(0).attrTyp().equalsType(typ, e)) {
-                            toIndexF.addError("Parameter must be of type " + typ);
-                        }
-
-                        WurstType returnType = toIndexF.attrReturnTyp();
-                        if (!returnType.equalsType(WurstTypeInt.instance(), e)) {
-                            toIndexF.addError("Return type must be of type int " + " but was " + returnType);
-                        }
+                if (!typ.isTranslatedToInt() && !(e instanceof ModuleUse)) {
+                    String toIndexFuncName = ImplicitFuncs.toIndexFuncName(typ);
+                    String fromIndexFuncName = ImplicitFuncs.fromIndexFuncName(typ);
+                    Collection<FuncLink> toIndexFuncs = ImplicitFuncs.findToIndexFuncs(typ, e);
+                    Collection<FuncLink> fromIndexFuncs = ImplicitFuncs.findFromIndexFuncs(typ, e);
+                    if (toIndexFuncs.isEmpty()) {
+                        e.addError("Type parameters can only be bound to ints and class types, but " + "not to " + typ
+                                + ".\n" + "You can provide functions " + toIndexFuncName + " and " + fromIndexFuncName
+                                + " to use this type " + "with generics.");
+                    } else if (fromIndexFuncs.isEmpty()) {
+                        e.addError("Could not find function " + fromIndexFuncName + " which is required to use " + typ
+                                + " with generics.");
                     } else {
-                        toIndex.addError("This should be a function.");
-                    }
+                        if (toIndexFuncs.size() > 1) {
+                            e.addError("There is more than one function named " + toIndexFuncName);
+                        }
+                        if (fromIndexFuncs.size() > 1) {
+                            e.addError("There is more than one function named " + fromIndexFuncName);
+                        }
+                        NameDef toIndex = Utils.getFirst(toIndexFuncs).getDef();
+                        if (toIndex instanceof FuncDef) {
+                            FuncDef toIndexF = (FuncDef) toIndex;
 
-                    NameDef fromIndex = Utils.getFirst(fromIndexFuncs).getDef();
-                    if (fromIndex instanceof FuncDef) {
-                        FuncDef fromIndexF = (FuncDef) fromIndex;
+                            if (toIndexF.getParameters().size() != 1) {
+                                toIndexF.addError("Must have exactly one parameter");
 
-                        if (fromIndexF.getParameters().size() != 1) {
-                            fromIndexF.addError("Must have exactly one parameter");
+                            } else if (!toIndexF.getParameters().get(0).attrTyp().equalsType(typ, e)) {
+                                toIndexF.addError("Parameter must be of type " + typ);
+                            }
 
-                        } else if (!fromIndexF.getParameters().get(0).attrTyp()
-                                .equalsType(WurstTypeInt.instance(), e)) {
-                            fromIndexF.addError("Parameter must be of type int");
+                            WurstType returnType = toIndexF.attrReturnTyp();
+                            if (!returnType.equalsType(WurstTypeInt.instance(), e)) {
+                                toIndexF.addError("Return type must be of type int " + " but was " + returnType);
+                            }
+                        } else {
+                            toIndex.addError("This should be a function.");
                         }
 
-                        WurstType returnType = fromIndexF.attrReturnTyp();
-                        if (!returnType.equalsType(typ, e)) {
-                            fromIndexF.addError("Return type must be of type " + typ + " but was " + returnType);
-                        }
+                        NameDef fromIndex = Utils.getFirst(fromIndexFuncs).getDef();
+                        if (fromIndex instanceof FuncDef) {
+                            FuncDef fromIndexF = (FuncDef) fromIndex;
 
-                    } else {
-                        fromIndex.addError("This should be a function.");
+                            if (fromIndexF.getParameters().size() != 1) {
+                                fromIndexF.addError("Must have exactly one parameter");
+
+                            } else if (!fromIndexF.getParameters().get(0).attrTyp()
+                                    .equalsType(WurstTypeInt.instance(), e)) {
+                                fromIndexF.addError("Parameter must be of type int");
+                            }
+
+                            WurstType returnType = fromIndexF.attrReturnTyp();
+                            if (!returnType.equalsType(typ, e)) {
+                                fromIndexF.addError("Return type must be of type " + typ + " but was " + returnType);
+                            }
+
+                        } else {
+                            fromIndex.addError("This should be a function.");
+                        }
                     }
                 }
             }
@@ -1575,8 +1634,8 @@ public class WurstValidator {
         if (def != null && def.hasAnnotation("@deprecated")) {
             Annotation annotation = def.getAnnotation("@deprecated");
             String msg = annotation.getAnnotationMessage();
-            msg = (msg == null || msg.isEmpty()) ? "It shouldn't be used and will be removed in the future." : msg.substring(1, msg.length() - 1);
-            trace.addWarning(def.getName() + " is deprecated. " + msg);
+            msg = (msg == null || msg.isEmpty()) ? "It shouldn't be used and will be removed in the future." : msg;
+            trace.addWarning("<" + def.getName() + "> is deprecated. " + msg);
         }
     }
 
@@ -1884,11 +1943,11 @@ public class WurstValidator {
     }
 
     private void checkPackageName(CompilationUnit cu) {
-        if (cu.getPackages().size() == 1 && Utils.isWurstFile(cu.getFile())) {
+        if (cu.getPackages().size() == 1 && Utils.isWurstFile(cu.getCuInfo().getFile())) {
             // only one package in a wurst file
             WPackage p = cu.getPackages().get(0);
-            if (!Utils.fileName(cu.getFile()).equals(p.getName() + ".wurst")
-                    && !Utils.fileName(cu.getFile()).equals(p.getName() + ".jurst")) {
+            if (!Utils.fileName(cu.getCuInfo().getFile()).equals(p.getName() + ".wurst")
+                    && !Utils.fileName(cu.getCuInfo().getFile()).equals(p.getName() + ".jurst")) {
                 p.addError("The file must have the same name as the package " + p.getName());
             }
         }
@@ -1956,39 +2015,28 @@ public class WurstValidator {
             s.addError("The type " + s.getExpr().attrTyp()
                     + " is not viable as switchtype.\nViable switchtypes: int, string, enum");
         } else {
-            for (SwitchCase c : s.getCases()) {
-                // if ( i > 0 ) {
-                // for( int j = 0; j<i; j++) {
-                // WLogger.info(">>>>>>>>>>>>>>>>"+c.getExprs());
-                // WLogger.info(">>>>>>>>>>>>>>>>"+s.getCases().get(j).getExprs());
-                // if ( c.getExprs().attrN.equals(s.getCases().get(j).getExprs())
-                // )
-                // c.addError("Case " + j + " and " + i + " are the same.");
-                // }
-                // }
-                if (!c.getExpr().attrTyp().isSubtypeOf(s.getExpr().attrTyp(), c)) {
-                    c.addError("The type " + c.getExpr().attrTyp() + " does not match the switchtype "
+            List<Expr> switchExprs = s.getCases().stream()
+                    .flatMap(e -> e.getExpressions().stream())
+                    .collect(Collectors.toList());
+            for (Expr cExpr : switchExprs) {
+                if (!cExpr.attrTyp().isSubtypeOf(s.getExpr().attrTyp(), cExpr)) {
+                    cExpr.addError("The type " + cExpr.attrTyp() + " does not match the switchtype "
                             + s.getExpr().attrTyp() + ".");
                 }
             }
-        }
-        if (s.getExpr().attrTyp() instanceof WurstTypeEnum) {
-            WurstTypeEnum wurstTypeEnum = (WurstTypeEnum) s.getExpr().attrTyp();
-            if (s.getSwitchDefault() instanceof NoDefaultCase)
-                nextMember:for (EnumMember e : wurstTypeEnum.getDef().getMembers()) {
-                    String name = e.getName();
-                    for (SwitchCase c : s.getCases()) {
-                        if (c.getExpr() instanceof NameRef) {
-                            NameRef exprVarAccess = (NameRef) c.getExpr();
-                            if (exprVarAccess.attrNameDef() == e) {
-                                continue nextMember;
-                            }
-                        }
+            for (int i = 0; i < switchExprs.size(); i++) {
+                Expr ei = switchExprs.get(i);
+                for (int j = 0; j < i; j++) {
+                    Expr ej = switchExprs.get(j);
+                    if (ei.structuralEquals(ej)) {
+                        ei.addError("The case " + Utils.prettyPrint(ei) + " is already handled in line " + ej.attrSource().getLine());
+                        return;
                     }
-                    s.addError("Enum member " + name + " from enum " + wurstTypeEnum.getName()
-                            + " not covered in switchstatement and no default found.");
                 }
-
+            }
+        }
+        for (String unhandledCase : s.calculateUnhandledCases()) {
+            s.addError(unhandledCase + " not covered in switchstatement and no default found.");
         }
         if (s.getCases().isEmpty()) {
             s.addError("Switch statement without any cases.");
@@ -2021,8 +2069,8 @@ public class WurstValidator {
     /**
      * checks if func1 can override func2
      */
-    public static boolean canOverride(FuncLink func1, FuncLink func2) {
-        return checkOverride(func1, func2, false) == null;
+    public static boolean canOverride(FuncLink func1, FuncLink func2, boolean allowStaticOverride) {
+        return checkOverride(func1, func2, allowStaticOverride) == null;
     }
 
     /**
@@ -2172,10 +2220,8 @@ public class WurstValidator {
                     v.addError("0-dimensional arrays are not allowed");
                     break;
                 case 1:
-                    if (!v.attrIsDynamicClassMember() && wta.getSize(0) != 0) {
-                        v.addError("Sized arrays are only supported as class members.");
-                    } else if (v.attrIsDynamicClassMember() && wta.getSize(0) == 0) {
-                        v.addError("Array members require a fixed size.");
+                    if (v.attrIsDynamicClassMember() && wta.getSize(0) <= 0) {
+                        v.addError("Array members require a fixed size greater 0.");
                     }
                     break;
                 default:

@@ -3,8 +3,10 @@ package de.peeeq.wurstio.utils;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import de.peeeq.wurstio.languageserver.WFile;
+import de.peeeq.wurstscript.parser.WPos;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 /**
@@ -27,7 +29,11 @@ public class FileUtils {
 
 
     public static boolean isInDirectoryTrans(WFile file, WFile directory) {
-        return file.getPath().startsWith(directory.getPath());
+        try {
+            return file.getPath().startsWith(directory.getPath());
+        } catch (FileNotFoundException e) {
+            return false;
+        }
     }
 
     public static void deleteRecursively(File f) throws IOException {
@@ -44,5 +50,15 @@ public class FileUtils {
         if (!ok) {
             throw new IOException("Could not delete file " + f);
         }
+    }
+
+    public static String getWPosParent(WPos pos) {
+        String parentName = "";
+        try {
+            parentName = WFile.create(pos.getFile()).getPath().getParent().getFileName().toString();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return parentName;
     }
 }

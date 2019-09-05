@@ -22,7 +22,7 @@ import de.peeeq.wurstscript.jassIm.ImProg;
 import de.peeeq.wurstscript.jassinterpreter.TestFailException;
 import de.peeeq.wurstscript.jassinterpreter.TestSuccessException;
 import de.peeeq.wurstscript.jassprinter.JassPrinter;
-import de.peeeq.wurstscript.lua.translation.LuaTranslator;
+import de.peeeq.wurstscript.translation.lua.translation.LuaTranslator;
 import de.peeeq.wurstscript.luaAst.LuaCompilationUnit;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Utils;
@@ -39,7 +39,6 @@ import static org.testng.Assert.fail;
 public class WurstScriptTest {
 
     private static final String TEST_OUTPUT_PATH = "./test-output/";
-    private static final boolean testLua = false;
 
     protected boolean testOptimizer() {
         return true;
@@ -60,6 +59,7 @@ public class WurstScriptTest {
         private List<CU> additionalCompilationUnits = new ArrayList<>();
         private boolean stopOnFirstError = true;
         private boolean runCompiletimeFunctions;
+        private boolean testLua = true;
 
         TestConfig(String name) {
             this.name = name;
@@ -203,10 +203,11 @@ public class WurstScriptTest {
 
             testWithInliningAndOptimizationsAndStacktraces(name, executeProg, executeTests, gui, compiler, model, executeProgOnlyAfterTransforms, runArgs);
 
-            if (testLua && !withStdLib) {
+            if (testLua && executeProg && !withStdLib) {
                 // test lua translation
-                compiler.setRunArgs(new RunArgs("-lua"));
-                translateAndTestLua(name, executeProg, gui, model);
+                runArgs = runArgs.with("-lua");
+                compiler.setRunArgs(runArgs);
+                translateAndTestLua(name, executeProg, gui, model, compiler);
             }
 
             return new CompilationResult(model, gui);
@@ -244,6 +245,11 @@ public class WurstScriptTest {
 
         public TestConfig runCompiletimeFunctions(boolean b) {
             this.runCompiletimeFunctions = b;
+            return this;
+        }
+
+        public TestConfig testLua(boolean b) {
+            this.testLua = b;
             return this;
         }
     }
@@ -367,15 +373,15 @@ public class WurstScriptTest {
         translateAndTest(name, executeProg, executeTests, gui, compiler, model, executeProgOnlyAfterTransforms);
     }
 
-    private void translateAndTestLua(String name, boolean executeProg, WurstGui gui, WurstModel model) {
+    private void translateAndTestLua(String name, boolean executeProg, WurstGui gui, WurstModel model, WurstCompilerJassImpl compiler) {
         try {
             name = name.replaceAll("[^a-zA-Z0-9_]", "_");
 
-            ImTranslator imTranslator = new ImTranslator(model, true);
-            ImProg imProg = imTranslator.translateProg();
+            compiler.translateProgToIm(model);
 
-            LuaTranslator luaTranslator = new LuaTranslator(imProg);
-            LuaCompilationUnit luaCode = luaTranslator.translate();
+            compiler.runCompiletime();
+
+            LuaCompilationUnit luaCode = compiler.transformProgToLua();
             StringBuilder sb = new StringBuilder();
             luaCode.print(sb, 0);
 
@@ -393,9 +399,9 @@ public class WurstScriptTest {
             if (executeProg) {
                 String line;
                 String[] args = {
-                        "lua",
-                        "-l", luaFile.getPath().replace(".lua", ""),
-                        "-e", "main()"
+                    "lua",
+                    "-l", luaFile.getPath().replace(".lua", ""),
+                    "-e", "main()"
                 };
                 Process p = Runtime.getRuntime().exec(args);
                 StringBuilder errors = new StringBuilder();
@@ -427,7 +433,8 @@ public class WurstScriptTest {
                 }
             }
 
-
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -557,7 +564,7 @@ public class WurstScriptTest {
     }
 
     private void executeTests(WurstGui gui, ImProg imProg) {
-        RunTests runTests = new RunTests(null, 0, 0);
+        RunTests runTests = new RunTests(null, 0, 0, null);
         RunTests.TestResult res = runTests.runTests(imProg, null, null);
         if (res.getPassedTests() < res.getTotalTests()) {
             throw new Error("tests failed: " + res.getPassedTests() + " / " + res.getTotalTests() + "\n" +

@@ -25,7 +25,10 @@ import java.util.regex.Pattern
 
 
 mainClassName = "de.peeeq.wurstio.Main"
-version = "1.8.0.0"
+version = "1.8.1.0"
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
 
 jacocoTestReport {
     reports {
@@ -67,7 +70,7 @@ dependencies {
     antlr "org.antlr:antlr4:4.7"
 
     // tool for generating AST-classes
-    compileOnly 'com.github.peterzeller:abstractsyntaxgen:0.3.1'
+    compileOnly 'com.github.peterzeller:abstractsyntaxgen:59168ba9d61d89c775a53d54b3b83a99f48a585b'
 
     // JUnit for testing
     testCompile group: 'org.testng', name: 'testng', version: '6.14.3'
@@ -80,7 +83,7 @@ dependencies {
     compile group: 'org.functionaljava', name: 'functionaljava', version: '4.8.1'
 
     // Support for the vscode language server protocol
-    compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.5.0'
+    compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.7.0'
 
     // @Nullable annotations
     compile group: 'org.eclipse.jdt', name: 'org.eclipse.jdt.annotation', version: '2.1.0'
@@ -94,14 +97,20 @@ dependencies {
     // Chardet for guessing the file-encoding of a source-file
     compile group: 'net.sourceforge.jchardet', name: 'jchardet', version: '1.0'
 
-    // Water's wc3 libs including Crigges' jmpq
-    compile 'com.github.inwc3:wc3libs:b47b5c553b'
+    // Crigges' jmpq
+    compile group: 'com.github.inwc3', name: 'jmpq3', version: '1.7.7'
+
+    // Water's wc3 libs
+    compile 'com.github.inwc3:wc3libs:06de7ae12b'
 
     // The setup tool for wurst.build handling
-    compile 'com.github.wurstscript:wurstsetup:cc208dcc86'
+    compile 'com.github.wurstscript:wurstsetup:b004e9943c'
 
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
     compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
+
+    // Smallcheck testing library:
+    testCompile group: 'com.github.peterzeller', name: 'java-smallcheck', version: '3f6a178ba7'
 }
 
 configurations.all {
@@ -211,9 +220,9 @@ clean.doFirst {
     delete genDir
 }
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '2.12'
-}
+//task wrapper(type: Wrapper) {
+//    gradleVersion = '2.12'
+//}
 
 
 

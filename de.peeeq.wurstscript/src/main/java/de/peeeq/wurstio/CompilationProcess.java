@@ -17,7 +17,6 @@ import org.eclipse.jdt.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.function.Supplier;
 
 /**
  *
@@ -104,9 +103,9 @@ public class CompilationProcess {
                 () -> writeMapscript(mapScript));
 
         if (!runArgs.isDisablePjass()) {
-            boolean pjassOk = timeTaker.measure("Run PJass",
+            boolean pjassError = timeTaker.measure("Run PJass",
                     () -> runPjass(outputMapscript));
-            if (pjassOk) return null;
+            if (pjassError) return null;
         }
         timeTaker.printReport();
         return mapScript;
@@ -147,7 +146,7 @@ public class CompilationProcess {
         // tests
         gui.sendProgress("Running tests");
         System.out.println("Running tests");
-        RunTests runTests = new RunTests(null, 0, 0) {
+        RunTests runTests = new RunTests(null, 0, 0, null) {
             @Override
             protected void print(String message) {
                 out.print(message);
@@ -156,7 +155,7 @@ public class CompilationProcess {
         runTests.runTests(compiler.getImProg(), null, null);
 
         for (RunTests.TestFailure e : runTests.getFailTests()) {
-            gui.sendError(new CompileError(e.getFunction().attrTrace().attrErrorPos(), e.getMessage()));
+            gui.sendError(new CompileError(e.getFunction(), e.getMessage()));
             if (runArgs.isGui()) {
                 // when using graphical user interface, send stack trace to GUI
                 for (ILStackFrame sf : Utils.iterateReverse(e.getStackTrace().getStackFrames())) {

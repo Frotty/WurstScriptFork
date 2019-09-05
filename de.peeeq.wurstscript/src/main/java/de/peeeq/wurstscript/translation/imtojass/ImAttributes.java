@@ -7,6 +7,9 @@ import de.peeeq.wurstscript.translation.imtranslation.FunctionFlag;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagCompiletime;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 public class ImAttributes {
 
 
@@ -43,7 +46,11 @@ public class ImAttributes {
 
 
     public static boolean isGlobal(ImVar imVar) {
-        return imVar.getParent().getParent() instanceof ImProg;
+        Element parent = imVar.getParent();
+        if (parent == null) {
+            throw new RuntimeException("Variable " + imVar + " not attached.");
+        }
+        return parent.getParent() instanceof ImProg;
     }
 
 
@@ -70,8 +77,20 @@ public class ImAttributes {
     }
 
     public static de.peeeq.wurstscript.ast.Element getTrace(Element t) {
-        if (t.getParent() != null) {
-            return t.getParent().attrTrace();
+        Deque<Element> q = new ArrayDeque<>();
+        q.add(t);
+        while (q.isEmpty()) {
+            Element e = q.removeFirst();
+            if (e == null) {
+                continue;
+            }
+            q.add(e.getParent());
+            for (int i = 0; i < e.size(); i++) {
+                q.add(e.get(i));
+            }
+            if (e instanceof ElementWithTrace) {
+                return ((ElementWithTrace) e).getTrace();
+            }
         }
         return Ast.NoExpr();
     }
@@ -95,11 +114,19 @@ public class ImAttributes {
 
 
     public static ImClass attrClass(ImMethod m) {
-        if (m.getParent() == null) {
-            throw new CompileError(m.attrTrace().attrSource(), "Method " + m.getName() + " not attached.");
-        }
-        return (ImClass) m.getParent().getParent();
+        return m.getMethodClass().getClassDef();
     }
 
 
+    public static String translateType(ImTypeVarRef t) {
+        throw new CompileError(t, "Type variable " + t.getTypeVariable().getName() + " not eliminated.");
+    }
+
+    public static String translateType(ImClassType imClassType) {
+        return "integer";
+    }
+
+    public static String translateType(ImAnyType at) {
+        return "integer";
+    }
 }

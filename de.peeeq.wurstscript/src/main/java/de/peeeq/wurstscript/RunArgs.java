@@ -14,10 +14,12 @@ public class RunArgs {
 
 
     private final String[] args;
+    private final RunOption optionLua;
     private List<String> files = Lists.newArrayList();
     private @Nullable String mapFile = null;
     private @Nullable String outFile = null;
-    private @Nullable String testDir = null;
+    private @Nullable String workspaceroot = null;
+    private @Nullable String inputmap = null;
     private List<RunOption> options = Lists.newArrayList();
     private List<File> libDirs = Lists.newArrayList();
     private RunOption optionHelp;
@@ -43,6 +45,10 @@ public class RunArgs {
     private RunOption optionDisablePjass;
     private RunOption optionShowVersion;
     private RunOption optionMeasureTimes;
+    private RunOption optionHotStartmap;
+    private RunOption optionHotReload;
+
+    private RunOption optionBuild;
 
     public RunArgs with(String... additionalArgs) {
         return new RunArgs(Stream.concat(Stream.of(args), Stream.of(additionalArgs))
@@ -50,11 +56,11 @@ public class RunArgs {
     }
 
     private class RunOption {
+
         final String name;
         final String descr;
         final @Nullable Consumer<String> argHandler;
         boolean isSet;
-
         RunOption(String name, String descr) {
             this.name = name;
             this.descr = descr;
@@ -66,8 +72,8 @@ public class RunArgs {
             this.descr = descr;
             this.argHandler = argHandler2;
         }
-    }
 
+    }
 
     public static RunArgs defaults() {
         return new RunArgs();
@@ -104,7 +110,6 @@ public class RunArgs {
         optionNoExtractMapScript = addOption("noExtractMapScript", "Do not extract the map script from the map and use the one from the Wurst folder instead.");
         optionGui = addOption("gui", "Show a graphical user interface (progress bar and error window).");
         addOptionWithArg("lib", "The next argument should be a library folder which is lazily added to the build.", arg -> libDirs.add(new File(arg)));
-        addOptionWithArg("runmapTarget", "Allows you to change the path where your map will be run from.", arg -> testDir = arg);
         addOptionWithArg("out", "Outputs the compiled script to this file.", arg -> outFile = arg);
 
         optionLanguageServer = addOption("languageServer", "Starts a language server which can be used by editors to get services "
@@ -112,6 +117,14 @@ public class RunArgs {
 
         optionHelp = addOption("help", "Prints this help message.");
         optionDisablePjass = addOption("noPJass", "Disables PJass checks for the generated code.");
+        optionHotStartmap = addOption("hotstart", "Uses Jass Hot Code Reload (JHCR) to start the map.");
+        optionHotReload = addOption("hotreload", "Reloads the mapscript after running the map with Jass Hot Code Reload (JHCR).");
+
+        optionBuild = addOption("build", "Builds an output map from the input map and library directories.");
+        addOptionWithArg("workspaceroot", "The next argument should be the root folder of the project to build.", arg -> workspaceroot = arg);
+        addOptionWithArg("inputmap", "The next argument should be the input map.", arg -> inputmap = arg);
+        optionLua = addOption("lua", "Choose Lua as the compilation target.");
+
 
         nextArg:
         for (int i = 0; i < args.length; i++) {
@@ -196,14 +209,13 @@ public class RunArgs {
         return mapFile;
     }
 
+    public void setMapFile(String file) {
+        mapFile = file;
+    }
+
     public @Nullable String getOutFile() {
         return outFile;
     }
-
-    public @Nullable String getTestDir() {
-        return testDir;
-    }
-
 
     public boolean showAbout() {
         return optionAbout.isSet;
@@ -251,7 +263,7 @@ public class RunArgs {
     }
 
     public boolean isInjectObjects() {
-        return optionInjectCompiletimeObjects.isSet;
+        return !isHotReload() && optionInjectCompiletimeObjects.isSet;
     }
 
     public List<File> getAdditionalLibDirs() {
@@ -306,6 +318,30 @@ public class RunArgs {
 
     public boolean isMeasureTimes() {
         return optionMeasureTimes.isSet;
+    }
+
+    public boolean isHotStartmap() {
+        return optionHotStartmap.isSet;
+    }
+
+    public boolean isHotReload() {
+        return optionHotReload.isSet;
+    }
+
+    public boolean isBuild() {
+        return optionBuild.isSet;
+    }
+
+    public String getWorkspaceroot() {
+        return workspaceroot;
+    }
+
+    public String getInputmap() {
+        return inputmap;
+    }
+
+    public boolean isLua() {
+        return optionLua.isSet;
     }
 
 }

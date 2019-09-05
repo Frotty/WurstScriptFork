@@ -10,24 +10,22 @@ import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.attributes.prettyPrint.DefaultSpacer;
-import de.peeeq.wurstscript.jassIm.ImExpr;
-import de.peeeq.wurstscript.jassIm.ImFunctionCall;
 import de.peeeq.wurstscript.jassIm.JassImElementWithName;
 import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.types.WurstType;
 import de.peeeq.wurstscript.types.WurstTypeUnknown;
 import org.eclipse.jdt.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.io.*;
+import java.time.Duration;
 import java.util.*;
 import java.util.Map.Entry;
-import java.util.function.BiConsumer;
-import java.util.function.BinaryOperator;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
+import java.util.function.*;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
@@ -120,9 +118,16 @@ public class Utils {
         return result;
     }
 
+    public static int parseOctalInt(String yytext) {
+        return (int) Long.parseLong(yytext, 8);
+    }
 
     public static int parseHexInt(String yytext, int offset) {
-        return (int) Long.parseLong(yytext.substring(offset), 16);
+        if (yytext.startsWith("-")) {
+            return (int) -Long.parseLong(yytext.substring(offset+1), 16);
+        } else {
+            return (int) Long.parseLong(yytext.substring(offset), 16);
+        }
     }
 
     public static String printSep(String sep, String[] args) {
@@ -931,12 +936,19 @@ public class Utils {
      * Extracts a resource from the jar, stores it in a temp file and returns the abolute path to the tempfile
      */
     public static synchronized String getResourceFile(String name) {
+        return getResourceFileF(name).getAbsolutePath();
+    }
+
+    /**
+     * Extracts a resource from the jar, stores it in a temp file and returns the abolute path to the tempfile
+     */
+    public static synchronized File getResourceFileF(String name) {
         try {
             File f = resourceMap.get(name);
             if (f != null && f.exists()) {
-                return f.getAbsolutePath();
+                return f;
             }
-            String[] parts = name.split("\\.");
+            String[] parts = splitFilename(name);
             f = File.createTempFile(parts[0], parts[1]);
             f.deleteOnExit();
             try (InputStream is = Pjass.class.getClassLoader().getResourceAsStream(name)) {
@@ -946,11 +958,20 @@ public class Utils {
                 byte[] bytes = Utils.convertStreamToBytes(is);
                 Files.write(bytes, f);
                 resourceMap.put(name, f);
-                return f.getAbsolutePath();
+                return f;
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @NotNull
+    private static String[] splitFilename(String name) {
+        int dotPos = name.lastIndexOf('.');
+        if (dotPos >= 0) {
+            return new String[] { name.substring(0, dotPos), name.substring(dotPos + 1) };
+        }
+        return new String[] { name, "" };
     }
 
     private static Map<String, File> resourceMap = new HashMap<>();
@@ -965,6 +986,16 @@ public class Utils {
             e = e.getParent();
         }
         return result.toString();
+    }
+
+    @SafeVarargs
+    public static <T> ImmutableList<T> append(List<T> list, T ... elems) {
+        Builder<T> builder = ImmutableList.builderWithExpectedSize(list.size() + elems.length);
+        builder.addAll(list);
+        for (T elem : elems) {
+            builder.add(elem);
+        }
+        return builder.build();
     }
 
     @SafeVarargs
@@ -1018,4 +1049,109 @@ public class Utils {
         }
         throw new CompileError(parent.attrTrace().attrSource(), "Could not find " + oldElement + " in " + parent);
     }
+
+    /**
+     * Copy of the list without its last element
+     */
+    public static <T> List<T> init(List<T> list) {
+        return list.stream().limit(list.size() - 1).collect(Collectors.toList());
+    }
+
+    public static class ExecResult {
+        private final String stdOut;
+        private final String stdErr;
+
+        public ExecResult(String stdOut, String stdErr) {
+            this.stdOut = stdOut;
+            this.stdErr = stdErr;
+        }
+
+        public String getStdOut() {
+            return stdOut;
+        }
+
+        public String getStdErr() {
+            return stdErr;
+        }
+    }
+
+    public static ExecResult exec(ProcessBuilder pb, Duration duration, Consumer<String> onInput) throws IOException, InterruptedException {
+        Process process = pb.start();
+        class Collector extends Thread {
+            private final StringBuilder sb = new StringBuilder();
+            private final InputStream in;
+
+            Collector(InputStream in) {
+                this.in = in;
+            }
+
+            @Override
+            public void run() {
+                try (BufferedReader input = new BufferedReader(new InputStreamReader(in))) {
+                    String line;
+                    while ((line = input.readLine()) != null) {
+                        onInput.accept(line);
+                        sb.append(line).append("\n");
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            String getContents() {
+                return sb.toString();
+            }
+        }
+
+        Collector cIn = new Collector(process.getInputStream());
+        cIn.start();
+        Collector cErr = new Collector(process.getErrorStream());
+        cErr.start();
+
+        boolean r = process.waitFor(duration.toMillis(), TimeUnit.MILLISECONDS);
+        process.destroyForcibly();
+        cIn.join();
+        cErr.join();
+        if (!r) {
+            throw new IOException("Timeout running external tool");
+        }
+        if (process.exitValue() != 0) {
+            throw new IOException("Failure when running external tool");
+        }
+        return new ExecResult(cIn.getContents(), cErr.getContents());
+    }
+
+    public static String makeUniqueName(String baseName, Predicate<String> isValid) {
+        if (isValid.test(baseName)) {
+            return baseName;
+        }
+        int minI = 1;
+        int maxI = 1;
+        while (true) {
+            String name = baseName + "_" + maxI;
+            if (isValid.test(name)) {
+                break;
+            }
+            minI = maxI;
+            maxI *= 2;
+        }
+
+        while (minI < maxI) {
+            int mid = minI + (maxI - minI) / 2;
+            String name = baseName + "_" + mid;
+            if (isValid.test(name)) {
+                maxI = mid;
+            } else {
+                minI = mid + 1;
+            }
+        }
+        return baseName + "_" + maxI;
+
+
+
+    }
+
+
+
+
 }

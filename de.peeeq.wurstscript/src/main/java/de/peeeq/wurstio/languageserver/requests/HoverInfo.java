@@ -7,6 +7,7 @@ import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
+import de.peeeq.wurstscript.types.CallSignature;
 import de.peeeq.wurstscript.types.WurstType;
 import de.peeeq.wurstscript.types.WurstTypeNamedScope;
 import de.peeeq.wurstscript.utils.Utils;
@@ -45,7 +46,30 @@ public class HoverInfo extends UserRequest<Hover> {
         }
         Element e = Utils.getAstElementAtPos(cu, line, column, false);
         WLogger.info("hovering over " + Utils.printElement(e));
-        return new Hover(e.match(new Description()));
+        List<Either<String, MarkedString>> desription = e.match(new Description());
+        desription = addArgumentHint(e, desription);
+
+        return new Hover(desription);
+    }
+
+    private List<Either<String, MarkedString>> addArgumentHint(Element e, List<Either<String, MarkedString>> desription) {
+        try {
+            if (e.getParent() instanceof Arguments) {
+                Arguments args = (Arguments) e.getParent();
+                int index = args.indexOf(e);
+                if (args.getParent() instanceof FunctionCall) {
+                    FunctionCall fc = (FunctionCall) args.getParent();
+                    FuncLink f = fc.attrFuncLink();
+                    WurstType parameterType = f.getParameterType(index);
+                    String parameterName = f.getParameterName(index);
+                    desription = Utils.append(desription, Either.forLeft("Parameter " + parameterType + " " + parameterName));
+                }
+            }
+        } catch (Exception ex) {
+            WLogger.info("Could not get argument hint");
+            WLogger.info(ex);
+        }
+        return desription;
     }
 
     private static List<Either<String, MarkedString>> description(Element n) {
@@ -121,10 +145,21 @@ public class HoverInfo extends UserRequest<Hover> {
         }
 
         public List<Either<String, MarkedString>> description(NameDef n) {
+            if (n == null) {
+                return Collections.emptyList();
+            }
             List<Either<String, MarkedString>> result = new ArrayList<>();
             String comment = n.attrComment();
             if (comment != null && !comment.isEmpty()) {
                 result.add(Either.forLeft(comment));
+            }
+            if (n.attrIsConstant()) {
+                if (n instanceof GlobalOrLocalVarDef) {
+                    GlobalOrLocalVarDef v = (GlobalOrLocalVarDef) n;
+                    VarInitialization initialExpr = v.getInitialExpr();
+                    String initial = Utils.prettyPrint(initialExpr);
+                    result.add(Either.forRight(new MarkedString("wurst", " = " + initial)));
+                }
             }
 
             String additionalProposalInfo = type(n.attrTyp()) + " " + n.getName()
@@ -258,8 +293,11 @@ public class HoverInfo extends UserRequest<Hover> {
 
         @Override
         public List<Either<String, MarkedString>> case_Annotation(Annotation annotation) {
-            // TODO different annotations
-            return string("This is an annotation.");
+            FunctionDefinition def = annotation.attrFuncDef();
+            if (def != null) {
+                return string(def.attrComment());
+            }
+            return string("This is an undefined annotation.");
         }
 
         @Override
@@ -293,7 +331,7 @@ public class HoverInfo extends UserRequest<Hover> {
 
         @Override
         public List<Either<String, MarkedString>> case_CompilationUnit(CompilationUnit compilationUnit) {
-            return string("File " + compilationUnit.getFile());
+            return string("File " + compilationUnit.getCuInfo().getFile());
         }
 
         @Override
@@ -378,7 +416,7 @@ public class HoverInfo extends UserRequest<Hover> {
 
         @Override
         public List<Either<String, MarkedString>> case_ExprClosure(ExprClosure exprClosure) {
-            return string("Closure with type " + exprClosure.attrTyp());
+            return string("Closure with type " + exprClosure.attrTyp() + " (implements " + exprClosure.attrExpectedTyp() + ")");
         }
 
         @Override
@@ -566,6 +604,11 @@ public class HoverInfo extends UserRequest<Hover> {
         @Override
         public List<Either<String, MarkedString>> case_NativeType(NativeType nativeType) {
             return description(nativeType);
+        }
+
+        @Override
+        public List<Either<String, MarkedString>> case_NoTypeParamConstraints(NoTypeParamConstraints noTypeParamConstraints) {
+            return string("No type parameter constraints given.");
         }
 
         @Override

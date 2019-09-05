@@ -2,13 +2,11 @@ package de.peeeq.wurstscript.intermediatelang.interpreter;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import de.peeeq.wurstio.jassinterpreter.InterpreterException;
 import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.gui.WurstGui;
-import de.peeeq.wurstscript.intermediatelang.ILconst;
-import de.peeeq.wurstscript.intermediatelang.ILconstArray;
+import de.peeeq.wurstscript.intermediatelang.*;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.utils.LineOffsets;
@@ -26,10 +24,11 @@ public class ProgramState extends State {
     private List<NativesProvider> nativeProviders = Lists.newArrayList();
     private ImProg prog;
     private int objectIdCounter;
-    private Map<Integer, Object> objectToClassKey = Maps.newLinkedHashMap();
+    private HashMap<Integer, ILconstObject> indexToObject = new HashMap<>();
     private Deque<ILStackFrame> stackFrames = new ArrayDeque<>();
     private Deque<de.peeeq.wurstscript.jassIm.Element> lastStatements = new ArrayDeque<>();
     private boolean isCompiletime;
+    private HashMap<Integer, IlConstHandle> handleMap = new HashMap<>();
 
 
     public ProgramState(WurstGui gui, ImProg prog, boolean isCompiletime) {
@@ -84,43 +83,43 @@ public class ProgramState extends State {
         return prog;
     }
 
-    public int allocate(ImClass clazz, Element trace) {
+    public ILconstObject allocate(ImClassType clazz, Element trace) {
         objectIdCounter++;
-        objectToClassKey.put(objectIdCounter, classKey(clazz));
-        return objectIdCounter;
+        ILconstObject res = new ILconstObject(clazz, objectIdCounter, trace);
+        indexToObject.put(objectIdCounter, res);
+        return res;
     }
 
     protected Object classKey(ImClass clazz) {
         return clazz;
     }
 
-    public void deallocate(int obj, ImClass clazz, Element trace) {
+    public void deallocate(ILconstObject obj, ImClass clazz, Element trace) {
         assertAllocated(obj, trace);
-        objectToClassKey.remove(obj);
+        obj.destroy();
         // TODO recycle ids
     }
 
-    public void assertAllocated(int obj, Element trace) {
-        if (obj == 0) {
+    public void assertAllocated(ILconstObject obj, Element trace) {
+        if (obj == null) {
             throw new InterpreterException(trace, "Null pointer dereference");
         }
-        if (!objectToClassKey.containsKey(obj)) {
+        if (obj.isDestroyed()) {
             throw new InterpreterException(trace, "Object already destroyed");
         }
     }
 
-    public boolean isInstanceOf(int obj, ImClass clazz, Element trace) {
+    public boolean isInstanceOf(ILconstObject obj, ImClass clazz, Element trace) {
+        if (obj == null) {
+            return false;
+        }
         assertAllocated(obj, trace);
-        return getObjectClass(obj).isSubclassOf(clazz); // TODO more efficient check
+        return obj.getImClass().isSubclassOf(clazz); // TODO more efficient check
     }
 
-    public int getTypeId(int obj, Element trace) {
+    public int getTypeId(ILconstObject obj, Element trace) {
         assertAllocated(obj, trace);
-        return getObjectClass(obj).attrTypeId();
-    }
-
-    private ImClass getObjectClass(int obj) {
-        return findClazz(objectToClassKey.get(obj));
+        return obj.getImClass().attrTypeId();
     }
 
     private ImClass findClazz(Object key) {
@@ -181,6 +180,27 @@ public class ProgramState extends State {
         }
     }
 
+    public ILconst getObjectByIndex(int val) {
+        return indexToObject.get(val);
+    }
+
+    public HashMap<Integer, IlConstHandle> getHandleMap() {
+        return handleMap;
+    }
+
+    public ILconst getHandleByIndex(int val) {
+        return handleMap.get(val);
+    }
+
+    public ILconstObject toObject(ILconst val) {
+        if (val instanceof ILconstObject) {
+            return (ILconstObject) val;
+        } else if (val instanceof ILconstInt) {
+            return indexToObject.get(((ILconstInt) val).getVal());
+        }
+        throw new InterpreterException(this, "Value " + val + " (" + val.getClass().getSimpleName() + ") cannot be cast to object.");
+    }
+
     public static class StackTrace {
         private final List<ILStackFrame> stackFrames;
 
@@ -193,8 +213,8 @@ public class ProgramState extends State {
         }
 
         public void appendTo(StringBuilder sb) {
-            for (int i = stackFrames.size() - 1; i >= 0; i--) {
-                sb.append(stackFrames.get(i).getMessage());
+            for (ILStackFrame stackFrame : stackFrames) {
+                sb.append(stackFrame.getMessage());
                 sb.append("\n");
             }
         }
@@ -237,7 +257,8 @@ public class ProgramState extends State {
     protected ILconstArray getArray(ImVar v) {
         ILconstArray r = arrayValues.get(v);
         if (r == null) {
-            r = new ILconstArray(v.getType()::defaultValue);
+            ImType vType = v.getType();
+            r = createArrayConstantFromType(vType);
             arrayValues.put(v, r);
             List<ImExpr> e = prog.getGlobalInits().get(v);
             if (e != null) {
@@ -251,6 +272,11 @@ public class ProgramState extends State {
         return r;
     }
 
+
+
+    public Collection<ILconstObject> getAllObjects() {
+        return indexToObject.values();
+    }
 
 }
 

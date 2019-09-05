@@ -5,6 +5,7 @@ import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.antlr.WurstParser;
 import de.peeeq.wurstscript.antlr.WurstParser.*;
 import de.peeeq.wurstscript.ast.*;
+import de.peeeq.wurstscript.attributes.CompilationUnitInfo;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.ErrorHandler;
 import de.peeeq.wurstscript.jass.AntlrJassParseTreeTransformer;
@@ -54,7 +55,7 @@ public class AntlrWurstParseTreeTransformer {
         }
 
         return Ast
-                .CompilationUnit("", this.cuErrorHandler, jassDecls, packages);
+                .CompilationUnit(new CompilationUnitInfo(this.cuErrorHandler), jassDecls, packages);
     }
 
     private JassToplevelDeclaration transformJassToplevelDecl(
@@ -325,7 +326,9 @@ public class AntlrWurstParseTreeTransformer {
     private Modifier transformModifier(ModifierContext m) {
         WPos src = source(m);
         if (m.annotation() != null) {
-            return Ast.Annotation(src, m.annotation().name.getText(), m.annotation().message != null ? m.annotation().message.getText() : "");
+            return Ast.Annotation(src,
+                    Ast.Identifier(source(m.annotation().name), m.annotation().name.getText().substring(1).toLowerCase()),
+                    transformArgumentList(m.annotation().argumentList()));
         }
         switch (m.modType.getType()) {
             case WurstParser.PUBLIC:
@@ -559,9 +562,13 @@ public class AntlrWurstParseTreeTransformer {
     }
 
     private ExprList transformExprlist(ExprListContext es) {
+        return transformExprlist(es.exprs);
+    }
+
+    private ExprList transformExprlist(List<ExprContext> es) {
         ExprList result = Ast.ExprList();
         if (es != null) {
-            for (ExprContext e : es.exprs) {
+            for (ExprContext e : es) {
                 result.add(transformExpr(e));
             }
         }
@@ -674,7 +681,7 @@ public class AntlrWurstParseTreeTransformer {
         Expr expr = transformExpr(s.expr());
         SwitchCases cases = Ast.SwitchCases();
         for (SwitchCaseContext c : s.switchCase()) {
-            Expr e = transformExpr(c.expr());
+            ExprList e = transformExprlist(c.expr());
             WStatements stmts = transformStatements(c.statementsBlock());
             cases.add(Ast.SwitchCase(source(c), e, stmts));
         }
@@ -1291,7 +1298,19 @@ public class AntlrWurstParseTreeTransformer {
 
     private TypeParamDef transformTypeParam(TypeParamContext p) {
         Modifiers modifiers = Ast.Modifiers();
-        return Ast.TypeParamDef(source(p), modifiers, text(p.name));
+        TypeParamConstraints typeParamClasses = tranformTypeParamConstraints(p.typeParamConstraints());
+        return Ast.TypeParamDef(source(p), modifiers, text(p.name), typeParamClasses);
+    }
+
+    private TypeParamConstraints tranformTypeParamConstraints(TypeParamConstraintsContext tc) {
+        if (tc == null) {
+            return Ast.NoTypeParamConstraints();
+        }
+        TypeExprList res = Ast.TypeExprList();
+        for (TypeExprContext t : tc.constraints) {
+            res.add(transformTypeExpr(t));
+        }
+        return res;
     }
 
     private WImport transformImport(WImportContext i) {

@@ -604,6 +604,7 @@ public class ClosureTests extends WurstScriptTest {
     @Test
     public void testDispatch() {
         test().executeProg(true)
+            .testLua(false)
                 .executeProgOnlyAfterTransforms()
                 .lines(
                 "package A",
@@ -807,6 +808,40 @@ public class ClosureTests extends WurstScriptTest {
                 "        construct(B a)",
                 "    init",
                 "        new A(() -> 42)"
+        );
+    }
+
+    @Test
+    public void closureCaptureMain() {
+        testAssertOkLines(true,
+                "package test",
+                "native testSuccess()",
+                "interface SimpleFunc",
+                "	function apply(int x) returns int",
+                "init",
+                "	int main = 4",
+                "	SimpleFunc f = (int x) -> x + main",
+                "	if f.apply(3) == 7",
+                "		testSuccess()"
+        );
+    }
+
+
+    @Test
+    public void closureInClassInit() {
+        testAssertOkLines(true,
+            "package test",
+            "native testSuccess()",
+            "interface Func",
+            "	function apply(int x) returns int",
+            "class A",
+            "	Func f = x -> x + 1",
+            "	construct()",
+            "	construct(int x)",
+            "init",
+            "	let a = new A",
+            "	if a.f.apply(3) == 4",
+            "		testSuccess()"
         );
     }
 

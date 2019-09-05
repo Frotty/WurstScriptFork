@@ -1,4 +1,4 @@
-package de.peeeq.wurstscript.lua.printing;
+package de.peeeq.wurstscript.translation.lua.printing;
 
 import de.peeeq.wurstscript.luaAst.*;
 import de.peeeq.wurstscript.utils.Utils;
@@ -16,8 +16,13 @@ public class LuaPrinter {
     }
 
     public static void print(LuaCompilationUnit cu, StringBuilder sb, int indent) {
-        for (LuaDefinition d : cu) {
-            d.print(sb, indent);
+        for (LuaStatement d : cu) {
+            if (d instanceof LuaVariable) {
+                // don't translate global variables as locals:
+                printVariable((LuaVariable) d, sb, indent);
+            } else {
+                d.print(sb, indent);
+            }
             sb.append("\n\n");
         }
     }
@@ -47,6 +52,7 @@ public class LuaPrinter {
 
     public static void print(LuaExprFieldAccess e, StringBuilder sb, int indent) {
         e.getReceiver().print(sb, indent);
+        sb.append(".");
         sb.append(e.getFieldName());
     }
 
@@ -109,7 +115,7 @@ public class LuaPrinter {
     public static void print(LuaExprMethodCall e, StringBuilder sb, int indent) {
         e.getReceiver().print(sb, indent);
         sb.append(":");
-        sb.append(e.getFunc().getName());
+        sb.append(e.getMethod().getName());
         sb.append("(");
         e.getArguments().print(sb, indent);
         sb.append(")");
@@ -150,26 +156,39 @@ public class LuaPrinter {
         sb.append("end");
     }
 
+    public static void print(LuaMethod f, StringBuilder sb, int indent) {
+        printIndent(sb, indent);
+        sb.append("function ");
+        f.getReceiver().print(sb, indent);
+        sb.append(":");
+        sb.append(f.getName());
+        sb.append("(");
+        f.getParams().print(sb, indent);
+        sb.append(") \n");
+        f.getBody().print(sb, indent + 1);
+        printIndent(sb, indent);
+        sb.append("end");
+    }
+
     public static void print(LuaIf s, StringBuilder sb, int indent) {
         sb.append("if ");
         s.getCond().print(sb, indent);
         sb.append(" then\n");
         s.getThenStmts().print(sb, indent + 1);
-        printIndent(sb, indent);
-        sb.append("else\n"); // TODO special case for else if
-        s.getElseStmts().print(sb, indent);
+        if (!s.getElseStmts().isEmpty()) {
+            printIndent(sb, indent);
+            sb.append("else");
+            if (s.getElseStmts().size() == 1 && s.getElseStmts().get(0) instanceof LuaIf) {
+                LuaIf luaIf = (LuaIf) s.getElseStmts().get(0);
+                luaIf.print(sb, indent);
+                return;
+            } else {
+                sb.append("\n");
+                s.getElseStmts().print(sb, indent + 1);
+            }
+        }
         printIndent(sb, indent);
         sb.append("end");
-    }
-
-    public static void print(LuaLocal s, StringBuilder sb, int indent) {
-        sb.append("local ");
-        sb.append(s.getDefinedVar().getName());
-        if (s.getInitialValue() instanceof LuaExpr) {
-            LuaExpr in = (LuaExpr) s.getInitialValue();
-            sb.append(" = ");
-            in.print(sb, indent);
-        }
     }
 
     public static void print(LuaModel m, StringBuilder sb, int indent) {
@@ -263,6 +282,10 @@ public class LuaPrinter {
             printIndent(sb, indent);
             s.print(sb, indent);
             sb.append("\n");
+            if (s instanceof LuaReturn || s instanceof LuaBreak) {
+                // there can be no statement after return or break ...
+                break;
+            }
         }
     }
 
@@ -275,7 +298,7 @@ public class LuaPrinter {
     public static void print(LuaTableExprField e, StringBuilder sb, int indent) {
         sb.append("[");
         e.getFieldKey().print(sb, indent);
-        sb.append("])");
+        sb.append("] = ");
         e.getVal().print(sb, indent);
     }
 
@@ -297,13 +320,15 @@ public class LuaPrinter {
     }
 
     public static void print(LuaVariable v, StringBuilder sb, int indent) {
+        sb.append("local ");
+        printVariable(v, sb, indent);
+    }
 
+    private static void printVariable(LuaVariable v, StringBuilder sb, int indent) {
         sb.append(v.getName());
-        sb.append(" = ");
         if (v.getInitialValue() instanceof LuaExpr) {
+            sb.append(" = ");
             v.getInitialValue().print(sb, indent);
-        } else {
-            sb.append("nil");
         }
     }
 

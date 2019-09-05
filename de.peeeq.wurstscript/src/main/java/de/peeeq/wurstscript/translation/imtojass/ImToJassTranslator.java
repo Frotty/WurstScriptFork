@@ -19,7 +19,11 @@ import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
 
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import static de.peeeq.wurstscript.jassAst.JassAst.*;
+
 public class ImToJassTranslator {
 
     private ImProg imProg;
@@ -41,6 +45,9 @@ public class ImToJassTranslator {
     }
 
     public JassProg translate() {
+        makeNamesUnique(imProg.getGlobals());
+        makeNamesUnique(imProg.getFunctions());
+
         JassVars globals = JassVars();
         JassFunctions functions = JassFunctions();
         prog = JassProg(JassTypeDefs(), globals, JassNatives(), functions);
@@ -51,6 +58,29 @@ public class ImToJassTranslator {
         translateFunctionTransitive(confFunction);
 
         return prog;
+    }
+
+    /**
+     * makes names unique in a consistent way
+     */
+    private <T extends JassImElementWithName> void makeNamesUnique(List<T> list) {
+        List<T> sorted = list.stream()
+                .sorted(
+                        Comparator.comparing(JassImElementWithName::getName)
+                                .thenComparing(v -> v.getTrace().attrSource().getFile())
+                                .thenComparing(v -> v.getTrace().attrSource().getLine())
+                                .thenComparing(v -> v.getTrace().attrSource().getStartColumn()))
+                .collect(Collectors.toList());
+
+        for (int i = 0; i < sorted.size(); i++) {
+            T vi = sorted.get(i);
+            for (int j = i + 1; j < sorted.size(); j++) {
+                T vj = sorted.get(j);
+                if (vi.getName().equals(vj.getName())) {
+                    vj.setName(vi.getName() + "_" + j);
+                }
+            }
+        }
     }
 
     private void collectGlobalVars() {
@@ -146,37 +176,16 @@ public class ImToJassTranslator {
 
     private String getUniqueGlobalName(String name) { // TODO find local names
         name = jassifyName(name);
-
-        if (!usedNames.contains(name)) {
-            // name not used yet
-            usedNames.add(name);
-            return name;
-        }
-        // otherwise, try to find an unused name by adding a counter at the end
-        String name2;
-        int i = 1;
-        do {
-            i++;
-            name2 = name + "_" + i;
-        } while (usedNames.contains(name2));
-        usedNames.add(name2);
-        return name2;
+        name = Utils.makeUniqueName(name, n -> !usedNames.contains(n));
+        usedNames.add(name);
+        return name;
     }
 
     private String getUniqueLocalName(ImFunction imFunction, String name) {
         name = jassifyName(name);
-        if (!usedNames.contains(name) && !usedLocalNames.containsEntry(imFunction, name)) {
-            usedLocalNames.put(imFunction, name);
-            return name;
-        }
-        String name2;
-        int i = 1;
-        do {
-            i++;
-            name2 = name + "_" + i;
-        } while (usedNames.contains(name2) || usedLocalNames.containsEntry(imFunction, name2));
-        usedLocalNames.put(imFunction, name2);
-        return name2;
+        name = Utils.makeUniqueName(name, n -> !usedNames.contains(n) && !usedLocalNames.containsEntry(imFunction, n));
+        usedLocalNames.put(imFunction, name);
+        return name;
     }
 
 
@@ -213,6 +222,7 @@ public class ImToJassTranslator {
     }
 
     private String jassifyName(String name) {
+        name = filterInvalidSymbols(name);
         if (RestrictedCompressedNames.contains(name) || name.startsWith("_")) {
             name = "w" + name;
         }
@@ -223,6 +233,29 @@ public class ImToJassTranslator {
             name = "empty";
         }
         return name;
+    }
+
+    private final Pattern jassValidName = Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*");
+
+    /**
+     * replaces all invalid characters with underscores
+     */
+    private String filterInvalidSymbols(String name) {
+        if (jassValidName.matcher(name).matches()) {
+            return name;
+        }
+        StringBuilder sb = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!(c >= 'a' && c <= 'z'
+                    || c >= 'A' && c <= 'Z'
+                    || c >= '0' && c <= '9'
+                    || c == '_')) {
+                c = '_';
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 
     private boolean isGlobal(ImVar v) {
@@ -241,7 +274,11 @@ public class ImToJassTranslator {
                     prog.getNatives().add((JassNative) f);
                 }
             } else {
-                String name = getUniqueGlobalName(func.getName());
+                String name = func.getName();
+                // find a unique name, but keep special names 'main' and 'config'
+                if (!name.equals("main") && !name.equals("config")) {
+                    name = getUniqueGlobalName(func.getName());
+                }
                 boolean isCompiletimeNative = func.hasFlag(FunctionFlagEnum.IS_COMPILETIME_NATIVE);
                 f = JassFunction(name, JassSimpleVars(), "nothing", JassVars(), JassStatements(), isCompiletimeNative);
                 if (!func.isBj() && !func.isExtern()) {

@@ -116,6 +116,50 @@ public class BugTests extends WurstScriptTest {
                 "endpackage");
     }
 
+    @Test
+    public void test_init_order_jass_warning() {
+        testAssertErrorsLines(false, "Variable b may not have been initialized",
+                "function foo takes nothing returns integer",
+                "	local integer a = b",
+                "	local integer b = 3",
+                "	return a + b",
+                "endfunction",
+                "package test",
+                "	native testSuccess()",
+                "	init",
+                "		if foo() == 6",
+                "			testSuccess()",
+                "endpackage");
+    }
+
+    @Test
+    public void test_init_order_globals_warning() {
+        testAssertErrorsLines(false, "Global variable b must be declared before it is used.",
+                "package test",
+                "	integer a = b",
+                "	integer b = 3",
+                "	native testSuccess()",
+                "	init",
+                "		if a + b == 6",
+                "			testSuccess()",
+                "endpackage");
+    }
+
+    @Test
+    public void test_init_order_globals_warning_jass() {
+        testAssertErrorsLines(false, "Global variable b used before it is declared.",
+                "globals",
+                "	integer a = b",
+                "	integer b = 3",
+                "endglobals",
+                "package test",
+                "	native testSuccess()",
+                "	init",
+                "		if a + b == 6",
+                "			testSuccess()",
+                "endpackage");
+    }
+
 
     @Test
     public void test_for_from() {
@@ -773,6 +817,8 @@ public class BugTests extends WurstScriptTest {
     public void unreadVarWarning2() { // #380
         testAssertErrorsLines(true, "i is never read",
                 "package test",
+                "@annotation public function annotation()",
+                "@annotation public function extern()",
                 "@extern native I2S(int x) returns string",
                 "native testSuccess()",
                 "init",
@@ -781,6 +827,26 @@ public class BugTests extends WurstScriptTest {
                 "	i = i + 1",
                 "	testSuccess()"
         );
+    }
+
+
+    @Test
+    public void unreadVarWarningArrays() { // #813
+        testAssertOkLines(false,
+                "package test",
+                "@annotation public function annotation()",
+                "@annotation public function extern()",
+                "@extern native I2S(int x) returns string",
+                "init",
+                "    integer array b",
+                "    b[0] = 0 // Warning.",
+                "    b[1] = 0 // Warning.",
+                "    b[2] = 0 // No warning.",
+                "    I2S(b[0])",
+                "    I2S(b[1])",
+                "    for i = 0 to 2",
+                "        I2S(b[i])"
+                );
     }
 
 
@@ -840,7 +906,7 @@ public class BugTests extends WurstScriptTest {
                         "abstract class Hey\n" +
                         "	function foo()";
 
-        WurstModel model = test().executeProg(false).withStdLib(false).withCu(compilationUnit("testLine", "testLine")).run().getModel();
+        WurstModel model = test().executeProg(false).withStdLib(false).withCu(compilationUnit("testLine", input)).run().getModel();
 
         model.accept(new WurstModel.DefaultVisitor() {
             @Override
@@ -1162,6 +1228,140 @@ public class BugTests extends WurstScriptTest {
                 "        let clean_queue = new LinkedList<X>()",
                 "        clean_queue.forEach() itr ->",
                 ""
+        );
+    }
+
+
+    @Test
+    public void negativeNumberLiterals() {
+        testAssertOkLines(true,
+                "package Test",
+                "native testSuccess()",
+                "native testFail(string msg)",
+                "init",
+                "    if 0117 != 79",
+                "        testFail(\"a\")",
+                "    if -0117 != -79",
+                "        testFail(\"b\")",
+                "    if 0x4f != 79",
+                "        testFail(\"c\")",
+                "    if -0x4f != -79",
+                "        testFail(\"d\")",
+                "    if $4f != 79",
+                "        testFail(\"e\")",
+                "    if -$4f != -79",
+                "        testFail(\"f\")",
+                "    testSuccess()"
+        );
+    }
+
+	@Test
+	public void testSelfAssignmentWarning() {
+		testAssertErrorsLines(false, "The assignment to local variable i probably has no effect",
+			"package test",
+			"@annotation public function annotation()",
+			"@annotation public function extern()",
+			"@extern native I2S(int x) returns string",
+			"native testSuccess()",
+			"init",
+			"	var i = 5",
+			"	I2S(i)",
+			"	i = i",
+			"	I2S(i)",
+			"	testSuccess()"
+		);
+	}
+
+	@Test
+	public void testSelfAssignmentWarningDot() {
+		testAssertErrorsLines(false, "The assignment to variable i probably has no effect",
+			"package test",
+			"@annotation public function annotation()",
+			"@annotation public function extern()",
+			"@extern native I2S(int x) returns string",
+			"native testSuccess()",
+			"class A",
+			"	var i = 5",
+			"	construct()",
+			"		this.i = i",
+			"init",
+			"	new A()",
+			"	testSuccess()"
+		);
+	}
+
+	@Test
+	public void testSelfAssignmentNoWarning() {
+		testAssertOkLines(true,
+			"package test",
+			"@annotation public function annotation()",
+			"@annotation public function extern()",
+			"@extern native I2S(int x) returns string",
+			"native testSuccess()",
+			"class A",
+			"	var i = 5",
+			"	construct(int i)",
+			"		this.i = i",
+			"init",
+			"	new A(1)",
+			"	testSuccess()"
+		);
+	}
+
+    @Test
+    public void bitset_add() {
+        testAssertOkLines(true,
+            "package Test",
+            "native testSuccess()",
+            "native testFail(string msg)",
+            "@extern native I2S(int i) returns string",
+            "public tuple bitset(int val)",
+            "public function int.pow(int x) returns int",
+            "    int result = 1",
+            "    for int i=1 to x",
+            "        result *= this",
+            "    return result",
+            "public function bitset.add(int v) returns bitset",
+            "    let pow = 2 .pow(v)",
+            "    return not this.containsPow(pow) ? bitset(this.val + pow) : this",
+            "function bitset.containsPow(int pow) returns boolean",
+            "    return (this.val mod (pow * 2)) >= pow",
+            "init",
+            "    let a = bitset(5)", // {0,2}
+            "    let res = a.add(1)",
+            "    if res.val == 7",
+            "        testSuccess()",
+            "    else",
+            "        testFail(I2S(res.val))"
+        );
+    }
+
+    @Test
+    public void middlewareOverload() throws IOException {
+        testAssertOkFile(new File(TEST_DIR + "MiddlewareOverload.wurst"), true);
+    }
+
+    @Test
+    public void cycle_with_generics() {
+        testAssertOkLines(true,
+            "package Test",
+            "native testSuccess()",
+            "public abstract class VoidFunction<T>",
+            "    abstract function call(T t)",
+            "int x = 0",
+            "function foo(int i)",
+            "    x++",
+            "    VoidFunction<int> f = j -> bar(j - 1)",
+            "    f.call(i)",
+            "function bar(int i)",
+            "    x++",
+            "    VoidFunction<int> f = j -> foo(j - 1)",
+            "    if i > 0",
+            "        f.call(i)",
+            "init",
+            "    bar(10)",
+            "    if x == 11",
+            "        testSuccess()"
         );
     }
 

@@ -1,5 +1,7 @@
 package de.peeeq.wurstscript.attributes;
 
+import de.peeeq.wurstscript.jassIm.Element;
+import de.peeeq.wurstscript.jassIm.ImTypeVarRef;
 import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.utils.LineOffsets;
 import org.eclipse.jdt.annotation.Nullable;
@@ -31,6 +33,11 @@ public class CompileError extends Error implements Serializable {
     }
 
     public CompileError(@Nullable WPos source, String message, ErrorType errorType) {
+        this(source, message, errorType, null);
+    }
+
+    public CompileError(@Nullable WPos source, String message, ErrorType errorType, Throwable cause) {
+        super(message, cause);
         if (source == null) {
             this.source = new WPos("", new LineOffsets(), 0, 0);
         } else {
@@ -38,6 +45,15 @@ public class CompileError extends Error implements Serializable {
         }
         this.message = message;
         this.errorType = errorType;
+    }
+
+
+    public CompileError(Element e, String msg) {
+        this(e.attrTrace().attrErrorPos(), msg);
+    }
+
+    public CompileError(de.peeeq.wurstscript.ast.Element e, String msg) {
+        this(e.attrErrorPos(), msg);
     }
 
 
