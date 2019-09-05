@@ -292,7 +292,7 @@ public class SimpleRewrites implements OptimizerPass {
 
     private void replaceStringCompareWithHash(ImExpr left, ImStringVal right) {
         ImExpr copy = left.copy();
-        left.replaceBy(JassIm.ImFunctionCall(left.attrTrace(), stringHashFunc, JassIm.ImExprs(copy), true, CallType.NORMAL));
+        left.replaceBy(JassIm.ImFunctionCall(left.attrTrace(), stringHashFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(copy), true, CallType.NORMAL));
         try {
             right.replaceBy(JassIm.ImIntVal(StringHash.hash(right.getValS())));
         } catch (UnsupportedEncodingException e) {
