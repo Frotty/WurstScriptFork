@@ -154,4 +154,14 @@ public class ImOptimizer {
         }
     }
 
+    public void doStrictInline() {
+        removeGarbage();
+        GlobalsInliner globalsInliner = new GlobalsInliner();
+        globalsInliner.optimize(trans);
+        ImInliner inliner = new ImInliner(trans);
+        inliner.setInlineTreshold(1);
+        inliner.doInlining();
+        trans.assertProperties();
+        removeGarbage();
+    }
 }
