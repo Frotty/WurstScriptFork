@@ -25,22 +25,26 @@ public class WurstChecker {
         if (root.isEmpty()) {
             return;
         }
+        WLogger.info("debug - Checking Files");
         gui.sendProgress("Checking Files");
 
         if (errorHandler.getErrorCount() > 0) return;
 
+        WLogger.info("debug - attachErrorHandler");
         attachErrorHandler(root);
 
+        WLogger.info("debug - expandModules");
         expandModules(root);
 
         if (errorHandler.getErrorCount() > 0) return;
 
+        WLogger.info("debug - computeFlowAttributes");
         // compute the flow attributes
         for (CompilationUnit cu : toCheck) {
             WurstValidator.computeFlowAttributes(cu);
         }
 
-
+        WLogger.info("debug - WurstValidator");
         // validate the resource:
         WurstValidator validator = new WurstValidator(root);
         validator.validate(toCheck);

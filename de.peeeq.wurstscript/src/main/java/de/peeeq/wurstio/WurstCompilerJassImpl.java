@@ -385,10 +385,12 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     }
 
     public void checkProg(WurstModel model) {
+        WLogger.info("debug - checkProg");
         checkProg(model, model);
     }
 
     public void checkProg(WurstModel model, List<CompilationUnit> toCheck) {
+        WLogger.info("debug - checkNotNull");
         for (CompilationUnit cu : toCheck) {
             Preconditions.checkNotNull(cu);
             if (!model.contains(cu)) {
@@ -396,7 +398,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                 throw new ModelChangedException();
             }
         }
-
+        WLogger.info("debug - checker");
         checker.checkProg(model, toCheck);
     }
 
