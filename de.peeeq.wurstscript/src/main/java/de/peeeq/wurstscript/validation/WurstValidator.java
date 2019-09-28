@@ -219,6 +219,7 @@ public class WurstValidator {
     }
 
     private void check(Element e) {
+        WLogger.info("debug - check <" + e.getClass().getSimpleName() + ">");
         try {
             if (e instanceof Annotation)
                 checkAnnotation((Annotation) e);
