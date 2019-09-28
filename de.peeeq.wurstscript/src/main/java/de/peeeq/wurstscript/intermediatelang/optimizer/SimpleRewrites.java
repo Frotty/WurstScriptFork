@@ -109,7 +109,7 @@ public class SimpleRewrites implements OptimizerPass {
             optimizeExitwhen(imExitwhen);
         } else if (elem instanceof ImFunction) {
             ImFunction imFunction = (ImFunction) elem;
-//            optimizeFunction(imFunction);
+            optimizeFunction(imFunction);
         }
 
     }
@@ -122,7 +122,8 @@ public class SimpleRewrites implements OptimizerPass {
             ImStmts body = imFunction.getBody();
             if (body.get(0) instanceof ImIf && body.get(1) instanceof ImReturn) {
                 ImIf imIf = (ImIf) body.get(0);
-                if (imIf.getThenBlock().size() == 1 && imIf.getThenBlock().get(0) instanceof ImReturn) {
+                if ((imIf.getElseBlock() == null || imIf.getElseBlock().size() == 0)
+                    && imIf.getThenBlock().size() == 1 && imIf.getThenBlock().get(0) instanceof ImReturn) {
                     ImReturn firstReturn = (ImReturn) body.get(1);
                     ImReturn secondReturn = (ImReturn) imIf.getThenBlock().get(0);
                     if (firstReturn.getReturnValue() instanceof ImBoolVal && secondReturn.getReturnValue() instanceof ImBoolVal) {
