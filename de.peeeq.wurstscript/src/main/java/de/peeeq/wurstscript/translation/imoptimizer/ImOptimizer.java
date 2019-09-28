@@ -29,6 +29,7 @@ public class ImOptimizer {
         localPasses.add(new SimpleRewrites());
         localPasses.add(new TempMerger());
         localPasses.add(new LocalMerger());
+        localPasses.add(new LocalInliner());
     }
 
 
