@@ -208,6 +208,7 @@ public class SideEffectAnalyzer {
      */
     public Set<ImFunction> calledFunctions(Element e) {
         return calledFunctionsStream(e)
+                .filter(func -> !func.isNative())
                 .collect(Collectors.toSet());
     }
 
