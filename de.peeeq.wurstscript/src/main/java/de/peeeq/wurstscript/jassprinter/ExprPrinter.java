@@ -40,6 +40,9 @@ public class ExprPrinter {
         if (valR.startsWith("0.") && valR.length() > 2) {
             valR = valR.substring(1);
         }
+        if (valR.endsWith(".0") || valR.endsWith(".00")) {
+            valR = valR.substring(valR.indexOf(".") + 1);
+        }
         sb.append(valR);
     }
 
