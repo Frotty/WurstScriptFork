@@ -1159,6 +1159,7 @@ public class WurstValidator {
         func.getErrorHandler().setProgress(null, ProgressHelper.getValidatorPercent(visitedFunctions, functionCount));
         WLogger.info("debug - check name ");
         checkFunctionName(func);
+        WLogger.info("debug - attrIsAbstract ");
         if (func.attrIsAbstract()) {
             if (!func.attrHasEmptyBody()) {
                 func.addError("Abstract function " + func.getName() + " must not have a body.");
@@ -1167,9 +1168,11 @@ public class WurstValidator {
                 func.addError("Abstract functions must not be private.");
             }
         }
+        WLogger.info("debug - FuncDef done ");
     }
 
     private void checkUninitializedVars(FunctionLike f) {
+        WLogger.info("debug - checkUninitializedVars ");
         boolean isAbstract = false;
         if (f instanceof FuncDef) {
             FuncDef func = (FuncDef) f;
@@ -1191,6 +1194,7 @@ public class WurstValidator {
                 new DataflowAnomalyAnalysis(Utils.isJassCode(f)).execute(f);
             }
         }
+        WLogger.info("debug - checkUninitializedVars done");
     }
 
     private void checkCall(StmtCall call) {
@@ -1502,6 +1506,7 @@ public class WurstValidator {
     }
 
     private void checkTypeBinding(HasTypeArgs e) {
+        WLogger.info("debug - HasTypeArgs");
         VariableBinding mapping = e.match(new HasTypeArgs.Matcher<VariableBinding>() {
 
             @Override
@@ -1667,6 +1672,7 @@ public class WurstValidator {
     }
 
     private void checkModifiers(final HasModifier e) {
+        WLogger.info("debug - HasModifier ");
         for (final Modifier m : e.getModifiers()) {
             final StringBuilder error = new StringBuilder();
 
