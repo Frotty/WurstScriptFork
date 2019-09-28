@@ -597,6 +597,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     private void beginPhase(int phase, String description) {
         errorHandler.setProgress("Translating wurst. Phase " + phase + ": " + description, 0.6 + 0.01 * phase);
         timeTaker.beginPhase(description);
+        WLogger.info("Translating wurst. Phase " + phase + ": " + description);
     }
 
     private void printDebugImProg(String debugFile) {
