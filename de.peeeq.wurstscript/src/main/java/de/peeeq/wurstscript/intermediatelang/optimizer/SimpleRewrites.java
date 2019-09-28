@@ -109,7 +109,7 @@ public class SimpleRewrites implements OptimizerPass {
             optimizeExitwhen(imExitwhen);
         } else if (elem instanceof ImFunction) {
             ImFunction imFunction = (ImFunction) elem;
-//            optimizeFunction(imFunction);
+            optimizeFunction(imFunction);
         }
 
     }
@@ -123,16 +123,15 @@ public class SimpleRewrites implements OptimizerPass {
                 ImIf imIf = (ImIf) body.get(0);
                 if ((imIf.getElseBlock() == null || imIf.getElseBlock().size() == 0)
                     && imIf.getThenBlock().size() == 1 && imIf.getThenBlock().get(0) instanceof ImReturn) {
-                    ImReturn firstReturn = (ImReturn) body.get(1);
-                    ImReturn secondReturn = (ImReturn) imIf.getThenBlock().get(0);
+                    ImReturn firstReturn = (ImReturn) imIf.getThenBlock().get(0);
+                    ImReturn secondReturn = (ImReturn) body.get(1);
                     if (firstReturn.getReturnValue() instanceof ImBoolVal && secondReturn.getReturnValue() instanceof ImBoolVal) {
                         boolean first = ((ImBoolVal)firstReturn.getReturnValue()).getValB();
                         boolean second = ((ImBoolVal)secondReturn.getReturnValue()).getValB();
-
                         if (first && !second) {
                             imIf.getCondition().setParent(null);
                             body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), imIf.getCondition()));
-                            body.get(1).replaceBy(ImHelper.nullExpr());
+                            body.remove(1).replaceBy(ImHelper.nullExpr());
                         } else if (second && !first) {
                             imIf.getCondition().setParent(null);
                             body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(imIf.getCondition()))));
