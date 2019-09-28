@@ -17,7 +17,7 @@ public class NameGenerator {
      */
     private final String charmapFirst = "lLoOiI";
     private final String charmap = charmapFirst + "01";
-    private final String charmapMid = charmap + "01_";
+    private final String charmapMid = charmap + "_";
 
     private String TEcharmap = "wurstqeiopadfghjklyxcvbnm";
     /**
