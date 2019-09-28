@@ -109,39 +109,39 @@ public class SimpleRewrites implements OptimizerPass {
             optimizeExitwhen(imExitwhen);
         } else if (elem instanceof ImFunction) {
             ImFunction imFunction = (ImFunction) elem;
-            optimizeFunction(imFunction);
+//            optimizeFunction(imFunction);
         }
 
     }
 
-    private void optimizeFunction(ImFunction imFunction) {
-        // if (cond) then return true else return false
-        // -> return cond
-        if (imFunction.getBody().size() == 2) {
-            ImStmts body = imFunction.getBody();
-            if (body.get(0) instanceof ImIf && body.get(1) instanceof ImReturn) {
-                ImIf imIf = (ImIf) body.get(0);
-                if (imIf.getThenBlock().size() == 1 && imIf.getThenBlock().get(0) instanceof ImReturn) {
-                    ImReturn firstReturn = (ImReturn) body.get(1);
-                    ImReturn secondReturn = (ImReturn) imIf.getThenBlock().get(0);
-                    if (firstReturn.getReturnValue() instanceof ImBoolVal && secondReturn.getReturnValue() instanceof ImBoolVal) {
-                        boolean first = ((ImBoolVal)firstReturn.getReturnValue()).getValB();
-                        boolean second = ((ImBoolVal)secondReturn.getReturnValue()).getValB();
-
-                        if (first && !second) {
-                            imIf.getCondition().setParent(null);
-                            body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), imIf.getCondition()));
-                            body.get(1).replaceBy(ImHelper.nullExpr());
-                        } else if (second && !first) {
-                            imIf.getCondition().setParent(null);
-                            body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(imIf.getCondition()))));
-                            body.get(1).replaceBy(ImHelper.nullExpr());
-                        }
-                    }
-                }
-            }
-        }
-    }
+//    private void optimizeFunction(ImFunction imFunction) {
+//        // if (cond) then return true else return false
+//        // -> return cond
+//        if (imFunction.getBody().size() == 2) {
+//            ImStmts body = imFunction.getBody();
+//            if (body.get(0) instanceof ImIf && body.get(1) instanceof ImReturn) {
+//                ImIf imIf = (ImIf) body.get(0);
+//                if (imIf.getThenBlock().size() == 1 && imIf.getThenBlock().get(0) instanceof ImReturn) {
+//                    ImReturn firstReturn = (ImReturn) body.get(1);
+//                    ImReturn secondReturn = (ImReturn) imIf.getThenBlock().get(0);
+//                    if (firstReturn.getReturnValue() instanceof ImBoolVal && secondReturn.getReturnValue() instanceof ImBoolVal) {
+//                        boolean first = ((ImBoolVal)firstReturn.getReturnValue()).getValB();
+//                        boolean second = ((ImBoolVal)secondReturn.getReturnValue()).getValB();
+//
+//                        if (first && !second) {
+//                            imIf.getCondition().setParent(null);
+//                            body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), imIf.getCondition()));
+//                            body.get(1).replaceBy(ImHelper.nullExpr());
+//                        } else if (second && !first) {
+//                            imIf.getCondition().setParent(null);
+//                            body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(imIf.getCondition()))));
+//                            body.get(1).replaceBy(ImHelper.nullExpr());
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
 
     private void optimizeConsecutiveExitWhen(ImExitwhen lookback, ImExitwhen element) {
         element.getCondition().setParent(null);
@@ -333,15 +333,15 @@ public class SimpleRewrites implements OptimizerPass {
     }
 
     private boolean rewriteEquals(ImOperatorCall opc, ImIntVal right) {
-        if (opc.getOp() == WurstOperator.GREATER_EQ) {
-            right.setValI(right.getValI() - 1);
-            opc.setOp(WurstOperator.GREATER);
-            return true;
-        } else if (opc.getOp() == WurstOperator.LESS_EQ) {
-            right.setValI(right.getValI() + 1);
-            opc.setOp(WurstOperator.LESS);
-            return true;
-        }
+//        if (opc.getOp() == WurstOperator.GREATER_EQ) {
+//            right.setValI(right.getValI() - 1);
+//            opc.setOp(WurstOperator.GREATER);
+//            return true;
+//        } else if (opc.getOp() == WurstOperator.LESS_EQ) {
+//            right.setValI(right.getValI() + 1);
+//            opc.setOp(WurstOperator.LESS);
+//            return true;
+//        }
         return false;
     }
 

@@ -55,15 +55,12 @@ public class WurstValidator {
             functionCount = countFunctions();
             visitedFunctions = 0;
 
-            WLogger.info("debug - Checking wurst types");
             prog.getErrorHandler().setProgress("Checking wurst types",
                     ProgressHelper.getValidatorPercent(visitedFunctions, functionCount));
-            WLogger.info("debug - walkTree");
             for (CompilationUnit cu : toCheck) {
                 walkTree(cu);
             }
             prog.getErrorHandler().setProgress("Post checks", 0.55);
-            WLogger.info("debug - postChecks");
             postChecks(toCheck);
         } catch (RuntimeException e) {
             WLogger.severe(e);
@@ -219,7 +216,6 @@ public class WurstValidator {
     }
 
     private void check(Element e) {
-        WLogger.info("debug - check <" + e.getClass().getSimpleName() + ">");
         try {
             if (e instanceof Annotation)
                 checkAnnotation((Annotation) e);
@@ -436,7 +432,6 @@ public class WurstValidator {
     }
 
     private void checkName(AstElementWithNameId e) {
-        WLogger.info("debug - check AstElementWithNameId ");
         String name = e.getNameId().getName();
         TypeDef def = e.lookupType(name, false);
 
@@ -1154,12 +1149,9 @@ public class WurstValidator {
     }
 
     private void visit(FuncDef func) {
-        WLogger.info("debug - visit " + func.getName());
         visitedFunctions++;
         func.getErrorHandler().setProgress(null, ProgressHelper.getValidatorPercent(visitedFunctions, functionCount));
-        WLogger.info("debug - check name ");
         checkFunctionName(func);
-        WLogger.info("debug - attrIsAbstract ");
         if (func.attrIsAbstract()) {
             if (!func.attrHasEmptyBody()) {
                 func.addError("Abstract function " + func.getName() + " must not have a body.");
@@ -1168,11 +1160,9 @@ public class WurstValidator {
                 func.addError("Abstract functions must not be private.");
             }
         }
-        WLogger.info("debug - FuncDef done ");
     }
 
     private void checkUninitializedVars(FunctionLike f) {
-        WLogger.info("debug - checkUninitializedVars ");
         boolean isAbstract = false;
         if (f instanceof FuncDef) {
             FuncDef func = (FuncDef) f;
@@ -1194,7 +1184,6 @@ public class WurstValidator {
                 new DataflowAnomalyAnalysis(Utils.isJassCode(f)).execute(f);
             }
         }
-        WLogger.info("debug - checkUninitializedVars done");
     }
 
     private void checkCall(StmtCall call) {
@@ -1506,7 +1495,6 @@ public class WurstValidator {
     }
 
     private void checkTypeBinding(HasTypeArgs e) {
-        WLogger.info("debug - HasTypeArgs");
         VariableBinding mapping = e.match(new HasTypeArgs.Matcher<VariableBinding>() {
 
             @Override
@@ -1672,7 +1660,6 @@ public class WurstValidator {
     }
 
     private void checkModifiers(final HasModifier e) {
-        WLogger.info("debug - HasModifier ");
         for (final Modifier m : e.getModifiers()) {
             final StringBuilder error = new StringBuilder();
 
@@ -1971,7 +1958,6 @@ public class WurstValidator {
 
     private void checkBannedFunctions(ExprFunctionCall e) {
         if (e.getFuncName().equals("TriggerRegisterVariableEvent")) {
-            WLogger.info("debug - check TriggerRegisterVariableEvent");
             if (e.getArgs().size() > 1 && e.getArgs().get(1) instanceof ExprStringVal) {
                 ExprStringVal varName = (ExprStringVal) e.getArgs().get(1);
                 TRVEHelper.TO_KEEP.add(varName.getValS());
