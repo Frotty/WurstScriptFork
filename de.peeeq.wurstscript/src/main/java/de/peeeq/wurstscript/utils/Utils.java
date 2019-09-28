@@ -148,6 +148,9 @@ public class Utils {
             if (pos instanceof WPackage) {
                 return false; // code is inside package -> wurstscript code
             }
+            if (pos.getParent() == pos) {
+                break;
+            }
             pos = pos.getParent();
         }
         return true; // no package found -> jass code
@@ -382,7 +385,7 @@ public class Utils {
     }
 
     public static Element getAstElementAtPos(Element elem, int line, int column, boolean usesMouse) {
-//		System.out.println("get element " + Utils.printElement(elem)  
+//		System.out.println("get element " + Utils.printElement(elem)
 //			+ "(" + elem.attrSource().getLeftPos() + " - " + elem.attrSource().getRightPos() + ")");
         if (elem instanceof ModuleInstanciation) {
             // do not helicopter into module instantiations
