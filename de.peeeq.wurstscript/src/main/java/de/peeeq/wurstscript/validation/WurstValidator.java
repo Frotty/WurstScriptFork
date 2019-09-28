@@ -55,12 +55,15 @@ public class WurstValidator {
             functionCount = countFunctions();
             visitedFunctions = 0;
 
+            WLogger.info("debug - Checking wurst types");
             prog.getErrorHandler().setProgress("Checking wurst types",
                     ProgressHelper.getValidatorPercent(visitedFunctions, functionCount));
+            WLogger.info("debug - walkTree");
             for (CompilationUnit cu : toCheck) {
                 walkTree(cu);
             }
             prog.getErrorHandler().setProgress("Post checks", 0.55);
+            WLogger.info("debug - postChecks");
             postChecks(toCheck);
         } catch (RuntimeException e) {
             WLogger.severe(e);
@@ -438,7 +441,7 @@ public class WurstValidator {
         if (def != e && def instanceof NativeType) {
             e.addError(
                     "The name '" + name + "' is already used as a native type in " + Utils.printPos(def.getSource()));
-        } else if (e.attrSource().getFile().endsWith(".wurst")) {
+        } else if (!e.attrSource().getFile().endsWith(".j")) {
             switch (name) {
                 case "int":
                 case "integer":
@@ -1959,7 +1962,8 @@ public class WurstValidator {
 
     private void checkBannedFunctions(ExprFunctionCall e) {
         if (e.getFuncName().equals("TriggerRegisterVariableEvent")) {
-            if (e.getArgs().get(1) instanceof ExprStringVal) {
+            WLogger.info("debug - check TriggerRegisterVariableEvent");
+            if (e.getArgs().size() > 1 && e.getArgs().get(1) instanceof ExprStringVal) {
                 ExprStringVal varName = (ExprStringVal) e.getArgs().get(1);
                 TRVEHelper.TO_KEEP.add(varName.getValS());
                 return;
