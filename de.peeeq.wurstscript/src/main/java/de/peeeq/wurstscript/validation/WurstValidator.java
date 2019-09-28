@@ -1175,10 +1175,8 @@ public class WurstValidator {
         WLogger.info("debug - checkUninitializedVars ");
         boolean isAbstract = false;
         if (f instanceof FuncDef) {
-            WLogger.info("debug - is FuncDef");
             FuncDef func = (FuncDef) f;
             if (func.attrIsAbstract()) {
-                WLogger.info("debug - isAbstract");
                 isAbstract = true;
                 if (!func.attrHasEmptyBody()) {
                     func.getBody().get(0)
@@ -1186,11 +1184,9 @@ public class WurstValidator {
                 }
             }
         }
-        WLogger.info("debug - checkUninitializedVars not abstract");
         if (!isAbstract) { // not abstract
-
             checkReturn(f);
-            WLogger.info("debug - checkUninitializedVars checked return");
+
             if (!f.getSource().getFile().endsWith("common.j")
                     && !f.getSource().getFile().endsWith("blizzard.j")
                     && !f.getSource().getFile().endsWith("war3map.j")

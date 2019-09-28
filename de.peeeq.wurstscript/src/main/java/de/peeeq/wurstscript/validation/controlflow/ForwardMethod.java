@@ -1,6 +1,5 @@
 package de.peeeq.wurstscript.validation.controlflow;
 
-import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.ast.AstElementWithBody;
 import de.peeeq.wurstscript.ast.WStatement;
 
@@ -38,7 +37,6 @@ public abstract class ForwardMethod<T, Target extends AstElementWithBody> {
 
     public void execute(Target f) {
         this.f = f;
-        WLogger.info("debug - execute forward method");
         ForwardExecution<T, Target> ex = new ForwardExecution<>(f, this);
         ex.execute();
     }
