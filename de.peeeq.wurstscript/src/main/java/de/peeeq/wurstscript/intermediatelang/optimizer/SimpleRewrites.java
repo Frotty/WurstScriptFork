@@ -215,7 +215,13 @@ public class SimpleRewrites implements OptimizerPass {
             } else if (left instanceof ImBoolVal) {
                 boolean b1 = ((ImBoolVal) left).getValB();
                 wasViable = replaceBoolTerm(opc, right, b1);
-            } else if (right instanceof ImBoolVal) {
+            } else if (left instanceof ImIntVal) {
+                int i1 = ((ImIntVal) left).getValI();
+                wasViable = replaceIntTerm(opc, right, i1);
+            } else if (right instanceof ImIntVal) {
+                int i1 = ((ImIntVal) right).getValI();
+                wasViable = replaceIntTerm(opc, left, i1);
+            }  else if (right instanceof ImBoolVal) {
                 boolean b2 = ((ImBoolVal) right).getValB();
                 wasViable = replaceBoolTerm(opc, left, b2);
             } else if (left instanceof ImIntVal && right instanceof ImIntVal) {
@@ -571,6 +577,21 @@ public class SimpleRewrites implements OptimizerPass {
                 } else {
                     expr.setParent(null);
                     opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(expr)));
+                }
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
+
+    private boolean replaceIntTerm(ImOperatorCall opc, ImExpr expr, int i1) {
+        switch (opc.getOp()) {
+            case PLUS:
+            case MINUS:
+                if (i1 == 0) {
+                    expr.setParent(null);
+                    opc.replaceBy(expr);
                 }
                 break;
             default:
