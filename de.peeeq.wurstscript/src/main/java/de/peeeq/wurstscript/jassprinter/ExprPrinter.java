@@ -41,7 +41,7 @@ public class ExprPrinter {
             valR = valR.substring(1);
         }
         if (valR.endsWith(".0") || valR.endsWith(".00")) {
-            valR = valR.substring(valR.indexOf(".") + 1);
+            valR = valR.substring(0, valR.indexOf(".") + 1);
         }
         sb.append(valR);
     }
