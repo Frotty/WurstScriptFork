@@ -109,7 +109,7 @@ public class SimpleRewrites implements OptimizerPass {
             optimizeExitwhen(imExitwhen);
         } else if (elem instanceof ImFunction) {
             ImFunction imFunction = (ImFunction) elem;
-            optimizeFunction(imFunction);
+//            optimizeFunction(imFunction);
         }
 
     }
@@ -117,6 +117,7 @@ public class SimpleRewrites implements OptimizerPass {
     private void optimizeFunction(ImFunction imFunction) {
         // if (cond) then return true else return false
         // -> return cond
+        WLogger.info("processing: " + imFunction);
         if (imFunction.getBody().size() == 2) {
             ImStmts body = imFunction.getBody();
             if (body.get(0) instanceof ImIf && body.get(1) instanceof ImReturn) {
