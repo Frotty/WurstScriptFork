@@ -484,9 +484,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             printDebugImProg("./test-output/im " + stage++ + "_afternullsetting.im");
         }
 
-        // Run a strict inliner to get rid of one-liners
-        optimizer.doStrictInline();
-
         optimizer.removeGarbage();
         imProg.flatten(imTranslator);
 

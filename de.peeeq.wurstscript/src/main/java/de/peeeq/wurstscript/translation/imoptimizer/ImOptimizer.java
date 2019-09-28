@@ -77,6 +77,9 @@ public class ImOptimizer {
             removeGarbage();
             finalItr = i;
             WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
+
+            // Run a strict inliner to get rid of one-liners
+            doStrictInline();
         }
         WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
         totalCount.forEach((k, v) -> {
@@ -156,7 +159,6 @@ public class ImOptimizer {
     }
 
     public void doStrictInline() {
-        removeGarbage();
         GlobalsInliner globalsInliner = new GlobalsInliner();
         globalsInliner.optimize(trans);
         ImInliner inliner = new ImInliner(trans);

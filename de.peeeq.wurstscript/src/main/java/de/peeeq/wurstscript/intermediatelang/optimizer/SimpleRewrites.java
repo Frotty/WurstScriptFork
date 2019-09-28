@@ -590,12 +590,13 @@ public class SimpleRewrites implements OptimizerPass {
                 if (i1 == 0) {
                     expr.setParent(null);
                     opc.replaceBy(expr);
+                    return true;
                 }
                 break;
             default:
                 return false;
         }
-        return true;
+        return false;
     }
 
     /**
