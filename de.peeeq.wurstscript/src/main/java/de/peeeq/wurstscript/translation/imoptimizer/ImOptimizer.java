@@ -75,6 +75,7 @@ public class ImOptimizer {
             });
             trans.getImProg().flatten(trans);
             removeGarbage();
+
             finalItr = i;
             WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
 
@@ -166,5 +167,6 @@ public class ImOptimizer {
         inliner.doInlining();
         trans.assertProperties();
         removeGarbage();
+        trans.getImProg().flatten(trans);
     }
 }

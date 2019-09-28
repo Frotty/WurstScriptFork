@@ -23,6 +23,7 @@ public class LocalInliner implements OptimizerPass {
                 optimizeFunc(func);
             }
         }
+        prog.flatten(trans);
         return totalLocalsInlined;
     }
 
