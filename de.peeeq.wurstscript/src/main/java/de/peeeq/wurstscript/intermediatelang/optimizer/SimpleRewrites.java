@@ -131,7 +131,7 @@ public class SimpleRewrites implements OptimizerPass {
                         if (first && !second) {
                             imIf.getCondition().setParent(null);
                             body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), imIf.getCondition()));
-                            body.remove(1).replaceBy(ImHelper.nullExpr());
+                            body.get(1).replaceBy(ImHelper.nullExpr());
                         } else if (second && !first) {
                             imIf.getCondition().setParent(null);
                             body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(imIf.getCondition()))));
