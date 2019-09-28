@@ -38,9 +38,10 @@ public class LocalInliner implements OptimizerPass {
             Collection<ImVarWrite> writes = local.attrWrites();
             Collection<ImVarRead> reads = local.attrReads();
             if (writes.size() == 1 && reads.size() == 1) {
-                ImExpr write = writes.iterator().next().getRight();
-                if (!sideEffectAnalyzer.hasSideEffects(write)) {
-                    reads.iterator().next().replaceBy(write);
+                ImExpr writeRight = writes.iterator().next().getRight();
+                if (!sideEffectAnalyzer.hasSideEffects(writeRight)) {
+                    writeRight.setParent(null);
+                    reads.iterator().next().replaceBy(writeRight);
                     totalLocalsInlined++;
                 }
             }
