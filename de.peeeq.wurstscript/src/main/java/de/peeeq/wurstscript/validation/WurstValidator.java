@@ -436,6 +436,7 @@ public class WurstValidator {
     }
 
     private void checkName(AstElementWithNameId e) {
+        WLogger.info("debug - check AstElementWithNameId ");
         String name = e.getNameId().getName();
         TypeDef def = e.lookupType(name, false);
 
@@ -1153,9 +1154,10 @@ public class WurstValidator {
     }
 
     private void visit(FuncDef func) {
+        WLogger.info("debug - visit " + func.getName());
         visitedFunctions++;
         func.getErrorHandler().setProgress(null, ProgressHelper.getValidatorPercent(visitedFunctions, functionCount));
-
+        WLogger.info("debug - check name ");
         checkFunctionName(func);
         if (func.attrIsAbstract()) {
             if (!func.attrHasEmptyBody()) {
