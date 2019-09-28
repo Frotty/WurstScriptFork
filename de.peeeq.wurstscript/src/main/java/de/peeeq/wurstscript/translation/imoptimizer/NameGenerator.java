@@ -15,9 +15,27 @@ public class NameGenerator {
     /**
      * The given charmap
      */
-    private final String charmapFirst = "lLoOiI";
-    private final String charmap = charmapFirst + "01";
-    private final String charmapMid = charmap + "_";
+    private String charmapFirst = "lLoOiI";
+    private String charmap = charmapFirst + "01";
+    private String charmapMid = charmap + "_";
+
+    public void setConfusingCharmap() {
+        String first = "lLoOiI";
+        String charmap = first + "01";
+        setCharmap(first, charmap, charmap + "_");
+    }
+
+    public void setMaxCharmap() {
+        String first = "wprojDfsWAqYcCUyMdLeGiPuxSanEtJmHBOKhQFbgvRNIXTZklV";
+        String charmap = first + "3901724568";
+        setCharmap(first, charmap, charmap + "_");
+    }
+
+    private void setCharmap(String first, String mid, String other) {
+        charmapFirst = first;
+        charmap = other;
+        charmapMid = mid;
+    }
 
     private String TEcharmap = "wurstqeiopadfghjklyxcvbnm";
     /**
