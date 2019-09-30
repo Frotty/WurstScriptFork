@@ -148,9 +148,6 @@ public class Utils {
             if (pos instanceof WPackage) {
                 return false; // code is inside package -> wurstscript code
             }
-            if (pos.getParent() == pos) {
-                break;
-            }
             pos = pos.getParent();
         }
         return true; // no package found -> jass code

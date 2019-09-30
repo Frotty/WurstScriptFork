@@ -8,6 +8,7 @@ import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Pair;
+import de.peeeq.wurstscript.validation.TRVEHelper;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,6 +63,8 @@ public class ImOptimizer {
     private int optCount = 1;
 
     public void localOptimizations() {
+        ImProg imProg = trans.imProg();
+
         totalCount.clear();
         removeGarbage();
 
@@ -69,6 +72,7 @@ public class ImOptimizer {
         for (int i = 1; i <= 10 && optCount > 0; i++) {
             optCount = 0;
             localPasses.forEach(pass -> {
+                trans.getImProg().getGlobals().forEach(global -> WLogger.info("debug - global " + global.getName()));
                 int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
@@ -122,12 +126,12 @@ public class ImOptimizer {
                         super.visit(e);
                         if (e.getLeft() instanceof ImVarAccess) {
                             ImVarAccess va = (ImVarAccess) e.getLeft();
-                            if (!trans.getReadVariables().contains(va.getVar())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if (e.getLeft() instanceof ImVarArrayAccess) {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
-                            if (!trans.getReadVariables().contains(va.getVar())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 // TODO indexes might have side effects that we need to keep
                                 List<ImExpr> exprs = va.getIndexes().removeAll();
                                 exprs.add(e.getRight());
@@ -160,8 +164,6 @@ public class ImOptimizer {
     }
 
     public void doStrictInline() {
-        GlobalsInliner globalsInliner = new GlobalsInliner();
-        globalsInliner.optimize(trans);
         ImInliner inliner = new ImInliner(trans);
         inliner.setInlineTreshold(1);
         inliner.doInlining();

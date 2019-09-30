@@ -12,18 +12,20 @@ import java.util.Collection;
 public class LocalInliner implements OptimizerPass {
     private SideEffectAnalyzer sideEffectAnalyzer;
     private int totalLocalsInlined = 0;
+    private ImProg imProg;
 
     @Override
     public int optimize(ImTranslator trans) {
-        ImProg prog = trans.getImProg();
-        this.sideEffectAnalyzer = new SideEffectAnalyzer(prog);
+        imProg = trans.getImProg();
+        this.sideEffectAnalyzer = new SideEffectAnalyzer(imProg);
         totalLocalsInlined = 0;
-        for (ImFunction func : prog.getFunctions()) {
+        trans.calculateCallRelationsAndUsedVariables();
+        for (ImFunction func : imProg.getFunctions()) {
             if (!func.isNative() && !func.isBj()) {
                 optimizeFunc(func);
             }
         }
-        prog.flatten(trans);
+        imProg.flatten(trans);
         return totalLocalsInlined;
     }
 
@@ -40,7 +42,14 @@ public class LocalInliner implements OptimizerPass {
             Collection<ImVarRead> reads = local.attrReads();
             if (writes.size() == 1 && reads.size() == 1) {
                 ImExpr writeRight = writes.iterator().next().getRight();
-                if (!sideEffectAnalyzer.hasSideEffects(writeRight)) {
+                Element nearestStmt = reads.iterator().next().getParent();
+                while (nearestStmt != null) {
+                    if (nearestStmt instanceof ImStmt) {
+                        break;
+                    }
+                    nearestStmt = nearestStmt.getParent();
+                }
+                if (!sideEffectAnalyzer.hasSideEffects(writeRight) && sideEffectAnalyzer.usedVariables(writeRight).size() == 0) {
                     writeRight.setParent(null);
                     reads.iterator().next().replaceBy(writeRight);
                     totalLocalsInlined++;
