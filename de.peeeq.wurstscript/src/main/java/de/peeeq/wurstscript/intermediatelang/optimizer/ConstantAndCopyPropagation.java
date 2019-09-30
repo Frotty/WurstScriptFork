@@ -149,6 +149,8 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
         Map<Node, Knowledge> knowledge = new HashMap<>();
 
         // initialize with empty knowledge:
+
+        WLogger.info("ControlFlowGraph: " + cfg.getNodes().size());
         for (Node n : cfg.getNodes()) {
             knowledge.put(n, new Knowledge());
         }
@@ -228,6 +230,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
             kn.varKnowledgeOut = newOut;
 
         }
+        WLogger.info("ControlFlowGraph: No TODO");
         return knowledge;
     }
 
