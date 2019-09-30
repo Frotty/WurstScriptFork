@@ -142,6 +142,7 @@ public class ImTranslator {
             sortEverything();
             return imProg;
         } catch (CompileError t) {
+            WLogger.info(t);
             throw t;
         } catch (Throwable t) {
             WLogger.severe(t);
@@ -1656,14 +1657,14 @@ public class ImTranslator {
         // TODO divide by zero to crash thread:
 
 
-//		stmts.add(JassAst.JassStmtCall("BJDebugMsg", 
+//		stmts.add(JassAst.JassStmtCall("BJDebugMsg",
 //				JassAst.JassExprlist(JassAst.JassExprBinary(
-//						JassAst.JassExprStringVal("|cffFF3A29Wurst Error:|r" + nl), 
+//						JassAst.JassExprStringVal("|cffFF3A29Wurst Error:|r" + nl),
 //						JassAst.JassOpPlus(),
 //						s.getMessage().translate(translator)))));
 //		// crash thread (divide by zero)
 //		stmts.add(JassAst.JassStmtCall("I2S", JassAst.JassExprlist(JassAst.JassExprBinary(JassAst.JassExprIntVal("1"), JassAst.JassOpDiv(), Jas
-//				               
+//
 
         List<FunctionFlag> flags = Lists.newArrayList();
 
