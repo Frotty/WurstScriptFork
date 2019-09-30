@@ -72,7 +72,7 @@ public class ImOptimizer {
         for (int i = 1; i <= 10 && optCount > 0; i++) {
             optCount = 0;
             localPasses.forEach(pass -> {
-                trans.getImProg().getGlobals().forEach(global -> WLogger.info("debug - global " + global.getName()));
+                WLogger.info("executing localopt " + pass.getName());
                 int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
@@ -164,6 +164,7 @@ public class ImOptimizer {
     }
 
     public void doStrictInline() {
+        WLogger.info("execute strict inline");
         ImInliner inliner = new ImInliner(trans);
         inliner.setInlineTreshold(1);
         inliner.doInlining();

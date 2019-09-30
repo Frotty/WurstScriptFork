@@ -19,7 +19,6 @@ public class LocalInliner implements OptimizerPass {
         imProg = trans.getImProg();
         this.sideEffectAnalyzer = new SideEffectAnalyzer(imProg);
         totalLocalsInlined = 0;
-        trans.calculateCallRelationsAndUsedVariables();
         for (ImFunction func : imProg.getFunctions()) {
             if (!func.isNative() && !func.isBj()) {
                 optimizeFunc(func);
