@@ -49,8 +49,7 @@ public class ImAttributes {
 
     public static boolean isGlobal(ImVar imVar) {
         if (TRVEHelper.TO_KEEP.contains(imVar.getName())) {
-            WLogger.info("Fix TRVE var");
-            imVar.setParent(imVar.attrProg().getGlobals());
+            return true;
         }
         Element parent = imVar.getParent();
         if (parent == null) {
