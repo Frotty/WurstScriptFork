@@ -89,7 +89,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
     }
 
     private void optimizeFunc(ImFunction func) {
-        WLogger.info("ControlFlowGraph: " + func.getName());
+        WLogger.info("ControlFlowGraph for: " + func.getName());
         ControlFlowGraph cfg = new ControlFlowGraph(func.getBody());
         WLogger.info("knowledge: " + func.getName());
         Map<Node, Knowledge> knowledge = calculateKnowledge(cfg);
@@ -146,6 +146,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
     }
 
     private Map<Node, Knowledge> calculateKnowledge(ControlFlowGraph cfg) {
+        WLogger.info("calculateKnowledge 1");
         Map<Node, Knowledge> knowledge = new HashMap<>();
 
         // initialize with empty knowledge:
@@ -154,6 +155,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
         for (Node n : cfg.getNodes()) {
             knowledge.put(n, new Knowledge());
         }
+        WLogger.info("calculateKnowledge 2");
 
         Deque<Node> todo = new ArrayDeque<>(cfg.getNodes());
 
@@ -184,7 +186,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                     }
                 }
             }
-
+            WLogger.info("calculateKnowledge 3");
             // at the output get all from the input knowledge
             HashMap<ImVar, Value> newOut = new HashMap<>(newKnowledge);
 
