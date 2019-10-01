@@ -198,7 +198,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                 if (imSet.getLeft() instanceof ImVarAccess) {
                     WLogger.info("calculateKnowledge 3.2");
                     ImVar var = ((ImVarAccess) imSet.getLeft()).getVar();
-                    if (!var.isGlobal()) {
+                    if (var != null && !var.isGlobal()) {
                         WLogger.info("calculateKnowledge 3.3");
                         Value newValue = null;
                         if (imSet.getRight() instanceof ImConst) {
@@ -228,6 +228,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                         WLogger.info("calculateKnowledge 3.8");
                         newOut.entrySet().removeIf(entry -> entry.getValue().equalValue(new Value(var)));
                     }
+                    WLogger.info("calculateKnowledge 3.9");
                 }
             }
 
