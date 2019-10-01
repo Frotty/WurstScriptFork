@@ -1,5 +1,6 @@
 package de.peeeq.wurstscript.translation.imtojass;
 
+import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.ast.Ast;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.jassIm.*;
@@ -48,8 +49,10 @@ public class ImAttributes {
     public static boolean isGlobal(ImVar imVar) {
         Element parent = imVar.getParent();
         if (parent == null) {
+            WLogger.info("Variable " + imVar + " not attached.");
             throw new RuntimeException("Variable " + imVar + " not attached.");
         }
+        WLogger.info("isGlobal");
         return parent.getParent() instanceof ImProg;
     }
 
