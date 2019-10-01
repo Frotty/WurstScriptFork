@@ -12,6 +12,8 @@ import java.io.FileNotFoundException;
  * @author Frotty
  */
 public class NameGenerator {
+    public static boolean USE_CONFUSE = false;
+    public static String CUSTOM_CHARMAP = "";
     /**
      * The given charmap
      */
@@ -21,14 +23,13 @@ public class NameGenerator {
 
     public void setConfusingCharmap() {
         String first = "lLoOiI";
-        String charmap = first + "01";
-        setCharmap(first, charmap, charmap + "_");
+        setCharmap(first, first + "01_", first  + "01");
     }
 
     public void setMaxCharmap() {
         String first = "wprojDfsWAqYcCUyMdLeGiPuxSanEtJmHBOKhQFbgvRNIXTZklV";
         String charmap = first + "3901724568";
-        setCharmap(first, charmap, charmap + "_");
+        setCharmap(first, charmap + "_", charmap);
     }
 
     private void setCharmap(String first, String mid, String other) {
@@ -64,7 +65,15 @@ public class NameGenerator {
      * @throws FileNotFoundException
      */
     public NameGenerator() {
-        setMaxCharmap();
+        if (CUSTOM_CHARMAP.length() > 0) {
+            String normalized = CUSTOM_CHARMAP.replaceAll("_", "");
+            String digits = normalized.replaceAll("\\D+","");
+            setCharmap(normalized.replaceAll("\\d+",""), normalized + digits + "_", normalized + digits);
+        } else if (USE_CONFUSE) {
+            setConfusingCharmap();
+        } else {
+            setMaxCharmap();
+        }
     }
 
     private void checkCharmap(String c) {
