@@ -169,6 +169,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
             if (!n.getPredecessors().isEmpty()) {
                 Node pred1 = n.getPredecessors().get(0);
                 Map<ImVar, Value> predKnowledgeOut = knowledge.get(pred1).varKnowledgeOut;
+                WLogger.info("calculateKnowledge 2.1 for");
                 for (Entry<ImVar, Value> e : predKnowledgeOut.entrySet()) {
                     ImVar var = e.getKey();
                     Value val = e.getValue();
@@ -222,11 +223,12 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                 }
             }
 
+            WLogger.info("calculateKnowledge 4");
             // if there are changes, revisit successors:
             if (!kn.varKnowledgeOut.equals(newOut)) {
                 todo.addAll(n.getSuccessors());
             }
-
+            WLogger.info("calculateKnowledge 5");
             // update knowledge
             kn.varKnowledge = newKnowledge;
             kn.varKnowledgeOut = newOut;
