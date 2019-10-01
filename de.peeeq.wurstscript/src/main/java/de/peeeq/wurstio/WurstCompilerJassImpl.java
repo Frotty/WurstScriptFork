@@ -410,7 +410,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         new EliminateGenerics(imTranslator2, imProg2).transform();
         printDebugImProg("./test-output/im " + stage++ + "_genericsEliminated.im");
         Optional<ImVar> udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
         // eliminate classes
         beginPhase(2, "translate classes");
 
@@ -418,7 +418,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         imTranslator2.assertProperties();
         printDebugImProg("./test-output/im " + stage++ + "_classesEliminated.im");
         udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
         new VarargEliminator(imProg2).run();
         printDebugImProg("./test-output/im " + stage++ + "_varargEliminated.im");
         imTranslator2.assertProperties();
@@ -436,7 +436,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
 
         ImOptimizer optimizer = new ImOptimizer(timeTaker, imTranslator2);
         udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
         // inliner
         if (runArgs.isInline()) {
             beginPhase(5, "inlining");
@@ -446,7 +446,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             printDebugImProg("./test-output/im " + stage++ + "_afterinline.im");
         }
         udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
         // eliminate tuples
         beginPhase(6, "eliminate tuples");
         getImProg().flatten(imTranslator2);
@@ -454,7 +454,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         getImTranslator().assertProperties(AssertProperty.NOTUPLES);
 
         udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
 
         printDebugImProg("./test-output/im " + stage++ + "_withouttuples.im");
 
@@ -469,7 +469,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         beginPhase(8, "remove cyclic functions");
         new CyclicFunctionRemover(imTranslator2, imProg2).work();
         udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
         printDebugImProg("./test-output/im " + stage++ + "_nocyc.im");
 
         // flatten
@@ -479,7 +479,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
 
         printDebugImProg("./test-output/im " + stage++ + "_flat.im");
         udg_damageEvent = getImProg().getGlobals().stream().filter(global -> global.getName().equals("udg_DamageEvent")).findFirst();
-        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + imVar.getParent()));
+        udg_damageEvent.ifPresent(imVar -> WLogger.info("udg_damageEvent.parent: " + (imVar.getParent() != null)));
         if (runArgs.isLocalOptimizations()) {
             beginPhase(10, "local optimizations");
             optimizer.localOptimizations();
