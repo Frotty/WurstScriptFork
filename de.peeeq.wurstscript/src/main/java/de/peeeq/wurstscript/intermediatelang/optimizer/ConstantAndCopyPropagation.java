@@ -21,7 +21,6 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
 
         totalPropagated = 0;
         for (ImFunction func : prog.getFunctions()) {
-            WLogger.info("optimize: " + func.getName());
             optimizeFunc(func);
         }
         return totalPropagated;
@@ -147,7 +146,6 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
 
         // initialize with empty knowledge:
 
-        WLogger.info("ControlFlowGraph: " + cfg.getNodes().size());
         for (Node n : cfg.getNodes()) {
             knowledge.put(n, new Knowledge());
         }

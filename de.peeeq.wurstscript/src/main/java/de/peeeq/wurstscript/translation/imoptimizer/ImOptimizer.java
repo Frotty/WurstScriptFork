@@ -63,10 +63,9 @@ public class ImOptimizer {
     private int optCount = 1;
 
     public void localOptimizations() {
-        ImProg imProg = trans.imProg();
-
         totalCount.clear();
         removeGarbage();
+        trans.getImProg().flatten(trans);
 
         int finalItr = 0;
         for (int i = 1; i <= 10 && optCount > 0; i++) {
@@ -127,13 +126,11 @@ public class ImOptimizer {
                         if (e.getLeft() instanceof ImVarAccess) {
                             ImVarAccess va = (ImVarAccess) e.getLeft();
                             if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
-                                WLogger.info("replace gb getVar name: " + va.getVar().getName());
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if (e.getLeft() instanceof ImVarArrayAccess) {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
                             if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
-                                WLogger.info("replace gb getVar name: " + va.getVar().getName());
                                 // TODO indexes might have side effects that we need to keep
                                 List<ImExpr> exprs = va.getIndexes().removeAll();
                                 exprs.add(e.getRight());
