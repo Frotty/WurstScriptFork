@@ -7,6 +7,7 @@ import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlag;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagCompiletime;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum;
+import de.peeeq.wurstscript.validation.TRVEHelper;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -47,6 +48,10 @@ public class ImAttributes {
 
 
     public static boolean isGlobal(ImVar imVar) {
+        if (TRVEHelper.TO_KEEP.contains(imVar.getName())) {
+            WLogger.info("Fix TRVE var");
+            imVar.setParent(imVar.attrProg().getGlobals());
+        }
         Element parent = imVar.getParent();
         if (parent == null) {
             WLogger.info("Variable " + imVar + " not attached.");
