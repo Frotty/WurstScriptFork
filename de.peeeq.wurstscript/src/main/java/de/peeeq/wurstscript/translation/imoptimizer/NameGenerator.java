@@ -35,6 +35,12 @@ public class NameGenerator {
         charmapFirst = first;
         charmap = other;
         charmapMid = mid;
+        checkCharmap(charmapFirst);
+        checkCharmap(charmap);
+        checkCharmap(charmapMid);
+        length = charmap.length();
+        lengthMid = charmapMid.length();
+        lengthFirst = charmapFirst.length();
     }
 
     private String TEcharmap = "wurstqeiopadfghjklyxcvbnm";
@@ -58,12 +64,7 @@ public class NameGenerator {
      * @throws FileNotFoundException
      */
     public NameGenerator() {
-        checkCharmap(charmapFirst);
-        checkCharmap(charmap);
-        checkCharmap(charmapMid);
-        length = charmap.length();
-        lengthMid = charmapMid.length();
-        lengthFirst = charmapFirst.length();
+        setMaxCharmap();
     }
 
     private void checkCharmap(String c) {

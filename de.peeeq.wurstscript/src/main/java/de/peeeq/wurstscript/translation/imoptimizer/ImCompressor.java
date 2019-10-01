@@ -15,7 +15,6 @@ public class ImCompressor {
     public ImCompressor(ImTranslator translator) {
         this.prog = translator.getImProg();
         ng = new NameGenerator();
-        ng.setMaxCharmap();
     }
 
     public void compressNames() {
