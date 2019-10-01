@@ -1961,6 +1961,7 @@ public class WurstValidator {
             if (e.getArgs().size() > 1 && e.getArgs().get(1) instanceof ExprStringVal) {
                 ExprStringVal varName = (ExprStringVal) e.getArgs().get(1);
                 TRVEHelper.TO_KEEP.add(varName.getValS());
+                WLogger.info("keep: " + varName.getValS());
                 return;
             } else {
                 e.addError("Map contains TriggerRegisterVariableEvent with non-constant arguments. Can't be optimized.");

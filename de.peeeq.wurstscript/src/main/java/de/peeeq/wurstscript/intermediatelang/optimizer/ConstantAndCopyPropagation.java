@@ -89,11 +89,8 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
     }
 
     private void optimizeFunc(ImFunction func) {
-        WLogger.info("ControlFlowGraph for: " + func.getName());
         ControlFlowGraph cfg = new ControlFlowGraph(func.getBody());
-        WLogger.info("knowledge: " + func.getName());
         Map<Node, Knowledge> knowledge = calculateKnowledge(cfg);
-        WLogger.info("rewriteCode: " + func.getName());
         rewriteCode(cfg, knowledge);
     }
 
@@ -146,7 +143,6 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
     }
 
     private Map<Node, Knowledge> calculateKnowledge(ControlFlowGraph cfg) {
-        WLogger.info("calculateKnowledge 1");
         Map<Node, Knowledge> knowledge = new HashMap<>();
 
         // initialize with empty knowledge:
@@ -155,7 +151,6 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
         for (Node n : cfg.getNodes()) {
             knowledge.put(n, new Knowledge());
         }
-        WLogger.info("calculateKnowledge 2");
 
         Deque<Node> todo = new ArrayDeque<>(cfg.getNodes());
 
@@ -169,7 +164,6 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
             if (!n.getPredecessors().isEmpty()) {
                 Node pred1 = n.getPredecessors().get(0);
                 Map<ImVar, Value> predKnowledgeOut = knowledge.get(pred1).varKnowledgeOut;
-                WLogger.info("calculateKnowledge 2.1 for");
                 for (Entry<ImVar, Value> e : predKnowledgeOut.entrySet()) {
                     ImVar var = e.getKey();
                     Value val = e.getValue();
@@ -187,34 +181,26 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                     }
                 }
             }
-            WLogger.info("calculateKnowledge 3");
             // at the output get all from the input knowledge
             HashMap<ImVar, Value> newOut = new HashMap<>(newKnowledge);
 
             ImStmt stmt = n.getStmt();
             if (stmt instanceof ImSet) {
-                WLogger.info("calculateKnowledge 3.1");
                 ImSet imSet = (ImSet) stmt;
                 if (imSet.getLeft() instanceof ImVarAccess) {
-                    WLogger.info("calculateKnowledge 3.2");
                     ImVar var = ((ImVarAccess) imSet.getLeft()).getVar();
-                    WLogger.info("calculateKnowledge 3.2.1");
                     if (var != null && !var.isGlobal()) {
-                        WLogger.info("calculateKnowledge 3.3");
                         Value newValue = null;
                         if (imSet.getRight() instanceof ImConst) {
-                            WLogger.info("calculateKnowledge 3.4");
                             ImConst imConst = (ImConst) imSet.getRight();
                             newValue = new Value(imConst);
                         } else if (imSet.getRight() instanceof ImVarAccess) {
-                            WLogger.info("calculateKnowledge 3.5");
                             ImVarAccess imVarAccess = (ImVarAccess) imSet.getRight();
                             if (!imVarAccess.getVar().isGlobal()) {
                                 newValue = new Value(imVarAccess.getVar());
                             }
                         }
                         if (newValue == null) {
-                            WLogger.info("calculateKnowledge 3.6");
                             // invalidate old value
                             newOut.remove(var);
                         } else {
@@ -226,25 +212,20 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                         // x = a; [x->a]
                         // y = b; [x->a, y->b]
                         // a = 5; [y->b, a->5] // here [x->a] has been invalidated
-                        WLogger.info("calculateKnowledge 3.8");
                         newOut.entrySet().removeIf(entry -> entry.getValue().equalValue(new Value(var)));
                     }
-                    WLogger.info("calculateKnowledge 3.9");
                 }
             }
 
-            WLogger.info("calculateKnowledge 4");
             // if there are changes, revisit successors:
             if (!kn.varKnowledgeOut.equals(newOut)) {
                 todo.addAll(n.getSuccessors());
             }
-            WLogger.info("calculateKnowledge 5");
             // update knowledge
             kn.varKnowledge = newKnowledge;
             kn.varKnowledgeOut = newOut;
 
         }
-        WLogger.info("ControlFlowGraph: No TODO");
         return knowledge;
     }
 

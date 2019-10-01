@@ -1,6 +1,7 @@
 package de.peeeq.wurstscript.translation.imoptimizer;
 
 import com.google.common.collect.Sets;
+import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
@@ -34,6 +35,7 @@ public class GlobalsInliner implements OptimizerPass {
             }
             if (TRVEHelper.TO_KEEP.contains(v.getName()) || v.getType() instanceof ImStringVal) {
                 // keep TRVE vars and don't inline string constants
+                WLogger.info("Globals inliner TRVE");
                 continue;
             }
 

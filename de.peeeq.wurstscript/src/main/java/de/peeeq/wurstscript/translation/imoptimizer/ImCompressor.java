@@ -1,5 +1,6 @@
 package de.peeeq.wurstscript.translation.imoptimizer;
 
+import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.jassIm.ImFunction;
 import de.peeeq.wurstscript.jassIm.ImProg;
 import de.peeeq.wurstscript.jassIm.ImVar;
@@ -28,6 +29,7 @@ public class ImCompressor {
             if (global.getIsBJ() || TRVEHelper.TO_KEEP.contains(global.getName())) {
                 // do not rename bj constants
                 // do not rename TRVE vars
+                WLogger.info("compressGlobals TRVE");
                 continue;
             }
 
