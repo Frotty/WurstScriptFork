@@ -41,6 +41,7 @@ import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.types.*;
 import de.peeeq.wurstscript.utils.Pair;
 import de.peeeq.wurstscript.utils.Utils;
+import de.peeeq.wurstscript.validation.TRVEHelper;
 import de.peeeq.wurstscript.validation.WurstValidator;
 import org.eclipse.jdt.annotation.Nullable;
 import org.jetbrains.annotations.NotNull;
@@ -1021,10 +1022,11 @@ public class ImTranslator {
         calculateCallRelations(getMainFunc());
         calculateCallRelations(getConfFunc());
 
-//		WLogger.info("USED FUNCS:");
-//		for (ImFunction f : usedFunctions) {
-//			WLogger.info("	" + f.getName());
-//		}
+        imProg.getGlobals().forEach(global -> {
+            if (TRVEHelper.TO_KEEP.contains(global.getName())) {
+                getReadVariables().add(global);
+            }
+        });
     }
 
     private void calculateCallRelations(ImFunction f) {
