@@ -671,8 +671,10 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                 throw new Error("Could not move war3map.j from " + tempFile + " to " + wurstwar3map);
             }
         } catch (RuntimeException e) {
+            WLogger.warning("RTE: ", e);
             throw e;
         } catch (Exception e) {
+            WLogger.warning("Exception: ", e);
             throw new Error(e);
         }
 

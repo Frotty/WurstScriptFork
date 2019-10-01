@@ -198,6 +198,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                 if (imSet.getLeft() instanceof ImVarAccess) {
                     WLogger.info("calculateKnowledge 3.2");
                     ImVar var = ((ImVarAccess) imSet.getLeft()).getVar();
+                    WLogger.info("calculateKnowledge 3.2.1");
                     if (var != null && !var.isGlobal()) {
                         WLogger.info("calculateKnowledge 3.3");
                         Value newValue = null;
