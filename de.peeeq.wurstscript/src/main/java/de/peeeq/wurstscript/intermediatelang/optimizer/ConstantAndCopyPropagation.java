@@ -1,6 +1,5 @@
 package de.peeeq.wurstscript.intermediatelang.optimizer;
 
-import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.intermediatelang.optimizer.ControlFlowGraph.Node;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
@@ -202,7 +201,6 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             // invalidate old value
                             newOut.remove(var);
                         } else {
-                            WLogger.info("calculateKnowledge 3.7");
                             newOut.put(var, newValue);
                         }
                         // invalidate copies of the lhs
