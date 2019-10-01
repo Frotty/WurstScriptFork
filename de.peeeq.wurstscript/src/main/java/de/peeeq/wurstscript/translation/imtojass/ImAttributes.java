@@ -56,7 +56,6 @@ public class ImAttributes {
             WLogger.info("Variable " + imVar + " not attached.");
             throw new RuntimeException("Variable " + imVar + " not attached.");
         }
-        WLogger.info("isGlobal");
         return parent.getParent() instanceof ImProg;
     }
 
