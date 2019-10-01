@@ -193,24 +193,31 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
 
             ImStmt stmt = n.getStmt();
             if (stmt instanceof ImSet) {
+                WLogger.info("calculateKnowledge 3.1");
                 ImSet imSet = (ImSet) stmt;
                 if (imSet.getLeft() instanceof ImVarAccess) {
+                    WLogger.info("calculateKnowledge 3.2");
                     ImVar var = ((ImVarAccess) imSet.getLeft()).getVar();
                     if (!var.isGlobal()) {
+                        WLogger.info("calculateKnowledge 3.3");
                         Value newValue = null;
                         if (imSet.getRight() instanceof ImConst) {
+                            WLogger.info("calculateKnowledge 3.4");
                             ImConst imConst = (ImConst) imSet.getRight();
                             newValue = new Value(imConst);
                         } else if (imSet.getRight() instanceof ImVarAccess) {
+                            WLogger.info("calculateKnowledge 3.5");
                             ImVarAccess imVarAccess = (ImVarAccess) imSet.getRight();
                             if (!imVarAccess.getVar().isGlobal()) {
                                 newValue = new Value(imVarAccess.getVar());
                             }
                         }
                         if (newValue == null) {
+                            WLogger.info("calculateKnowledge 3.6");
                             // invalidate old value
                             newOut.remove(var);
                         } else {
+                            WLogger.info("calculateKnowledge 3.7");
                             newOut.put(var, newValue);
                         }
                         // invalidate copies of the lhs
@@ -218,6 +225,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                         // x = a; [x->a]
                         // y = b; [x->a, y->b]
                         // a = 5; [y->b, a->5] // here [x->a] has been invalidated
+                        WLogger.info("calculateKnowledge 3.8");
                         newOut.entrySet().removeIf(entry -> entry.getValue().equalValue(new Value(var)));
                     }
                 }
