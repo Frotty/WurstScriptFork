@@ -67,8 +67,7 @@ public class NameGenerator {
     public NameGenerator() {
         if (CUSTOM_CHARMAP.length() > 0) {
             String normalized = CUSTOM_CHARMAP.replaceAll("_", "");
-            String digits = normalized.replaceAll("\\D+","");
-            setCharmap(normalized.replaceAll("\\d+",""), normalized + digits + "_", normalized + digits);
+            setCharmap(normalized.replaceAll("\\d+",""), normalized + "_", normalized);
         } else if (USE_CONFUSE) {
             setConfusingCharmap();
         } else {
