@@ -4,4 +4,5 @@ import java.util.HashSet;
 
 public class TRVEHelper {
     public static final HashSet<String> TO_KEEP = new HashSet<>();
+    public static final HashSet<String> WRAPPERS = new HashSet<>();
 }
