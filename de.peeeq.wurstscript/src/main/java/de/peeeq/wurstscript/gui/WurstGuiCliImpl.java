@@ -1,5 +1,6 @@
 package de.peeeq.wurstscript.gui;
 
+import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.attributes.CompileError;
 
 /**
@@ -11,6 +12,7 @@ public class WurstGuiCliImpl extends WurstGui {
     @Override
     public void sendError(CompileError err) {
         super.sendError(err);
+        WLogger.warning("Error: ", err);
     }
 
     @Override
