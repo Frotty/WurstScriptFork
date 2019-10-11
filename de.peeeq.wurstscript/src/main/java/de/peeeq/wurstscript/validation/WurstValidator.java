@@ -2016,7 +2016,6 @@ public class WurstValidator {
                 String exFunc = s.getValS();
                 Collection<FuncLink> funcs = e.lookupFuncs(exFunc);
                 if (funcs.isEmpty()) {
-                    e.setParent(null);
                     return;
                 }
                 if (funcs.size() > 1) {
