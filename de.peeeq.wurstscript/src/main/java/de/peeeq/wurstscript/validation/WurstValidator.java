@@ -84,7 +84,7 @@ public class WurstValidator {
         ValidateClassMemberUsage.checkClassMembers(toCheck);
 
         TRVEHelper.WRAPPERS.forEach(wrapper -> {
-            calls.get(wrapper).forEach(call -> {
+            calls.getOrDefault(wrapper, new HashSet<>()).forEach(call -> {
                 if (call.getArgs().size() > 1 && call.getArgs().get(1) instanceof ExprStringVal) {
                     ExprStringVal varName = (ExprStringVal) call.getArgs().get(1);
                     TRVEHelper.TO_KEEP.add(varName.getValS());
