@@ -89,6 +89,8 @@ public class ImOptimizer {
         totalCount.forEach((k, v) -> {
             WLogger.info("== " + k + ":   " + v);
         });
+
+        InitFunctionCleaner.clean(trans.getImProg());
     }
 
     public void doNullsetting() {

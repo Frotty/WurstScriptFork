@@ -22,9 +22,7 @@ import de.peeeq.wurstscript.jassIm.ImProg;
 import de.peeeq.wurstscript.jassinterpreter.TestFailException;
 import de.peeeq.wurstscript.jassinterpreter.TestSuccessException;
 import de.peeeq.wurstscript.jassprinter.JassPrinter;
-import de.peeeq.wurstscript.translation.lua.translation.LuaTranslator;
 import de.peeeq.wurstscript.luaAst.LuaCompilationUnit;
-import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Utils;
 import org.testng.Assert;
 
@@ -59,7 +57,7 @@ public class WurstScriptTest {
         private List<CU> additionalCompilationUnits = new ArrayList<>();
         private boolean stopOnFirstError = true;
         private boolean runCompiletimeFunctions;
-        private boolean testLua = true;
+        private boolean testLua = false;
 
         TestConfig(String name) {
             this.name = name;
@@ -445,7 +443,6 @@ public class WurstScriptTest {
                                   boolean executeTests, WurstGui gui, WurstCompilerJassImpl compiler,
                                   WurstModel model, boolean executeProgOnlyAfterTransforms) throws Error {
         ImProg imProg = compiler.translateProgToIm(model);
-
 
         if (gui.getErrorCount() > 0) {
             throw gui.getErrorList().get(0);

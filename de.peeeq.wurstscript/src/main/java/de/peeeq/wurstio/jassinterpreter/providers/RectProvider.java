@@ -4,7 +4,6 @@ import de.peeeq.wurstio.jassinterpreter.mocks.RectMock;
 import de.peeeq.wurstscript.intermediatelang.ILconstReal;
 import de.peeeq.wurstscript.intermediatelang.IlConstHandle;
 import de.peeeq.wurstscript.intermediatelang.interpreter.AbstractInterpreter;
-import de.peeeq.wurstscript.intermediatelang.interpreter.ILInterpreter;
 
 public class RectProvider extends Provider {
 
@@ -22,12 +21,12 @@ public class RectProvider extends Provider {
 
     public ILconstReal GetRectCenterX(IlConstHandle rect) {
         RectMock rectMock = (RectMock) rect.getObj();
-        return new ILconstReal((rectMock.minx.getVal() + rectMock.maxx.getVal() / 2.0));
+        return new ILconstReal((rectMock.maxx.getVal() - rectMock.minx.getVal()) / 2.0);
     }
 
     public ILconstReal GetRectCenterY(IlConstHandle rect) {
         RectMock rectMock = (RectMock) rect.getObj();
-        return new ILconstReal((rectMock.miny.getVal() + rectMock.maxy.getVal() / 2.0));
+        return new ILconstReal((rectMock.maxy.getVal() - rectMock.miny.getVal()) / 2.0);
     }
 
     public ILconstReal GetRectMinX(IlConstHandle rect) {
@@ -50,4 +49,19 @@ public class RectProvider extends Provider {
         return rectMock.maxy;
     }
 
+    public void SetRect(IlConstHandle rect, ILconstReal minx, ILconstReal miny, ILconstReal maxx, ILconstReal maxy) {
+        RectMock rectMock = (RectMock) rect.getObj();
+        rectMock.maxx = maxx;
+        rectMock.maxy = maxy;
+        rectMock.minx = minx;
+        rectMock.miny = miny;
+    }
+
+    public void MoveRectTo(IlConstHandle rect, ILconstReal newCenterX, ILconstReal newCenterY) {
+        RectMock rectMock = (RectMock) rect.getObj();
+        rectMock.minx = new ILconstReal(newCenterX.getVal() - (rectMock.getWidth() / 2.));
+        rectMock.maxx = new ILconstReal(newCenterX.getVal() + (rectMock.getWidth() / 2.));
+        rectMock.miny = new ILconstReal(newCenterY.getVal() - (rectMock.getHeight() / 2.));
+        rectMock.maxy = new ILconstReal(newCenterY.getVal() + (rectMock.getHeight() / 2.));
+    }
 }
