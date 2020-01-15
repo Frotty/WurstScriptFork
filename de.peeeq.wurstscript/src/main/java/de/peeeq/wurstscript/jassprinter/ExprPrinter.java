@@ -44,22 +44,21 @@ public class ExprPrinter {
     }
 
     public static void print(JassExprRealVal e, StringBuilder sb, boolean withSpace) {
-        sb.append(e.getValR());
-//        String valR = e.getValR();
-//        if (valR.startsWith("0.") && valR.length() > 2) {
-//            valR = valR.substring(1);
-//        }
-//        if (valR.length() > 2 && (valR.endsWith(".0"))) {
-//            valR = valR.substring(0, valR.indexOf(".") + 1);
-//        }
-//        if (valR.endsWith(".00")) {
-//            if (valR.length() > 3 ) {
-//                valR = valR.substring(0, valR.indexOf(".") + 1);
-//            } else {
-//                valR = ".0";
-//            }
-//        }
-//        sb.append(valR);
+        String valR = e.getValR();
+        if (valR.startsWith("0.") && valR.length() > 2) {
+            valR = valR.substring(1);
+        }
+        if (valR.length() > 2 && (valR.endsWith(".0"))) {
+            valR = valR.substring(0, valR.indexOf(".") + 1);
+        }
+        if (valR.endsWith(".00")) {
+            if (valR.length() > 3 ) {
+                valR = valR.substring(0, valR.indexOf(".") + 1);
+            } else {
+                valR = ".0";
+            }
+        }
+        sb.append(valR);
     }
 
     public static void print(JassExprStringVal e, StringBuilder sb, boolean withSpace) {
