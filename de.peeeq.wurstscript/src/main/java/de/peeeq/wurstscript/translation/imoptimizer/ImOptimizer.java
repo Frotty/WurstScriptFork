@@ -84,14 +84,14 @@ public class ImOptimizer {
             WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
 
             // Run a strict inliner to get rid of one-liners
-            doStrictInline();
+//            doStrictInline();
         }
         WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
         totalCount.forEach((k, v) -> {
             WLogger.info("== " + k + ":   " + v);
         });
 
-        InitFunctionCleaner.clean(trans.getImProg());
+//        InitFunctionCleaner.clean(trans.getImProg());
     }
 
     public void doNullsetting() {
