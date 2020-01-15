@@ -23,15 +23,15 @@ public class ImOptimizer {
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
 
     static {
-//        localPasses.add(new SimpleRewrites());
+        localPasses.add(new SimpleRewrites());
         localPasses.add(new ConstantAndCopyPropagation());
         localPasses.add(new UselessFunctionCallsRemover());
         localPasses.add(new GlobalsInliner());
         localPasses.add(new BranchMerger());
-//        localPasses.add(new SimpleRewrites());
+        localPasses.add(new SimpleRewrites());
         localPasses.add(new TempMerger());
         localPasses.add(new LocalMerger());
-//        localPasses.add(new LocalInliner());
+        localPasses.add(new LocalInliner());
     }
 
 
@@ -84,14 +84,14 @@ public class ImOptimizer {
             WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
 
             // Run a strict inliner to get rid of one-liners
-//            doStrictInline();
+            doStrictInline();
         }
         WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
         totalCount.forEach((k, v) -> {
             WLogger.info("== " + k + ":   " + v);
         });
 
-//        InitFunctionCleaner.clean(trans.getImProg());
+        InitFunctionCleaner.clean(trans.getImProg());
     }
 
     public void doNullsetting() {

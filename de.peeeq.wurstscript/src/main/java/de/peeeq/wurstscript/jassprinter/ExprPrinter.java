@@ -18,24 +18,17 @@ public class ExprPrinter {
     }
 
     public static void print(JassExprIntVal e, StringBuilder sb, boolean withSpace) {
-        String val = String.valueOf(e.getValI());
-
-        // Disabled due digitbug
-//		if(!withSpace) {
-//			val = intShort(val);
-//		}
-
-        sb.append(val);
-//        int i = Integer.parseInt(e.getValI());
-//        if (i < 0) {
-//            sb.append("-");
-//        }
-//        if (Math.abs(i) > 99) {
-//            sb.append("$")
-//                .append(Integer.toHexString(i).replace("-", ""));
-//        } else {
-//            sb.append(("" + i).replace("-", ""));
-//        }
+        int i = Integer.parseInt(e.getValI());
+        if (i < 0) {
+            sb.append("-");
+        }
+        int abs = Math.abs(i);
+        if (abs > 99) {
+            sb.append("$")
+                .append(Integer.toHexString(abs).replace("-", ""));
+        } else {
+            sb.append(("" + i).replace("-", ""));
+        }
     }
 
 
