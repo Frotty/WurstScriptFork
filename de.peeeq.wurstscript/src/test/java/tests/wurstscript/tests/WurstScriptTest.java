@@ -64,12 +64,15 @@ public class WurstScriptTest {
         }
 
         TestConfig withStdLib() {
-            this.withStdLib = true;
-            return this;
+            return withStdLib(true);
         }
 
         TestConfig withStdLib(boolean b) {
             this.withStdLib = b;
+            if (withStdLib) {
+                // stdlib needs compiletime functions
+                this.runCompiletimeFunctions = true;
+            }
             return this;
         }
 
@@ -453,7 +456,7 @@ public class WurstScriptTest {
         if (!executeProgOnlyAfterTransforms) {
             // we want to test that the interpreter works correctly before transforming the program in the translation step
             if (executeTests) {
-                executeTests(gui, imProg);
+                executeTests(gui, compiler.getImTranslator(), imProg);
             }
             if (executeProg) {
                 executeImProg(gui, imProg);
@@ -468,7 +471,7 @@ public class WurstScriptTest {
         }
 
         if (executeTests) {
-            executeTests(gui, imProg);
+            executeTests(gui, compiler.getImTranslator(), imProg);
         }
         if (executeProg) {
             executeImProg(gui, imProg);
@@ -560,9 +563,9 @@ public class WurstScriptTest {
         throw new Error("Succeed function not called");
     }
 
-    private void executeTests(WurstGui gui, ImProg imProg) {
+    private void executeTests(WurstGui gui, ImTranslator translator, ImProg imProg) {
         RunTests runTests = new RunTests(null, 0, 0, null);
-        RunTests.TestResult res = runTests.runTests(imProg, null, null);
+        RunTests.TestResult res = runTests.runTests(translator, imProg, null, null);
         if (res.getPassedTests() < res.getTotalTests()) {
             throw new Error("tests failed: " + res.getPassedTests() + " / " + res.getTotalTests() + "\n" +
                     gui.getErrors());

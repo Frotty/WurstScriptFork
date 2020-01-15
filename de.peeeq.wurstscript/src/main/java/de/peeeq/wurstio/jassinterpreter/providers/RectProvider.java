@@ -21,12 +21,12 @@ public class RectProvider extends Provider {
 
     public ILconstReal GetRectCenterX(IlConstHandle rect) {
         RectMock rectMock = (RectMock) rect.getObj();
-        return new ILconstReal((rectMock.maxx.getVal() - rectMock.minx.getVal()) / 2.0);
+        return new ILconstReal((rectMock.minx.getVal() + rectMock.maxx.getVal()) / 2.0);
     }
 
     public ILconstReal GetRectCenterY(IlConstHandle rect) {
         RectMock rectMock = (RectMock) rect.getObj();
-        return new ILconstReal((rectMock.maxy.getVal() - rectMock.miny.getVal()) / 2.0);
+        return new ILconstReal((rectMock.miny.getVal() + rectMock.maxy.getVal()) / 2.0);
     }
 
     public ILconstReal GetRectMinX(IlConstHandle rect) {
@@ -59,9 +59,12 @@ public class RectProvider extends Provider {
 
     public void MoveRectTo(IlConstHandle rect, ILconstReal newCenterX, ILconstReal newCenterY) {
         RectMock rectMock = (RectMock) rect.getObj();
-        rectMock.minx = new ILconstReal(newCenterX.getVal() - (rectMock.getWidth() / 2.));
-        rectMock.maxx = new ILconstReal(newCenterX.getVal() + (rectMock.getWidth() / 2.));
-        rectMock.miny = new ILconstReal(newCenterY.getVal() - (rectMock.getHeight() / 2.));
-        rectMock.maxy = new ILconstReal(newCenterY.getVal() + (rectMock.getHeight() / 2.));
+        double hwidth = rectMock.getWidth() / 2.;
+        double hheight = rectMock.getHeight() / 2.;
+        rectMock.minx = new ILconstReal(newCenterX.getVal() - hwidth);
+        rectMock.maxx = new ILconstReal(newCenterX.getVal() + hwidth);
+        rectMock.miny = new ILconstReal(newCenterY.getVal() - hheight);
+        rectMock.maxy = new ILconstReal(newCenterY.getVal() + hheight);
     }
+
 }
