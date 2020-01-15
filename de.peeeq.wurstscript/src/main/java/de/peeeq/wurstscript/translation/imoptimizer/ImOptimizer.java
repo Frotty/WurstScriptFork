@@ -23,12 +23,12 @@ public class ImOptimizer {
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
 
     static {
-        localPasses.add(new SimpleRewrites());
+//        localPasses.add(new SimpleRewrites());
         localPasses.add(new ConstantAndCopyPropagation());
         localPasses.add(new UselessFunctionCallsRemover());
         localPasses.add(new GlobalsInliner());
         localPasses.add(new BranchMerger());
-        localPasses.add(new SimpleRewrites());
+//        localPasses.add(new SimpleRewrites());
         localPasses.add(new TempMerger());
         localPasses.add(new LocalMerger());
         localPasses.add(new LocalInliner());
