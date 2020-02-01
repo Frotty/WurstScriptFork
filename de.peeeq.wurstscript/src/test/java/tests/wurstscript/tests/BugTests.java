@@ -1365,4 +1365,34 @@ public class BugTests extends WurstScriptTest {
         );
     }
 
+    @Test
+    public void executeFuncWithStackTrace() {
+        testAssertOkLines(true,
+            "package Test",
+            "native testSuccess()",
+            "@extern native ExecuteFunc(string f)",
+            "function getStackTraceString() returns string",
+            "    return \"foo\"",
+            "class A",
+            "    function bar()",
+            "        testSuccess()",
+            "A a = new A",
+            "function foo()",
+            "    a.bar()", // calling a function to ensure stacktraces are needed
+            "init",
+            "    ExecuteFunc(\"foo\")"
+        );
+    }
+
+    @Test
+    public void agentTypeComparisonsWurst() {
+        testAssertErrorsLinesWithStdLib(true, "Cannot compare types sound with rect",
+            "package Test",
+            "function compare(sound s, rect r) returns boolean",
+            "    return s == r",
+            "init",
+            "    compare(null, null)"
+        );
+    }
+
 }

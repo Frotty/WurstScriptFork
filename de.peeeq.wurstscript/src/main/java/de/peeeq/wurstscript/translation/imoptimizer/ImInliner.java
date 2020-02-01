@@ -216,7 +216,7 @@ public class ImInliner {
     }
 
     private boolean shouldInline(ImFunctionCall call, ImFunction f) {
-        if (f.isNative()) {
+        if (f.isNative() || call.getCallType() == CallType.EXECUTE) {
             return false;
         }
 
