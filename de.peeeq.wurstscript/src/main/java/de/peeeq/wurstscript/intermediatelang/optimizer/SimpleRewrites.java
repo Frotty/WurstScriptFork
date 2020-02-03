@@ -216,16 +216,18 @@ public class SimpleRewrites implements OptimizerPass {
                 boolean b1 = ((ImBoolVal) left).getValB();
                 wasViable = replaceBoolTerm(opc, right, b1);
             } else if (left instanceof ImIntVal) {
-                int i1 = ((ImIntVal) left).getValI();
-                wasViable = replaceIntTerm(opc, right, i1);
+                if (right instanceof ImIntVal) {
+                    wasViable = optimizeIntInt(opc, wasViable, (ImIntVal) left, (ImIntVal) right);
+                } else {
+                    int i1 = ((ImIntVal) left).getValI();
+                    wasViable = replaceIntTerm(opc, right, i1);
+                }
             } else if (right instanceof ImIntVal) {
                 int i1 = ((ImIntVal) right).getValI();
                 wasViable = replaceIntTerm(opc, left, i1);
             }  else if (right instanceof ImBoolVal) {
                 boolean b2 = ((ImBoolVal) right).getValB();
                 wasViable = replaceBoolTerm(opc, left, b2);
-            } else if (left instanceof ImIntVal && right instanceof ImIntVal) {
-                wasViable = optimizeIntInt(opc, wasViable, (ImIntVal) left, (ImIntVal) right);
             } else if (left instanceof ImRealVal && right instanceof ImRealVal) {
                 wasViable = optimizeRealReal(opc, wasViable, (ImRealVal) left, (ImRealVal) right);
             } else if (right instanceof ImStringVal) {
@@ -586,10 +588,16 @@ public class SimpleRewrites implements OptimizerPass {
     private boolean replaceIntTerm(ImOperatorCall opc, ImExpr expr, int i1) {
         switch (opc.getOp()) {
             case PLUS:
-            case MINUS:
                 if (i1 == 0) {
                     expr.setParent(null);
                     opc.replaceBy(expr);
+                    return true;
+                }
+                break;
+            case MINUS:
+                if (i1 == 0) {
+                    expr.setParent(null);
+                    opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.UNARY_MINUS, JassIm.ImExprs(expr)));
                     return true;
                 }
                 break;
