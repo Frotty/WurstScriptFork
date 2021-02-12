@@ -27,8 +27,11 @@ import java.util.regex.Pattern
 mainClassName = "de.peeeq.wurstio.Main"
 version = "1.8.1.0"
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(8))
+    }
+}
 
 jacoco {
     toolVersion = "0.8.5"
@@ -40,10 +43,10 @@ jacocoTestReport {
     }
 
     afterEvaluate {
-        classDirectories = files(classDirectories.files.collect {
+        classDirectories.setFrom(files(classDirectories.files.collect {
             fileTree(dir: it,
                     exclude: ['**/ast/**', '**/jassAst/**', '**/jassIm/**', '**/luaAst/**', '**/antlr/**'])
-        })
+        }))
     }
 }
 
@@ -71,7 +74,7 @@ repositories {
 dependencies {
 
     // Antlr parsing library
-    antlr "org.antlr:antlr4:4.7"
+    antlr "org.antlr:antlr4:4.9"
 
     // tool for generating AST-classes
     compileOnly 'com.github.peterzeller:abstractsyntaxgen:3510802026'
@@ -81,13 +84,13 @@ dependencies {
     testCompile group: 'org.hamcrest', name: 'hamcrest-all', version: '1.3'
 
     // Google guava
-    compile 'com.google.guava:guava:26.0-jre'
+    compile 'com.google.guava:guava:30.0-jre'
 
     // Better functional data structures:
     compile 'io.vavr:vavr:1.0.0-alpha-3'
 
     // Support for the vscode language server protocol
-    compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.7.0'
+    compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.10.0'
 
     // @Nullable annotations
     compile group: 'org.eclipse.jdt', name: 'org.eclipse.jdt.annotation', version: '2.1.0'
@@ -105,10 +108,10 @@ dependencies {
     compile 'com.github.inwc3:jmpq3:1.7.14'
 
     // Water's wc3 libs
-    compile 'com.github.inwc3:wc3libs:257fcbd610'
+    compile 'com.github.inwc3:wc3libs:86f3db6854'
 
     // The setup tool for wurst.build handling
-    compile 'com.github.wurstscript:wurstsetup:e038293d07'
+    compile 'com.github.wurstscript:wurstsetup:4c65824b40'
 
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
     compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
@@ -244,6 +247,3 @@ task downloadAndUnzipFile(dependsOn: downloadZipFile, type: Copy) {
 }
 
 apply from: 'deploy.gradle'
-
-
-

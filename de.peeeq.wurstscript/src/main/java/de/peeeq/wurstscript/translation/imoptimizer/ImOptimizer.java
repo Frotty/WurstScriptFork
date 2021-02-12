@@ -87,9 +87,7 @@ public class ImOptimizer {
             doStrictInline();
         }
         WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
-        totalCount.forEach((k, v) -> {
-            WLogger.info("== " + k + ":   " + v);
-        });
+        totalCount.forEach((k, v) -> WLogger.info("== " + k + ":   " + v));
 
         InitFunctionCleaner.clean(trans.getImProg());
     }
