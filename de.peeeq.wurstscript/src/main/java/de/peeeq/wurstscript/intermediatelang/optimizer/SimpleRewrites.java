@@ -2,6 +2,7 @@ package de.peeeq.wurstscript.intermediatelang.optimizer;
 
 import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.WurstOperator;
+import de.peeeq.wurstscript.intermediatelang.ILconstString;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
@@ -20,6 +21,7 @@ import java.util.Locale;
 public class SimpleRewrites implements OptimizerPass {
     private SideEffectAnalyzer sideEffectAnalysis;
     public static boolean doHashing = false;
+    public static boolean removeWurstErrors = false;
     private int totalRewrites = 0;
     private boolean showRewrites = false;
     private ImProg prog;
@@ -52,6 +54,26 @@ public class SimpleRewrites implements OptimizerPass {
                 removeUnreachableCode(stmts);
             }
         });
+
+        if (removeWurstErrors) {
+            prog.accept(new ImProg.DefaultVisitor() {
+                @Override
+                public void visit(ImFunctionCall funcCall) {
+                    super.visit(funcCall);
+                    ImExprs arguments = funcCall.getArguments();
+                    if (arguments.size() == 1 && arguments.get(0) instanceof ImStringVal) {
+                        String message = ((ImStringVal) arguments.get(0)).getValS();
+                        if (message.startsWith("Double free") ||
+                            message.startsWith("Nullpointer exception") ||
+                            message.startsWith("Out of memory") ||
+                            message.endsWith("on invalid object.") ||
+                            message.startsWith("Could not initialize")) {
+                            funcCall.replaceBy(ImHelper.nullExpr());
+                        }
+                    }
+                }
+            });
+        }
     }
 
     private void removeUnreachableCode(ImStmts stmts) {
