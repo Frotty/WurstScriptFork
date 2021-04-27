@@ -3,6 +3,9 @@ package de.peeeq.wurstscript.translation.imoptimizer;
 import de.peeeq.wurstscript.utils.Debug;
 
 import java.io.FileNotFoundException;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * This will be used to generate unique Strings which aren't named like the ones
@@ -21,14 +24,24 @@ public class NameGenerator {
     private String charmap = charmapFirst + "01";
     private String charmapMid = charmap + "_";
 
+    static String shuffle(String string){
+        List<Character> list = string.chars().mapToObj(c -> (char) c)
+            .collect(Collectors.toList());
+        Collections.shuffle(list);
+        StringBuilder sb = new StringBuilder();
+        list.forEach(sb::append);
+
+        return sb.toString();
+    }
+
     public void setConfusingCharmap() {
-        String first = "lLoOiI";
+        String first = shuffle("lLoOiI");
         setCharmap(first, first + "01_", first  + "01");
     }
 
     public void setMaxCharmap() {
-        String first = "wprojDfsWAqYcCUyMdLeGiPuxSanEtJmHBOKhQFbgvRNIXTZklV";
-        String charmap = first + "3901724568";
+        String first = shuffle("wprojDfsWAqYcCUyMdLeGiPuxSanEtJmHBOKhQFbgvRNIXTZklV");
+        String charmap = first + shuffle("3901724568");
         setCharmap(first, charmap + "_", charmap);
     }
 
