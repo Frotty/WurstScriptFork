@@ -10,6 +10,7 @@ import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.types.TypesHelper;
 import net.moonlightflower.wc3libs.misc.StringHash;
+import net.moonlightflower.wc3libs.txt.app.jass.expr.VarRef;
 
 import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
@@ -26,11 +27,17 @@ public class SimpleRewrites implements OptimizerPass {
     private boolean showRewrites = false;
     private ImProg prog;
     private ImFunction stringHashFunc;
+    private ImFunction convertPlayerUnitEventFunc;
+    private ImFunction convertPlayerEventFunc;
+    private ImFunction convertStateFunc;
 
     @Override
     public int optimize(ImTranslator trans) {
         prog = trans.getImProg();
         stringHashFunc = trans.getNativeFunc("StringHash");
+        convertPlayerUnitEventFunc = trans.getNativeFunc("ConvertPlayerUnitEvent");
+        convertStateFunc = trans.getNativeFunc("ConvertPlayerState");
+        convertPlayerEventFunc = trans.getNativeFunc("ConvertPlayerEvent");
         this.sideEffectAnalysis = new SideEffectAnalyzer(prog);
         totalRewrites = 0;
         optimizeElement(prog);
@@ -132,6 +139,20 @@ public class SimpleRewrites implements OptimizerPass {
         } else if (elem instanceof ImFunction) {
             ImFunction imFunction = (ImFunction) elem;
             optimizeFunction(imFunction);
+        } else if (elem instanceof ImVarRead) {
+            ImVarRead varRef = (ImVarRead) elem;
+            String name = varRef.getVar().getName();
+            if (varRef.getVar().getIsBJ()) {
+                if (name.startsWith("EVENT_PLAYER_UNIT_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerUnitEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerUnitEvents.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("PLAYER_STATE_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertStateFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerStates.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("EVENT_PLAYER_HERO")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerUnitEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerHeroEvents.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("EVENT_PLAYER_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerEvents.getValForName(name))), true, CallType.NORMAL));
+                }
+            }
         }
 
     }
