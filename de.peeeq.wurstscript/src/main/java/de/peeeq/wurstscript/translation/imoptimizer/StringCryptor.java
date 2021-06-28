@@ -25,7 +25,8 @@ public class StringCryptor {
             prog.accept(new ImProg.DefaultVisitor() {
                 @Override
                 public void visit(ImStringVal stringVal) {
-                    stringVal.copy().replaceBy(JassIm.ImFunctionCall(descryptFunction.attrTrace(), descryptFunction, JassIm.ImTypeArguments(), JassIm.ImExprs(stringVal), true, CallType.NORMAL));
+                    stringVal.copy();
+                    stringVal.replaceBy(JassIm.ImFunctionCall(descryptFunction.attrTrace(), descryptFunction, JassIm.ImTypeArguments(), JassIm.ImExprs(stringVal), true, CallType.NORMAL));
                 }
             });
         }
