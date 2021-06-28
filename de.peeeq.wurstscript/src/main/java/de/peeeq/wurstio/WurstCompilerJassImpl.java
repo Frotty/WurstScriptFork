@@ -476,6 +476,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             optimizer.localOptimizations();
         }
 
+        optimizer.encryptStrings();
+
         printDebugImProg("./test-output/im " + stage++ + "_afterlocalopts.im");
 
         if (runArgs.isNullsetting()) {

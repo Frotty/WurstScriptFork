@@ -172,4 +172,8 @@ public class ImOptimizer {
         removeGarbage();
         trans.getImProg().flatten(trans);
     }
+
+    public void encryptStrings() {
+        new StringCryptor().encrypt(trans);
+    }
 }
