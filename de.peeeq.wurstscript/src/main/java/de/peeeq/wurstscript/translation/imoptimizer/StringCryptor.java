@@ -39,10 +39,10 @@ public class StringCryptor {
                             StringBuilder crypted = new StringBuilder();
                             int i = 0;
                             for (char c : text.toCharArray()) {
-                                if (c > 31 && c < 127) {
+                                if (c > 31 && c < 126) {
                                     char shifted = (char)(c - ((char) key[i]));
                                     if (shifted < 32) {
-                                        shifted += (128 - 32);
+                                        shifted += (127 - 32);
                                     }
                                     crypted.append(shifted);
                                 } else {
