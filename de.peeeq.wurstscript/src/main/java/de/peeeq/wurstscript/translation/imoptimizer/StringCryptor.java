@@ -25,7 +25,7 @@ public class StringCryptor {
             prog.accept(new ImProg.DefaultVisitor() {
                 @Override
                 public void visit(ImStringVal stringVal) {
-                    if (!stringVal.attrTrace().attrSource().getFile().contains("Crypto.wurst")) {
+                    if (!stringVal.getNearestFunc().attrTrace().attrSource().getFile().contains("Crypto.wurst")) {
                         stringVal.replaceBy(JassIm.ImFunctionCall(descryptFunction.attrTrace(), descryptFunction, JassIm.ImTypeArguments(), JassIm.ImExprs(stringVal.copy()), true, CallType.NORMAL));
                     }
                 }
