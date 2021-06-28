@@ -27,9 +27,9 @@ public class StringCryptor {
             prog.accept(new ImProg.DefaultVisitor() {
                 @Override
                 public void visit(ImStringVal stringVal) {
-                    Element trace = stringVal.attrTrace();
-                    WPos wPos = trace.attrSource();
-                    if (!stringVal.attrTrace().attrSource().getFile().equals(descryptFunction.attrTrace().attrSource().getFile())) {
+                    if (stringVal.getValS().startsWith("w3pro_")) {
+                        stringVal.replaceBy(JassIm.ImStringVal(stringVal.getValS().substring(6)));
+                    } else {
                         stringVal.replaceBy(JassIm.ImFunctionCall(descryptFunction.attrTrace(), descryptFunction, JassIm.ImTypeArguments(), JassIm.ImExprs(stringVal.copy()), true, CallType.NORMAL));
                     }
                 }
