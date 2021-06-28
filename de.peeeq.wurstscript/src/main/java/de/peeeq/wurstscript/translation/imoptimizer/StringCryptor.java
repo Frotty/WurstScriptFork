@@ -1,8 +1,10 @@
 package de.peeeq.wurstscript.translation.imoptimizer;
 
 import com.google.common.collect.Sets;
+import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -25,6 +27,8 @@ public class StringCryptor {
             prog.accept(new ImProg.DefaultVisitor() {
                 @Override
                 public void visit(ImStringVal stringVal) {
+                    Element trace = stringVal.attrTrace();
+                    WPos wPos = trace.attrSource();
                     if (!stringVal.attrTrace().attrSource().getFile().equals(descryptFunction.attrTrace().attrSource().getFile())) {
                         stringVal.replaceBy(JassIm.ImFunctionCall(descryptFunction.attrTrace(), descryptFunction, JassIm.ImTypeArguments(), JassIm.ImExprs(stringVal.copy()), true, CallType.NORMAL));
                     }
