@@ -220,7 +220,7 @@ public class StringCryptor {
                 @Override
                 public void visit(ImStringVal stringVal) {
                     Optional<String> forbidden = StringCryptor.forbidden.stream().filter(f -> stringVal.getValS().startsWith(f)).findFirst();
-                    if (!forbidden.isPresent() && stringVal.getValS().length() > 1) {
+                    if (!forbidden.isPresent()) {
                         if (stringVal.getValS().startsWith("w3pro_")) {
                             stringVal.replaceBy(JassIm.ImStringVal(stringVal.getValS().substring(6)));
                         } else {

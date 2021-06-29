@@ -288,6 +288,13 @@ public class SimpleRewrites implements OptimizerPass {
                         wasViable = false;
                     }
                 }
+            } else if (left instanceof ImStringVal) {
+                if(doHashing && opc.getOp() == WurstOperator.EQ && !((ImStringVal) left).getValS().contains("/") && !((ImStringVal) left).getValS().contains("\\")) {
+                    replaceStringCompareWithHash(right, (ImStringVal) left);
+                    wasViable = true;
+                } else {
+                    wasViable = false;
+                }
             } else if (opc.getOp() == WurstOperator.PLUS
                     && (left.attrTyp().equalsType(TypesHelper.imInt()) || left.attrTyp().equalsType(TypesHelper.imReal()))
                     && left.structuralEquals(right)) {
