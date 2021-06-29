@@ -281,7 +281,7 @@ public class SimpleRewrites implements OptimizerPass {
                     opc.replaceBy(left);
                     wasViable = true;
                 } else {
-                    if(doHashing && opc.getOp() == WurstOperator.EQ && (!((ImStringVal) right).getValS().contains("/") || !((ImStringVal) right).getValS().contains("\\"))) {
+                    if(doHashing && opc.getOp() == WurstOperator.EQ && !((ImStringVal) right).getValS().contains("/") && !((ImStringVal) right).getValS().contains("\\")) {
                         replaceStringCompareWithHash(left, (ImStringVal) right);
                         wasViable = true;
                     } else {
