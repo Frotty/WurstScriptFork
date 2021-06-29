@@ -87,7 +87,7 @@ public class ImTranslator {
     private final WurstModel wurstProg;
 
     private @Nullable ImFunction mainFunc = null;
-
+    private ImFunction metaMainFunc =  ImFunction(emptyTrace, "meta_main", ImTypeVars(), ImVars(), ImVoid(), ImVars(), ImStmts(), flags());;
     private @Nullable ImFunction configFunc = null;
 
     private final Map<ImVar, VarsForTupleResult> varsForTupleVar = new LinkedHashMap<>();
@@ -133,6 +133,7 @@ public class ImTranslator {
                 mainFunc = ImFunction(emptyTrace, "main", ImTypeVars(), ImVars(), ImVoid(), ImVars(), ImStmts(), flags());
                 addFunction(mainFunc);
             }
+            addFunction(metaMainFunc);
             if (configFunc == null) {
                 configFunc = ImFunction(emptyTrace, "config", ImTypeVars(), ImVars(), ImVoid(), ImVars(), ImStmts(), flags());
                 addFunction(configFunc);
@@ -331,7 +332,7 @@ public class ImTranslator {
 
     private void finishInitFunctions() {
         // init globals, at beginning of main func:
-        getMainFunc().getBody().add(0, ImFunctionCall(emptyTrace, globalInitFunc, ImTypeArguments(), ImExprs(), false, CallType.NORMAL));
+        metaMainFunc.getBody().add(0, ImFunctionCall(emptyTrace, globalInitFunc, ImTypeArguments(), ImExprs(), false, CallType.NORMAL));
 
 
         for (ImFunction initFunc : initFuncMap.values()) {
@@ -347,20 +348,23 @@ public class ImTranslator {
 
         ImFunction native_DestroyTrigger = getNativeFunc("DestroyTrigger");
         if (native_DestroyTrigger != null) {
-            getMainFunc().getBody().add(JassIm.ImFunctionCall(emptyTrace, native_DestroyTrigger, ImTypeArguments(),
+            metaMainFunc.getBody().add(JassIm.ImFunctionCall(emptyTrace, native_DestroyTrigger, ImTypeArguments(),
                     JassIm.ImExprs(JassIm.ImVarAccess(initTrigVar)), false, CallType.NORMAL));
         }
+
+        mainFunc.getBody().add(1, JassIm.ImFunctionCall(emptyTrace, metaMainFunc, ImTypeArguments(),
+            JassIm.ImExprs(), false, CallType.NORMAL));
     }
 
     @NotNull
     private ImVar prepareTrigger() {
         ImVar initTrigVar = JassIm.ImVar(emptyTrace, JassIm.ImSimpleType("trigger"), "initTrig", false);
-        getMainFunc().getLocals().add(initTrigVar);
+        metaMainFunc.getLocals().add(initTrigVar);
 
         // initTrigVar = CreateTrigger()
         ImFunction createTrigger = getNativeFunc("CreateTrigger");
         if (createTrigger != null) {
-            getMainFunc().getBody().add(ImSet(getMainFunc().getTrace(), ImVarAccess(initTrigVar), JassIm.ImFunctionCall(getMainFunc().getTrace(), getNativeFunc("CreateTrigger"), ImTypeArguments(), JassIm.ImExprs(), false, CallType.NORMAL)));
+            metaMainFunc.getBody().add(ImSet(metaMainFunc.getTrace(), ImVarAccess(initTrigVar), JassIm.ImFunctionCall(metaMainFunc.getTrace(), getNativeFunc("CreateTrigger"), ImTypeArguments(), JassIm.ImExprs(), false, CallType.NORMAL)));
         }
         return initTrigVar;
     }
@@ -394,13 +398,13 @@ public class ImTranslator {
         boolean successful = createInitFuncCall(p, initTrigVar, initFunc);
 
         if (!successful) {
-            getMainFunc().getBody().add(ImFunctionCall(initFunc.getTrace(), initFunc, ImTypeArguments(), ImExprs(), false, CallType.NORMAL));
+            metaMainFunc.getBody().add(ImFunctionCall(initFunc.getTrace(), initFunc, ImTypeArguments(), ImExprs(), false, CallType.NORMAL));
         }
     }
 
 
     private boolean createInitFuncCall(WPackage p, ImVar initTrigVar, ImFunction initFunc) {
-        ImStmts mainBody = getMainFunc().getBody();
+        ImStmts mainBody = metaMainFunc.getBody();
 
         ImFunction native_ClearTrigger = getNativeFunc("TriggerClearConditions");
         ImFunction native_TriggerAddCondition = getNativeFunc("TriggerAddCondition");
