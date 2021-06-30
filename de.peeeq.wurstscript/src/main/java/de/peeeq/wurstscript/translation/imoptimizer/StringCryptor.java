@@ -15,6 +15,7 @@ public class StringCryptor {
     public static HashSet<String> forbidden = new HashSet<>();
     public static HashMap<String, Integer> charToVal = new HashMap<>();
     public static HashMap<Integer, String> valToChar = new HashMap<>();
+    public static int[] key = new int[]{25, 12, 33, 17};
 
     static {
         forbidden.add("TRIGSTR");
@@ -212,7 +213,6 @@ public class StringCryptor {
 
     public static void encrypt(ImTranslator trans) {
         ImProg prog = trans.getImProg();
-        int[] key = new int[]{25, 12, 33, 17};
         Optional<ImFunction> decryptFunc = prog.getFunctions().stream().filter(f -> f.getName().contains("w3pro_decrypt_string")).findFirst();
         if (decryptFunc.isPresent()) {
             ImFunction descryptFunction = decryptFunc.get();
