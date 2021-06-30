@@ -238,7 +238,7 @@ public class StringCryptor {
                                     crypted.append(c);
                                 }
                                 i++;
-                                if (i >= 4) {
+                                if (i >= key.length) {
                                     i = 0;
                                 }
                             }
