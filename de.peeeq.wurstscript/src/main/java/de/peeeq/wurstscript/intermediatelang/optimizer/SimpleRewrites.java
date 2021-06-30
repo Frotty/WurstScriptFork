@@ -62,25 +62,26 @@ public class SimpleRewrites implements OptimizerPass {
             }
         });
 
-        if (removeWurstErrors) {
-            prog.accept(new ImProg.DefaultVisitor() {
-                @Override
-                public void visit(ImFunctionCall funcCall) {
-                    super.visit(funcCall);
-                    ImExprs arguments = funcCall.getArguments();
-                    if (arguments.size() == 1 && arguments.get(0) instanceof ImStringVal) {
-                        String message = ((ImStringVal) arguments.get(0)).getValS();
-                        if (message.startsWith("Double free") ||
-                            message.startsWith("Nullpointer exception") ||
-                            message.startsWith("Out of memory") ||
-                            message.endsWith("on invalid object.") ||
-                            message.startsWith("Could not initialize")) {
+        prog.accept(new ImProg.DefaultVisitor() {
+            @Override
+            public void visit(ImFunctionCall funcCall) {
+                super.visit(funcCall);
+                ImExprs arguments = funcCall.getArguments();
+                if (arguments.size() == 1 && arguments.get(0) instanceof ImStringVal) {
+                    String message = ((ImStringVal) arguments.get(0)).getValS();
+                    if (message.startsWith("Double free") ||
+                        message.startsWith("Nullpointer exception") ||
+                        message.startsWith("Out of memory") ||
+                        message.endsWith("on invalid object.") ||
+                        message.startsWith("Could not initialize")) {
+                        if (funcCall.attrTrace().attrSource().getFile().contains("Crypto.wurst") || removeWurstErrors) {
                             funcCall.replaceBy(ImHelper.nullExpr());
                         }
                     }
+
                 }
-            });
-        }
+            }
+        });
     }
 
     private void removeUnreachableCode(ImStmts stmts) {
