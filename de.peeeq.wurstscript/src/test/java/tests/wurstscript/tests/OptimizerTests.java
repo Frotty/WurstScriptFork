@@ -15,6 +15,7 @@ import de.peeeq.wurstscript.types.TypesHelper;
 import de.peeeq.wurstscript.utils.Utils;
 import io.vavr.collection.HashSet;
 import io.vavr.collection.Set;
+import org.hamcrest.CoreMatchers;
 import org.testng.annotations.Ignore;
 import org.testng.annotations.Test;
 
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.testng.AssertJUnit.*;
 
 public class OptimizerTests extends WurstScriptTest {
@@ -1083,4 +1085,6 @@ public class OptimizerTests extends WurstScriptTest {
 
 
     }
+
+
 }

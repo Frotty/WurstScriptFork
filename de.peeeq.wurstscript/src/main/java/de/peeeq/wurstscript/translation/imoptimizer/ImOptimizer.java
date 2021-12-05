@@ -10,10 +10,7 @@ import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Pair;
 import de.peeeq.wurstscript.validation.TRVEHelper;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 public class ImOptimizer {
     private int totalFunctionsRemoved = 0;
@@ -117,7 +114,16 @@ public class ImOptimizer {
             int functionsAfter = prog.getFunctions().size();
             int functionsRemoved = functionsBefore - functionsAfter;
             totalFunctionsRemoved += functionsRemoved;
-            for (ImFunction f : prog.getFunctions()) {
+            // also consider class functions
+            Set<ImFunction> allFunctions = new HashSet<>(prog.getFunctions());
+            for (ImClass c : prog.getClasses()) {
+                int classFunctionsBefore = c.getFunctions().size();
+                changes |= c.getFunctions().retainAll(trans.getUsedFunctions());
+                int classFunctionsAfter = c.getFunctions().size();
+                totalFunctionsRemoved += classFunctionsBefore - classFunctionsAfter;
+                allFunctions.addAll(c.getFunctions());
+            }
+            for (ImFunction f : allFunctions) {
                 // remove set statements to unread variables
                 final List<Pair<ImStmt, List<ImExpr>>> replacements = Lists.newArrayList();
                 f.accept(new ImFunction.DefaultVisitor() {
@@ -126,11 +132,13 @@ public class ImOptimizer {
                         super.visit(e);
                         if (e.getLeft() instanceof ImVarAccess) {
                             ImVarAccess va = (ImVarAccess) e.getLeft();
+
                             if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if (e.getLeft() instanceof ImVarArrayAccess) {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
+
                             if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 // TODO indexes might have side effects that we need to keep
                                 List<ImExpr> exprs = va.getIndexes().removeAll();
@@ -141,6 +149,7 @@ public class ImOptimizer {
                     }
 
                 });
+                Replacer replacer = new Replacer();
                 for (Pair<ImStmt, List<ImExpr>> pair : replacements) {
                     changes = true;
                     ImExpr r;
@@ -154,7 +163,7 @@ public class ImOptimizer {
                         }
                         r = ImHelper.statementExprVoid(JassIm.ImStmts(exprs));
                     }
-                    pair.getA().replaceBy(r);
+                    replacer.replace(pair.getA(), r);
                 }
 
                 // keep only read local variables
@@ -162,6 +171,7 @@ public class ImOptimizer {
             }
         }
     }
+
 
     public void doStrictInline() {
         WLogger.info("execute strict inline");
@@ -178,4 +188,5 @@ public class ImOptimizer {
         removeGarbage();
         trans.getImProg().flatten(trans);
     }
+
 }

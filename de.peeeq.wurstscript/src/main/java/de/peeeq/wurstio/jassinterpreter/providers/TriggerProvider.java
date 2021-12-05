@@ -50,7 +50,6 @@ public class TriggerProvider extends Provider {
 //        triggerMock.registerEvent();
     }
 
-
     public IlConstHandle Condition(ILconstFuncRef code) {
         return new IlConstHandle(NameProvider.getRandomName("conditionfunc"), code);
     }

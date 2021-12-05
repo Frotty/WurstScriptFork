@@ -2,6 +2,7 @@ package de.peeeq.wurstio.languageserver.requests;
 
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
+import config.WurstProjectConfigData;
 import de.peeeq.wurstio.Pjass;
 import de.peeeq.wurstio.UtilsIO;
 import de.peeeq.wurstio.WurstCompilerJassImpl;
@@ -25,6 +26,7 @@ import de.peeeq.wurstscript.luaAst.LuaCompilationUnit;
 import de.peeeq.wurstscript.parser.WPos;
 import de.peeeq.wurstscript.utils.LineOffsets;
 import de.peeeq.wurstscript.utils.Utils;
+import net.moonlightflower.wc3libs.port.Orient;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -58,7 +60,7 @@ public abstract class MapRequest extends UserRequest<Object> {
     /**
      * makes the compilation slower, but more safe by discarding results from the editor and working on a copy of the model
      */
-    private SafetyLevel safeCompilation = SafetyLevel.KindOfSafe;
+    protected SafetyLevel safeCompilation = SafetyLevel.KindOfSafe;
 
     enum SafetyLevel {
         QuickAndDirty, KindOfSafe
@@ -140,7 +142,8 @@ public abstract class MapRequest extends UserRequest<Object> {
         modelManager.syncCompilationUnit(WFile.create(existingScript));
     }
 
-    protected File compileMap(File projectFolder, WurstGui gui, Optional<File> mapCopy, RunArgs runArgs, WurstModel model) {
+    protected File compileMap(File projectFolder, WurstGui gui, Optional<File> mapCopy, RunArgs runArgs, WurstModel model,
+                              WurstProjectConfigData projectConfigData, boolean isProd) {
         try (@Nullable MpqEditor mpqEditor = MpqEditorFactory.getEditor(mapCopy)) {
             if (mpqEditor != null && !mpqEditor.canWrite()) {
                 WLogger.severe("The supplied map is invalid/corrupted/protected and Wurst cannot write to it.\n" +
@@ -166,7 +169,7 @@ public abstract class MapRequest extends UserRequest<Object> {
             }
 
 
-            compiler.runCompiletime();
+            compiler.runCompiletime(projectConfigData, isProd);
 
             if (runArgs.isLua()) {
                 print("translating program to Lua ... ");
@@ -314,7 +317,8 @@ public abstract class MapRequest extends UserRequest<Object> {
     }
 
 
-    protected File compileScript(WurstGui gui, ModelManager modelManager, List<String> compileArgs, Optional<File> mapCopy) throws Exception {
+    protected File compileScript(WurstGui gui, ModelManager modelManager, List<String> compileArgs, Optional<File> mapCopy,
+                                 WurstProjectConfigData projectConfigData, boolean isProd) throws Exception {
         RunArgs runArgs = new RunArgs(compileArgs);
         print("Compile Script : ");
         for (File dep : modelManager.getDependencyWurstFiles()) {
@@ -345,10 +349,10 @@ public abstract class MapRequest extends UserRequest<Object> {
             model = ModelManager.copy(model);
         }
 
-        return compileMap(modelManager.getProjectPath(), gui, mapCopy, runArgs, model);
+        return compileMap(modelManager.getProjectPath(), gui, mapCopy, runArgs, model, projectConfigData, isProd);
     }
 
-    protected File compileScript(ModelManager modelManager, WurstGui gui, Optional<File> testMap) throws Exception {
+    protected File compileScript(ModelManager modelManager, WurstGui gui, Optional<File> testMap, WurstProjectConfigData projectConfigData, boolean isProd) throws Exception {
         if (testMap.isPresent() && testMap.get().exists()) {
             boolean deleteOk = testMap.get().delete();
             if (!deleteOk) {
@@ -360,7 +364,7 @@ public abstract class MapRequest extends UserRequest<Object> {
         }
 
         // first compile the script:
-        File compiledScript = compileScript(gui, modelManager, compileArgs, testMap);
+        File compiledScript = compileScript(gui, modelManager, compileArgs, testMap, projectConfigData, isProd);
 
         Optional<WurstModel> model = Optional.ofNullable(modelManager.getModel());
         if (!model.isPresent()
@@ -376,6 +380,10 @@ public abstract class MapRequest extends UserRequest<Object> {
     }
 
     private W3InstallationData getBestW3InstallationData() throws RequestFailedException {
+        if (Orient.isLinuxSystem()) {
+            // no Warcraft installation supported on Linux
+            return new W3InstallationData(Optional.empty(), Optional.empty());
+        }
         if (wc3Path.isPresent()) {
             W3InstallationData w3data = new W3InstallationData(new File(wc3Path.get()));
             if (!w3data.getWc3PatchVersion().isPresent()) {

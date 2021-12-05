@@ -1,23 +1,30 @@
 package de.peeeq.wurstio.intermediateLang.interpreter;
 
 
+import config.WurstProjectConfigData;
 import de.peeeq.wurstio.jassinterpreter.InterpreterException;
 import de.peeeq.wurstio.jassinterpreter.ReflectionBasedNativeProvider;
 import de.peeeq.wurstio.objectreader.*;
-import de.peeeq.wurstscript.intermediatelang.ILconstInt;
-import de.peeeq.wurstscript.intermediatelang.ILconstReal;
-import de.peeeq.wurstscript.intermediatelang.ILconstString;
-import de.peeeq.wurstscript.intermediatelang.ILconstTuple;
+import de.peeeq.wurstscript.intermediatelang.*;
 import de.peeeq.wurstscript.intermediatelang.interpreter.NativesProvider;
 import de.peeeq.wurstscript.intermediatelang.interpreter.ProgramState;
 import de.peeeq.wurstscript.intermediatelang.interpreter.VariableType;
 
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
+
 @SuppressWarnings("ucd") // ignore unused code detector warnings, because this class uses reflection
 public class CompiletimeNatives extends ReflectionBasedNativeProvider implements NativesProvider {
+    private final boolean isProd;
     private ProgramStateIO globalState;
+    private WurstProjectConfigData projectConfigData;
 
-    public CompiletimeNatives(ProgramStateIO globalState) {
+    public CompiletimeNatives(ProgramStateIO globalState, WurstProjectConfigData projectConfigData, boolean isProd) {
         this.globalState = globalState;
+        this.projectConfigData = projectConfigData;
+        this.isProd = isProd;
     }
 
 
@@ -133,4 +140,15 @@ public class CompiletimeNatives extends ReflectionBasedNativeProvider implements
         throw new InterpreterException(msg.getVal());
     }
 
+    public ILconstString getMapName() {
+        return new ILconstString(projectConfigData.getBuildMapData().getName());
+    }
+
+    public ILconstString getBuildDate() {
+        return new ILconstString(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES).toString());
+    }
+
+    public ILconstBool isProductionBuild() {
+        return isProd ? ILconstBool.TRUE : ILconstBool.FALSE;
+    }
 }

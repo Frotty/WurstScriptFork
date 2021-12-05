@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import config.WurstProjectConfigData;
 import de.peeeq.wurstio.intermediateLang.interpreter.CompiletimeNatives;
 import de.peeeq.wurstio.intermediateLang.interpreter.ProgramStateIO;
 import de.peeeq.wurstio.jassinterpreter.InterpreterException;
@@ -31,6 +32,7 @@ import de.peeeq.wurstscript.utils.Pair;
 import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -78,15 +80,15 @@ public class CompiletimeFunctionRunner {
 
 
     public CompiletimeFunctionRunner(
-            ImTranslator tr, ImProg imProg, Optional<File> mapFile, MpqEditor mpqEditor, WurstGui gui,
-            FunctionFlagToRun flag) {
+        ImTranslator tr, ImProg imProg, Optional<File> mapFile, MpqEditor mpqEditor, WurstGui gui,
+        FunctionFlagToRun flag, WurstProjectConfigData projectConfigData, boolean isProd) {
         Preconditions.checkNotNull(imProg);
         this.translator = tr;
         this.imProg = imProg;
         globalState = new ProgramStateIO(mapFile, mpqEditor, gui, imProg, true);
         this.interpreter = new ILInterpreter(imProg, gui, mapFile, globalState);
 
-        interpreter.addNativeProvider(new CompiletimeNatives(globalState));
+        interpreter.addNativeProvider(new CompiletimeNatives(globalState, projectConfigData, isProd));
         interpreter.addNativeProvider(new ReflectionNativeProvider(interpreter));
         this.gui = gui;
         this.functionFlag = flag;
@@ -226,6 +228,33 @@ public class CompiletimeFunctionRunner {
             LocalState localState = new LocalState();
             ILconst value = cte.evaluate(globalState, localState);
             ImExpr newExpr = constantToExpr(cte.getTrace(), value);
+            if(translator.isLuaTarget() && value.toString().equals("0")) {
+                // convert 0 to null/nil, if the value is 0 and not a numeric type
+                ImExpr expr = cte.getExpr();
+
+                if(expr instanceof ImNull) {
+                    newExpr = ImHelper.nullExpr();
+                } else {
+                    @Nullable ImType exprType = null;
+                    if(expr instanceof ImFunctionCall) {
+                        exprType = ((ImFunctionCall) expr).getFunc().getReturnType();
+                    } else if(expr instanceof ImVarAccess) {
+                        exprType = ((ImVarAccess)expr).getVar().getType();
+                    } else if(expr instanceof ImVarArrayAccess) {
+                        ImType type = ((ImVarArrayAccess)expr).getVar().getType();
+                        if(type instanceof ImArrayLikeType) {
+                            exprType = ((ImArrayLikeType) type).getEntryType();
+                        }
+                    }
+                    if(exprType != null && !TypesHelper.isIntType(exprType) && !TypesHelper.isRealType(exprType)) {
+                        newExpr = ImHelper.nullExpr();
+                    }
+                }
+                // TODO is this complete? Are there more cases where 0 must be replaced?
+                // A function can return null
+                // null can be a literal
+                // null can be a variable
+            }
             cte.replaceBy(newExpr);
         } catch (InterpreterException e) {
             String msg = ILInterpreter.buildStacktrace(globalState, e);
@@ -245,6 +274,7 @@ public class CompiletimeFunctionRunner {
             imProg.getGlobals().add(res);
             ImAlloc alloc = JassIm.ImAlloc(obj.getTrace(), obj.getType());
             addCompiletimeStateInitAlloc(alloc.getTrace(), res, alloc);
+            globalState.setVal(res, obj);
 
 
             Element trace = obj.getTrace();
@@ -259,7 +289,17 @@ public class CompiletimeFunctionRunner {
                         ImExprs indexesT = indexes.stream()
                                 .map(i -> constantToExpr(trace, ILconstInt.create(i)))
                                 .collect(Collectors.toCollection(JassIm::ImExprs));
-                        addCompiletimeStateInit(JassIm.ImSet(trace, JassIm.ImMemberAccess(trace, JassIm.ImVarAccess(res), JassIm.ImTypeArguments(), var, indexesT), constantToExpr(trace, attrValue)));
+                        ImExpr value2 = constantToExpr(trace, attrValue);
+                        if(translator.isLuaTarget() && value2.toString().equals("0")) {
+                            ImType varType = var.getType();
+                            if(varType instanceof ImArrayLikeType) {
+                                varType = ((ImArrayLikeType) varType).getEntryType();
+                            }
+                            if (!TypesHelper.isIntType(varType) && !TypesHelper.isRealType(varType)) {
+                                value2 = ImHelper.nullExpr();
+                            }
+                        }
+                        addCompiletimeStateInit(JassIm.ImSet(trace, JassIm.ImMemberAccess(trace, JassIm.ImVarAccess(res), JassIm.ImTypeArguments(), var, indexesT), value2));
                     }
                 }
             });
@@ -283,6 +323,7 @@ public class CompiletimeFunctionRunner {
                 ImType type = TypesHelper.imHashTable();
                 ImVar res = JassIm.ImVar(trace, type, type + "_compiletime", false);
                 imProg.getGlobals().add(res);
+                globalState.setVal(res, a);
 
                 init = constantToExprHashtable(trace, res, a, map);
                 addCompiletimeStateInitAlloc(trace, res, init);
@@ -356,8 +397,9 @@ public class CompiletimeFunctionRunner {
 
     // insert at the beginning
     private void addCompiletimeStateInitAlloc(Element trace, ImVar v, ImExpr init) {
-        imProg.getGlobalInits().put(v, Collections.singletonList(init));
-        getCompiletimeStateInitFunction().getBody().add(0, JassIm.ImSet(trace, JassIm.ImVarAccess(v), init.copy()));
+        ImSet imSet = JassIm.ImSet(trace, JassIm.ImVarAccess(v), init.copy());
+        imProg.getGlobalInits().put(v, Collections.singletonList(imSet));
+        getCompiletimeStateInitFunction().getBody().add(0, imSet);
     }
 
     // insert at the end

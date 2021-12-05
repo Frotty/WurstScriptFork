@@ -268,6 +268,7 @@ public class JurstTests extends WurstScriptTest {
     public void testKeepTRVE() throws IOException {
         String jassCode = Utils.string(
             "type agent\t\t\t    extends     handle \n" +
+
             "type event              extends     agent \n" +
             "type trigger            extends     agent\n" +
             "type eventid            extends     handle\n" +

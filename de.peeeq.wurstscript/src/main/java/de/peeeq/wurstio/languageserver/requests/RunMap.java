@@ -49,6 +49,7 @@ public class RunMap extends MapRequest {
     public RunMap(ConfigProvider configProvider, WFile workspaceRoot, Optional<String> wc3Path, Optional<File> map,
             List<String> compileArgs) {
         super(configProvider, map, compileArgs, workspaceRoot, wc3Path);
+        safeCompilation = SafetyLevel.QuickAndDirty;
     }
 
     @Override
@@ -61,7 +62,7 @@ public class RunMap extends MapRequest {
         );
 
         if (modelManager.hasErrors()) {
-            throw new RequestFailedException(MessageType.Error, "Fix errors in your code before running.");
+            throw new RequestFailedException(MessageType.Error, "Fix errors in your code before running.\n" + modelManager.getFirstErrorDescription());
         }
 
         WurstProjectConfigData projectConfig = WurstProjectConfig.INSTANCE.loadProject(workspaceRoot.getFile().toPath().resolve(FILE_NAME));
@@ -83,7 +84,7 @@ public class RunMap extends MapRequest {
             // first we copy in same location to ensure validity
             File buildDir = getBuildDir();
             Optional<File> testMap = map.map($ -> new File(buildDir, "WurstRunMap.w3x"));
-            File compiledScript = compileScript(modelManager, gui, testMap);
+            File compiledScript = compileScript(modelManager, gui, testMap, projectConfig, false);
 
             if (runArgs.isHotReload()) {
                 // call jhcr update

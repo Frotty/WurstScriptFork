@@ -12,6 +12,7 @@ import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.attributes.prettyPrint.DefaultSpacer;
 import de.peeeq.wurstscript.jassIm.JassImElementWithName;
 import de.peeeq.wurstscript.parser.WPos;
+import de.peeeq.wurstscript.translation.imoptimizer.Replacer;
 import de.peeeq.wurstscript.types.WurstType;
 import de.peeeq.wurstscript.types.WurstTypeUnknown;
 import org.eclipse.jdt.annotation.Nullable;
@@ -134,16 +135,15 @@ public class Utils {
     /**
      * is a piece of code jass code?
      */
-    public static boolean isJassCode(Optional<Element> pos) {
-        while (pos.isPresent()) {
-            if (pos.get() instanceof WPackage) {
+    public static boolean isJassCode(@Nullable Element pos) {
+        while (pos != null) {
+            if (pos instanceof WPackage) {
                 return false; // code is inside package -> wurstscript code
             }
-            pos = Optional.ofNullable(pos.get().getParent());
+            pos = pos.getParent();
         }
         return true; // no package found -> jass code
     }
-
 
     public static <T> String join(Iterable<T> hints, String seperator) {
         StringBuilder builder = new StringBuilder();
@@ -444,8 +444,7 @@ public class Utils {
 
     public static String printElementWithSource(Optional<Element> e) {
         Optional<WPos> src = e.map(Element::attrSource);
-        return printElement(e) + " (" + src.map(WPos::getFile) + ":"
-                + src.map(WPos::getLine) + ")";
+        return printElement(e) + " (" + src.map(WPos::printShort).orElse("unknown position") + ")";
     }
 
     public static int[] copyArray(int[] ar) {
@@ -992,29 +991,21 @@ public class Utils {
     }
 
     /**
-     * Replaces oldElement with newElement in parent
-     */
-    public static void replace(de.peeeq.wurstscript.jassIm.Element parent, de.peeeq.wurstscript.jassIm.Element oldElement, de.peeeq.wurstscript.jassIm.Element newElement) {
-        if (oldElement == newElement) {
-            return;
-        }
-        de.peeeq.wurstscript.jassIm.Element oldElementParent = oldElement.getParent();
-        for (int i=0; i<parent.size(); i++) {
-            if (parent.get(i) == oldElement) {
-                parent.set(i, newElement);
-                // reset parent, because might be changed
-                oldElement.setParent(oldElementParent);
-                return;
-            }
-        }
-        throw new CompileError(parent.attrTrace().attrSource(), "Could not find " + oldElement + " in " + parent);
-    }
-
-    /**
      * Copy of the list without its last element
      */
     public static <T> List<T> init(List<T> list) {
         return list.stream().limit(list.size() - 1).collect(Collectors.toList());
+    }
+
+    public static Optional<String> getEnvOrConfig(String varName) {
+        String res = System.getenv(varName);
+        if (res == null || res.isEmpty()) {
+            res = System.getProperty(varName);
+        }
+        if (res == null || res.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(res);
     }
 
     public static class ExecResult {

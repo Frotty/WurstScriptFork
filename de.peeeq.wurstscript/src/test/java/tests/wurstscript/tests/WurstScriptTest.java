@@ -2,6 +2,7 @@ package tests.wurstscript.tests;
 
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
+import config.WurstProjectConfigData;
 import de.peeeq.wurstio.Pjass;
 import de.peeeq.wurstio.Pjass.Result;
 import de.peeeq.wurstio.UtilsIO;
@@ -392,7 +393,7 @@ public class WurstScriptTest {
 
             compiler.translateProgToIm(model);
 
-            compiler.runCompiletime();
+            compiler.runCompiletime(new WurstProjectConfigData(), false);
 
             LuaCompilationUnit luaCode = compiler.transformProgToLua();
             StringBuilder sb = new StringBuilder();
@@ -475,7 +476,7 @@ public class WurstScriptTest {
             }
         }
 
-        compiler.runCompiletime();
+        compiler.runCompiletime(new WurstProjectConfigData(), false);
         JassProg prog = compiler.transformProgToJass();
         writeJassImProg(name, gui, imProg);
         if (gui.getErrorCount() > 0) {

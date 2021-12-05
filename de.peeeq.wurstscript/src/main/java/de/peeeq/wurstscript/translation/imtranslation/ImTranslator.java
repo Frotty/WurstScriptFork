@@ -15,6 +15,7 @@ import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.attributes.names.PackageLink;
 import de.peeeq.wurstscript.jassIm.Element;
+import de.peeeq.wurstscript.jassIm.ImAnyType;
 import de.peeeq.wurstscript.jassIm.ImArrayType;
 import de.peeeq.wurstscript.jassIm.ImArrayTypeMulti;
 import de.peeeq.wurstscript.jassIm.ImClass;
@@ -90,6 +91,11 @@ public class ImTranslator {
     private ImFunction metaMainFunc =  ImFunction(emptyTrace, "meta_main", ImTypeVars(), ImVars(), ImVoid(), ImVars(), ImStmts(), flags());;
     private @Nullable ImFunction configFunc = null;
 
+    @Nullable public ImFunction ensureIntFunc = null;
+    @Nullable public ImFunction ensureBoolFunc = null;
+    @Nullable public ImFunction ensureRealFunc = null;
+    @Nullable public ImFunction ensureStrFunc = null;
+
     private final Map<ImVar, VarsForTupleResult> varsForTupleVar = new LinkedHashMap<>();
 
     private boolean isUnitTestMode;
@@ -123,6 +129,17 @@ public class ImTranslator {
             debugPrintFunction = ImFunction(emptyTrace, $DEBUG_PRINT, ImTypeVars(), ImVars(JassIm.ImVar(wurstProg, WurstTypeString.instance().imTranslateType(this), "msg",
                     false)), ImVoid(), ImVars(), ImStmts(), flags(IS_NATIVE, IS_BJ));
 
+            if(isLuaTarget()) {
+                ensureIntFunc = JassIm.ImFunction(emptyTrace, "intEnsure", ImTypeVars(), ImVars(JassIm.ImVar(wurstProg, WurstTypeInt.instance().imTranslateType(this), "x", false)), WurstTypeInt.instance().imTranslateType(this), ImVars(), ImStmts(), flags(IS_NATIVE, IS_BJ));
+                ensureBoolFunc = JassIm.ImFunction(emptyTrace, "boolEnsure", ImTypeVars(), ImVars(JassIm.ImVar(wurstProg, WurstTypeBool.instance().imTranslateType(this), "x", false)), WurstTypeBool.instance().imTranslateType(this), ImVars(), ImStmts(), flags(IS_NATIVE, IS_BJ));
+                ensureRealFunc = JassIm.ImFunction(emptyTrace, "realEnsure", ImTypeVars(), ImVars(JassIm.ImVar(wurstProg, WurstTypeReal.instance().imTranslateType(this), "x", false)), WurstTypeReal.instance().imTranslateType(this), ImVars(), ImStmts(), flags(IS_NATIVE, IS_BJ));
+                ensureStrFunc = JassIm.ImFunction(emptyTrace, "stringEnsure", ImTypeVars(), ImVars(JassIm.ImVar(wurstProg, WurstTypeString.instance().imTranslateType(this), "x", false)), WurstTypeString.instance().imTranslateType(this), ImVars(), ImStmts(), flags(IS_NATIVE, IS_BJ));
+                addFunction(ensureIntFunc);
+                addFunction(ensureBoolFunc);
+                addFunction(ensureRealFunc);
+                addFunction(ensureStrFunc);
+            }
+
             calculateCompiletimeOrder();
 
             for (CompilationUnit cu : wurstProg) {
@@ -138,6 +155,7 @@ public class ImTranslator {
                 configFunc = ImFunction(emptyTrace, "config", ImTypeVars(), ImVars(), ImVoid(), ImVars(), ImStmts(), flags());
                 addFunction(configFunc);
             }
+
             finishInitFunctions();
             EliminateCallFunctionsWithAnnotation.process(imProg);
             removeDuplicateNatives(imProg);
@@ -499,30 +517,35 @@ public class ImTranslator {
         if (initialExpr instanceof Expr) {
             Expr expr = (Expr) initialExpr;
             ImExpr translated = expr.imTranslateExpr(this, f);
+            ImSet imSet = ImSet(trace, ImVarAccess(v), translated);
             if (!v.getIsBJ()) {
                 // add init statement for non-bj vars
                 // bj-vars are already initalized by blizzard
-                f.getBody().add(ImSet(trace, ImVarAccess(v), translated));
+                f.getBody().add(imSet);
             }
-            imProg.getGlobalInits().put(v, Collections.singletonList(translated));
+            imProg.getGlobalInits().put(v, Collections.singletonList(imSet));
         } else if (initialExpr instanceof ArrayInitializer) {
             ArrayInitializer arInit = (ArrayInitializer) initialExpr;
             List<ImExpr> translatedExprs = arInit.getValues().stream()
                     .map(expr -> expr.imTranslateExpr(this, f))
                     .collect(Collectors.toList());
+            List<ImSet> imSets = new ArrayList<>();
             for (int i = 0; i < arInit.getValues().size(); i++) {
                 ImExpr translated = translatedExprs.get(i);
-                f.getBody().add(ImSet(trace, ImVarArrayAccess(trace, v, ImExprs((ImExpr) JassIm.ImIntVal(i))), translated));
+                ImSet imSet = ImSet(trace, ImVarArrayAccess(trace, v, ImExprs((ImExpr) JassIm.ImIntVal(i))), translated);
+                imSets.add(imSet);
             }
+            f.getBody().addAll(imSets);
             // add list of init-values to translatedExprs
-            imProg.getGlobalInits().put(v, translatedExprs);
+            imProg.getGlobalInits().put(v, imSets);
         }
     }
 
     public void addGlobalWithInitalizer(ImVar g, ImExpr initial) {
         imProg.getGlobals().add(g);
-        getGlobalInitFunc().getBody().add(ImSet(g.getTrace(), ImVarAccess(g), initial));
-        imProg.getGlobalInits().put(g, Collections.singletonList((ImExpr) initial.copy()));
+        ImSet imSet = ImSet(g.getTrace(), ImVarAccess(g), initial);
+        getGlobalInitFunc().getBody().add(imSet);
+        imProg.getGlobalInits().put(g, Collections.singletonList(imSet));
     }
 
 
@@ -1028,6 +1051,7 @@ public class ImTranslator {
         calculateCallRelations(getMainFunc());
         calculateCallRelations(getConfFunc());
 
+
         imProg.getGlobals().forEach(global -> {
             if (TRVEHelper.TO_KEEP.contains(global.getName())) {
                 getReadVariables().add(global);
@@ -1286,7 +1310,6 @@ public class ImTranslator {
         return runArgs.isLua();
     }
 
-
     interface VarsForTupleResult {
 
         default Iterable<ImVar> allValues() {
@@ -1521,6 +1544,8 @@ public class ImTranslator {
             Element child = e.get(i);
             if (child.getParent() == null) {
                 throw new Error("Child " + i + " (" + child + ") of " + e + " not attached to tree");
+            } else if (child.getParent() != e) {
+                throw new Error("Child " + i + " (" + child + ") of " + e + " attached to wrong tree");
             }
             assertProperties(properties, child);
         }

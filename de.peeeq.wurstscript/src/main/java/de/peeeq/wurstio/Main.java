@@ -143,17 +143,17 @@ public class Main {
                 if (mapFilePath != null && workspaceroot != null) {
                     try (MpqEditor mpqEditor = MpqEditorFactory.getEditor(Optional.of(new File(mapFilePath)))) {
                         File projectFolder = Paths.get(workspaceroot).toFile();
-                        compiledScript = compilationProcess.doCompilation(mpqEditor, projectFolder);
+                        compiledScript = compilationProcess.doCompilation(mpqEditor, projectFolder, true);
                         if (compiledScript != null) {
                             gui.sendProgress("Writing to map");
                             mpqEditor.deleteFile("war3map.j");
                             byte[] war3map = compiledScript.toString().getBytes(Charsets.UTF_8);
                             mpqEditor.insertFile("war3map.j", war3map);
                         }
-                        ImportFile.importFilesFromImportDirectory(projectFolder, mpqEditor);
+                        ImportFile.importFilesFromImports(projectFolder, mpqEditor);
                     }
                 } else {
-                    compiledScript = compilationProcess.doCompilation(null);
+                    compiledScript = compilationProcess.doCompilation(null, true);
                 }
 
                 if (compiledScript != null) {

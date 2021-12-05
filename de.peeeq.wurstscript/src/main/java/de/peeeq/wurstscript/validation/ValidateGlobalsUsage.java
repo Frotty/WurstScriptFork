@@ -8,7 +8,7 @@ import java.util.*;
  *
  */
 public class ValidateGlobalsUsage {
-    public static void checkGlobalsUsage(List<CompilationUnit> toCheck) {
+    public static void checkGlobalsUsage(Collection<CompilationUnit> toCheck) {
         Map<NameDef, Element> usedGlobals = new HashMap<>();
         for (CompilationUnit cu : toCheck) {
             checkJassGlobals(cu.getJassDecls(), usedGlobals);
@@ -61,8 +61,7 @@ public class ValidateGlobalsUsage {
                     if (!definedVars.contains(g)
                             && !g.attrIsDynamicClassMember()
                             && g.attrNearestNamedScope() == p) {
-                        e.addWarning("Global variable " + e.getVarName() + " must be declared before it is used. " +
-                                "This will be an error in future Wurst versions.");
+                        e.addError("Global variable <" + e.getVarName() + "> must be declared before it is used.");
                         // add variable to defined vars to silence further warnings:
                         definedVars.add(g);
                     }

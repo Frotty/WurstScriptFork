@@ -34,7 +34,7 @@ public class BuildMap extends MapRequest {
     @Override
     public Object execute(ModelManager modelManager) throws IOException {
         if (modelManager.hasErrors()) {
-            throw new RequestFailedException(MessageType.Error, "Fix errors in your code before building a release.");
+            throw new RequestFailedException(MessageType.Error, "Fix errors in your code before building a release.\n" + modelManager.getFirstErrorDescription());
         }
 
         WurstProjectConfigData projectConfig = WurstProjectConfig.INSTANCE.loadProject(workspaceRoot.getFile().toPath().resolve(FILE_NAME));
@@ -43,7 +43,6 @@ public class BuildMap extends MapRequest {
                 "Please install your project using grill or the wurst setup tool.");
         }
 
-        // TODO use normal compiler for this, avoid code duplication
         WLogger.info("buildMap " + map + " " + compileArgs);
         WurstGui gui = new WurstGuiImpl(workspaceRoot.getFile().getAbsolutePath());
         try {
@@ -61,7 +60,7 @@ public class BuildMap extends MapRequest {
             String fileName = projectConfig.getBuildMapData().getFileName();
             Optional<File> targetMap = Optional.of(
                 new File(buildDir, fileName.isEmpty() ? projectConfig.getProjectName() + ".w3x" : fileName + ".w3x"));
-            File compiledScript = compileScript(modelManager, gui, targetMap);
+            File compiledScript = compileScript(modelManager, gui, targetMap, projectConfig, true);
 
             gui.sendProgress("Applying Map Config...");
             ProjectConfigBuilder.apply(projectConfig, targetMap.get(), compiledScript, buildDir, runArgs, w3data);

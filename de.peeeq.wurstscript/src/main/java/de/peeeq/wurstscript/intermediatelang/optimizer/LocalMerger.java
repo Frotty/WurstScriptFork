@@ -4,15 +4,15 @@ import de.peeeq.datastructures.Worklist;
 import de.peeeq.wurstscript.intermediatelang.optimizer.ControlFlowGraph.Node;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
+import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
+import de.peeeq.wurstscript.utils.Utils;
 import io.vavr.collection.HashSet;
 import io.vavr.collection.Set;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.PriorityQueue;
+import java.util.*;
+
+import static de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG;
 
 /**
  * merges local variable, if they have disjoint live-spans
@@ -26,7 +26,7 @@ public class LocalMerger implements OptimizerPass {
     public int optimize(ImTranslator trans) {
         ImProg prog = trans.getImProg();
         totalLocalsMerged = 0;
-        for (ImFunction func : prog.getFunctions()) {
+        for (ImFunction func : ImHelper.calculateFunctionsOfProg(prog)) {
             if (!func.isNative() && !func.isBj()) {
                 optimizeFunc(func);
             }
@@ -46,6 +46,10 @@ public class LocalMerger implements OptimizerPass {
         mergeLocals(livenessInfo, func);
     }
 
+    private boolean canMerge(ImType a, ImType b) {
+        return a.equalsType(b);
+    }
+
     private void mergeLocals(Map<ImStmt, Set<ImVar>> livenessInfo, ImFunction func) {
         Map<ImVar, Set<ImVar>> inferenceGraph = calculateInferenceGraph(livenessInfo);
 
@@ -58,7 +62,9 @@ public class LocalMerger implements OptimizerPass {
 
         // variables which represent their own 'color', initially these are the parameters
         List<ImVar> assigned = new ArrayList<>(func.getParameters());
-
+        if(func.hasFlag(IS_VARARG)) {
+            assigned.remove(assigned.size() - 1);
+        }
         Map<ImVar, ImVar> merges = new HashMap<>();
 
         nextVar:
@@ -68,7 +74,7 @@ public class LocalMerger implements OptimizerPass {
             // check if there is some other variable which is already assigned, has the same type and does not interfere
             nextAssigned:
             for (ImVar other : assigned) {
-                if (other.getType().equalsType(v.getType())) {
+                if (canMerge(other.getType(), v.getType()) ) {
                     for (ImVar inferingVar : inferenceGraph.get(v)) {
                         if (merges.getOrDefault(inferingVar, inferingVar) == other) {
                             // variable already used by infering var, try next color
@@ -105,6 +111,15 @@ public class LocalMerger implements OptimizerPass {
                     }
                 }
             }
+
+            @Override
+            public void visit(ImVarargLoop varargLoop) {
+                super.visit(varargLoop);
+                ImVar v = varargLoop.getLoopVar();
+                if (merges.containsKey(v)) {
+                    varargLoop.setLoopVar(merges.get(v));
+                }
+            }
         });
     }
 
@@ -112,7 +127,7 @@ public class LocalMerger implements OptimizerPass {
      * for each variable: the set of variables which share some lifetime-range
      */
     private Map<ImVar, Set<ImVar>> calculateInferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
-        Map<ImVar, Set<ImVar>> inferenceGraph = new HashMap<>();
+        Map<ImVar, Set<ImVar>> inferenceGraph = new LinkedHashMap<>();
         java.util.Set<ImStmt> keys = livenessInfo.keySet();
         int i  = 0;
         for (ImStmt s : keys) {
@@ -120,7 +135,7 @@ public class LocalMerger implements OptimizerPass {
             Set<ImVar> live = livenessInfo.get(s);
             for (ImVar v1 : live) {
                 Set<ImVar> inferenceSet = inferenceGraph.getOrDefault(v1, HashSet.empty());
-                inferenceSet = inferenceSet.addAll(live.filter(v2 -> v1.getType().equalsType(v2.getType())));
+                inferenceSet = inferenceSet.addAll(live.filter(v2 -> canMerge(v1.getType(), v2.getType()) ));
                 inferenceGraph.put(v1, inferenceSet);
             }
         }
@@ -154,12 +169,12 @@ public class LocalMerger implements OptimizerPass {
 
     public Map<ImStmt, Set<ImVar>> calculateLiveness(ImFunction func) {
         ControlFlowGraph cfg = new ControlFlowGraph(func.getBody());
-        Map<Node, Set<ImVar>> in = new HashMap<>();
-        Map<Node, Set<ImVar>> out = new HashMap<>();
+        Map<Node, Set<ImVar>> in = new LinkedHashMap<>();
+        Map<Node, Set<ImVar>> out = new LinkedHashMap<>();
 
         Worklist<Node> todo = new Worklist<>();
 
-        Map<Node, Integer> index = new HashMap<>();
+        Map<Node, Integer> index = new LinkedHashMap<>();
 
         // init in and out with empty sets
         for (Node node : cfg.getNodes()) {
@@ -199,7 +214,7 @@ public class LocalMerger implements OptimizerPass {
             }
         }
 
-        Map<ImStmt, Set<ImVar>> result = new HashMap<>();
+        Map<ImStmt, Set<ImVar>> result = new LinkedHashMap<>();
         for (Node node : cfg.getNodes()) {
             ImStmt stmt = node.getStmt();
             if (stmt != null) {
@@ -210,7 +225,7 @@ public class LocalMerger implements OptimizerPass {
     }
 
     private Map<Node, Set<ImVar>> calculateUses(List<Node> nodes) {
-        Map<Node, Set<ImVar>> result = new HashMap<>();
+        Map<Node, Set<ImVar>> result = new LinkedHashMap<>();
         for (Node node : nodes) {
             List<ImVar> uses = new ArrayList<>();
             ImStmt stmt = node.getStmt();
@@ -271,7 +286,7 @@ public class LocalMerger implements OptimizerPass {
     }
 
     private Map<Node, Set<ImVar>> calculateDefs(List<Node> nodes) {
-        Map<Node, Set<ImVar>>result = new HashMap<>();
+        Map<Node, Set<ImVar>>result = new LinkedHashMap<>();
         for (Node node : nodes) {
             result.put(node, HashSet.empty());
             ImStmt stmt = node.getStmt();
