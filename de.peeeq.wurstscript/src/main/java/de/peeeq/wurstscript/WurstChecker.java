@@ -27,7 +27,7 @@ public class WurstChecker {
         if (root.isEmpty()) {
             return;
         }
-        TRVEHelper.protectedVariables.clear();
+        TRVEHelper.TO_KEEP.clear();
         gui.sendProgress("Checking Files");
 
         if (errorHandler.getErrorCount() > 0) return;
