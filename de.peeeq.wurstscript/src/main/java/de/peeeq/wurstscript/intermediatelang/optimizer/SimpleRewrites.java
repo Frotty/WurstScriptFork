@@ -73,7 +73,8 @@ public class SimpleRewrites implements OptimizerPass {
                         message.startsWith("Nullpointer exception") ||
                         message.startsWith("Out of memory") ||
                         message.endsWith("on invalid object.") ||
-                        message.startsWith("Could not initialize")) {
+                        message.startsWith("Could not initialize")||
+                        message.startsWith("Index out of bounds")) {
                         if (funcCall.attrTrace().attrSource().getFile().contains("Crypto.wurst") || removeWurstErrors) {
                             funcCall.replaceBy(ImHelper.nullExpr());
                         }
