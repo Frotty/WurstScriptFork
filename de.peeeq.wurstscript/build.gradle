@@ -16,6 +16,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'application'
+    id 'maven-publish'
 }
 
 import de.undercouch.gradle.tasks.download.Download
