@@ -232,3 +232,14 @@ task downloadAndUnzipFile(dependsOn: downloadZipFile, type: Copy) {
 }
 
 apply from: 'deploy.gradle'
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId = 'com.github.frotty'
+            artifactId = 'wurstscript'
+
+            from components.java
+        }
+    }
+}
