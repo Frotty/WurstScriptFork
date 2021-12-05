@@ -13,6 +13,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static de.peeeq.wurstscript.translation.imoptimizer.UselessFunctionCallsRemover.isFunctionWithoutSideEffect;
+
 /**
  * Analyzes a program for side-effects
  */
@@ -207,6 +209,7 @@ public class SideEffectAnalyzer {
      */
     public Set<ImFunction> calledFunctions(Element e) {
         return calledFunctionsStream(e)
+                .filter(func -> !func.isNative())
                 .collect(Collectors.toSet());
     }
 
@@ -223,7 +226,7 @@ public class SideEffectAnalyzer {
      */
     public Set<ImFunction> calledNatives(Element e) {
         return calledFunctionsStream(e)
-                .filter(ImFunction::isNative)
+                .filter(func -> func.isNative() && !isFunctionWithoutSideEffect(func.getName()))
                 .collect(Collectors.toSet());
     }
 

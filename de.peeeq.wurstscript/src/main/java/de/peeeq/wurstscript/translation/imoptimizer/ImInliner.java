@@ -25,6 +25,15 @@ public class ImInliner {
     private Map<ImFunction, Integer> callCounts = Maps.newLinkedHashMap();
     private Map<ImFunction, Integer> funcSizes = Maps.newLinkedHashMap();
     private Set<ImFunction> done = Sets.newLinkedHashSet();
+
+    public double getInlineTreshold() {
+        return inlineTreshold;
+    }
+
+    public void setInlineTreshold(double inlineTreshold) {
+        this.inlineTreshold = inlineTreshold;
+    }
+
     private double inlineTreshold = 50;
 
     static {
@@ -223,7 +232,7 @@ public class ImInliner {
 //		WLogger.info("	ininable: " + inlinableFunctions.contains(f));
 //		WLogger.info("	rating: " + getRating(f));
         return inlinableFunctions.contains(f)
-                && getRating(f) < threshold
+                && getRating(f) <= threshold
                 && !isRecursive(f);
     }
 

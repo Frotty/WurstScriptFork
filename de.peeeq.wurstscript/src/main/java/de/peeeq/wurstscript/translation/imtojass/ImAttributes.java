@@ -1,11 +1,13 @@
 package de.peeeq.wurstscript.translation.imtojass;
 
+import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.ast.Ast;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlag;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagCompiletime;
 import de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum;
+import de.peeeq.wurstscript.validation.TRVEHelper;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -46,8 +48,12 @@ public class ImAttributes {
 
 
     public static boolean isGlobal(ImVar imVar) {
+        if (TRVEHelper.TO_KEEP.contains(imVar.getName())) {
+            return true;
+        }
         Element parent = imVar.getParent();
         if (parent == null) {
+            WLogger.info("Variable " + imVar + " not attached.");
             throw new RuntimeException("Variable " + imVar + " not attached.");
         }
         return parent.getParent() instanceof ImProg;

@@ -1,10 +1,12 @@
 package de.peeeq.wurstscript.translation.imtranslation;
 
+import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.Lists;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.attributes.CompileError;
+import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
 import de.peeeq.wurstscript.attributes.names.OtherLink;
 import de.peeeq.wurstscript.jassIm.ImClass;
@@ -455,9 +457,14 @@ public class ExprTranslation {
         if (e.getFuncName().equals("ExecuteFunc")) {
             ExprStringVal s = (ExprStringVal) e.getArgs().get(0);
             String exFunc = s.getValS();
-            NameLink func = Utils.getFirst(e.lookupFuncs(exFunc));
-            ImFunction executedFunc = t.getFuncFor((TranslatedToImFunction) func.getDef());
-            return ImFunctionCall(e, executedFunc, ImTypeArguments(), JassIm.ImExprs(), true, CallType.EXECUTE);
+            ImmutableCollection<FuncLink> funcs = e.lookupFuncs(exFunc);
+            if (funcs.isEmpty()) {
+                return ImHelper.nullExpr();
+            } else {
+                NameLink func = Utils.getFirst(funcs);
+                ImFunction executedFunc = t.getFuncFor((TranslatedToImFunction) func.getDef());
+                return ImFunctionCall(e, executedFunc, ImTypeArguments(), JassIm.ImExprs(), true, CallType.EXECUTE);
+            }
         }
 
         if (e.getFuncName().equals("compiletime")

@@ -28,6 +28,7 @@ public class ImOptimizer {
         localPasses.add(new SimpleRewrites());
         localPasses.add(new TempMerger());
         localPasses.add(new LocalMerger());
+        localPasses.add(new LocalInliner());
     }
 
 
@@ -62,22 +63,30 @@ public class ImOptimizer {
     public void localOptimizations() {
         totalCount.clear();
         removeGarbage();
+        trans.getImProg().flatten(trans);
 
         int finalItr = 0;
         for (int i = 1; i <= 10 && optCount > 0; i++) {
             optCount = 0;
             localPasses.forEach(pass -> {
+                WLogger.info("executing localopt " + pass.getName());
                 int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
             });
             trans.getImProg().flatten(trans);
             removeGarbage();
+
             finalItr = i;
             WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
+
+            // Run a strict inliner to get rid of one-liners
+            doStrictInline();
         }
         WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
         totalCount.forEach((k, v) -> WLogger.info("== " + k + ":   " + v));
+
+        InitFunctionCleaner.clean(trans.getImProg());
     }
 
     public void doNullsetting() {
@@ -123,12 +132,14 @@ public class ImOptimizer {
                         super.visit(e);
                         if (e.getLeft() instanceof ImVarAccess) {
                             ImVarAccess va = (ImVarAccess) e.getLeft();
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.protectedVariables.contains(va.getVar().getName())) {
+
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if (e.getLeft() instanceof ImVarArrayAccess) {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.protectedVariables.contains(va.getVar().getName())) {
+
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 // TODO indexes might have side effects that we need to keep
                                 List<ImExpr> exprs = va.getIndexes().removeAll();
                                 exprs.add(e.getRight());
@@ -161,5 +172,21 @@ public class ImOptimizer {
         }
     }
 
+
+    public void doStrictInline() {
+        WLogger.info("execute strict inline");
+        ImInliner inliner = new ImInliner(trans);
+        inliner.setInlineTreshold(1);
+        inliner.doInlining();
+        trans.assertProperties();
+        removeGarbage();
+        trans.getImProg().flatten(trans);
+    }
+
+    public void encryptStrings() {
+        StringCryptor.encrypt(trans);
+        removeGarbage();
+        trans.getImProg().flatten(trans);
+    }
 
 }

@@ -2,12 +2,17 @@ package de.peeeq.wurstscript.intermediatelang.optimizer;
 
 import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.WurstOperator;
+import de.peeeq.wurstscript.intermediatelang.ILconstString;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
+import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.types.TypesHelper;
+import net.moonlightflower.wc3libs.misc.StringHash;
+import net.moonlightflower.wc3libs.txt.app.jass.expr.VarRef;
 
+import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Iterator;
@@ -16,12 +21,23 @@ import java.util.Locale;
 
 public class SimpleRewrites implements OptimizerPass {
     private SideEffectAnalyzer sideEffectAnalysis;
+    public static boolean doHashing = false;
+    public static boolean removeWurstErrors = false;
     private int totalRewrites = 0;
     private boolean showRewrites = false;
+    private ImProg prog;
+    private ImFunction stringHashFunc;
+    private ImFunction convertPlayerUnitEventFunc;
+    private ImFunction convertPlayerEventFunc;
+    private ImFunction convertStateFunc;
 
     @Override
     public int optimize(ImTranslator trans) {
-        ImProg prog = trans.getImProg();
+        prog = trans.getImProg();
+        stringHashFunc = trans.getNativeFunc("StringHash");
+        convertPlayerUnitEventFunc = trans.getNativeFunc("ConvertPlayerUnitEvent");
+        convertStateFunc = trans.getNativeFunc("ConvertPlayerState");
+        convertPlayerEventFunc = trans.getNativeFunc("ConvertPlayerEvent");
         this.sideEffectAnalysis = new SideEffectAnalyzer(prog);
         totalRewrites = 0;
         optimizeElement(prog);
@@ -43,6 +59,27 @@ public class SimpleRewrites implements OptimizerPass {
             public void visit(ImStmts stmts) {
                 super.visit(stmts);
                 removeUnreachableCode(stmts);
+            }
+        });
+
+        prog.accept(new ImProg.DefaultVisitor() {
+            @Override
+            public void visit(ImFunctionCall funcCall) {
+                super.visit(funcCall);
+                ImExprs arguments = funcCall.getArguments();
+                if (arguments.size() == 1 && arguments.get(0) instanceof ImStringVal) {
+                    String message = ((ImStringVal) arguments.get(0)).getValS();
+                    if (message.startsWith("Double free") ||
+                        message.startsWith("Nullpointer exception") ||
+                        message.startsWith("Out of memory") ||
+                        message.endsWith("on invalid object.") ||
+                        message.startsWith("Could not initialize")) {
+                        if (funcCall.attrTrace().attrSource().getFile().contains("Crypto.wurst") || removeWurstErrors) {
+                            funcCall.replaceBy(ImHelper.nullExpr());
+                        }
+                    }
+
+                }
             }
         });
     }
@@ -100,8 +137,54 @@ public class SimpleRewrites implements OptimizerPass {
         } else if (elem instanceof ImExitwhen) {
             ImExitwhen imExitwhen = (ImExitwhen) elem;
             optimizeExitwhen(imExitwhen);
+        } else if (elem instanceof ImFunction) {
+            ImFunction imFunction = (ImFunction) elem;
+            optimizeFunction(imFunction);
+        } else if (elem instanceof ImVarRead) {
+            ImVarRead varRef = (ImVarRead) elem;
+            String name = varRef.getVar().getName();
+            if (varRef.getVar().getIsBJ()) {
+                if (name.startsWith("EVENT_PLAYER_UNIT_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerUnitEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerUnitEvents.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("PLAYER_STATE_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertStateFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerStates.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("EVENT_PLAYER_HERO")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerUnitEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerHeroEvents.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("EVENT_PLAYER_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerEvents.getValForName(name))), true, CallType.NORMAL));
+                }
+            }
         }
 
+    }
+
+    private void optimizeFunction(ImFunction imFunction) {
+        // if (cond) then return true else return false
+        // -> return cond
+        if (imFunction.getBody().size() == 2) {
+            ImStmts body = imFunction.getBody();
+            if (body.get(0) instanceof ImIf && body.get(1) instanceof ImReturn) {
+                ImIf imIf = (ImIf) body.get(0);
+                if ((imIf.getElseBlock() == null || imIf.getElseBlock().size() == 0)
+                    && imIf.getThenBlock().size() == 1 && imIf.getThenBlock().get(0) instanceof ImReturn) {
+                    ImReturn firstReturn = (ImReturn) imIf.getThenBlock().get(0);
+                    ImReturn secondReturn = (ImReturn) body.get(1);
+                    if (firstReturn.getReturnValue() instanceof ImBoolVal && secondReturn.getReturnValue() instanceof ImBoolVal) {
+                        boolean first = ((ImBoolVal)firstReturn.getReturnValue()).getValB();
+                        boolean second = ((ImBoolVal)secondReturn.getReturnValue()).getValB();
+                        if (first && !second) {
+                            imIf.getCondition().setParent(null);
+                            body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), imIf.getCondition()));
+                            body.get(1).replaceBy(ImHelper.nullExpr());
+                        } else if (second && !first) {
+                            imIf.getCondition().setParent(null);
+                            body.get(0).replaceBy(JassIm.ImReturn(body.get(0).attrTrace(), JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(imIf.getCondition()))));
+                            body.get(1).replaceBy(ImHelper.nullExpr());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private void optimizeConsecutiveExitWhen(ImExitwhen lookback, ImExitwhen element) {
@@ -176,11 +259,19 @@ public class SimpleRewrites implements OptimizerPass {
             } else if (left instanceof ImBoolVal) {
                 boolean b1 = ((ImBoolVal) left).getValB();
                 wasViable = replaceBoolTerm(opc, right, b1);
-            } else if (right instanceof ImBoolVal) {
+            } else if (left instanceof ImIntVal) {
+                if (right instanceof ImIntVal) {
+                    wasViable = optimizeIntInt(opc, wasViable, (ImIntVal) left, (ImIntVal) right);
+                } else {
+                    int i1 = ((ImIntVal) left).getValI();
+                    wasViable = replaceIntTerm(opc, right, i1);
+                }
+            } else if (right instanceof ImIntVal) {
+                int i1 = ((ImIntVal) right).getValI();
+                wasViable = replaceIntTerm(opc, left, i1);
+            }  else if (right instanceof ImBoolVal) {
                 boolean b2 = ((ImBoolVal) right).getValB();
                 wasViable = replaceBoolTerm(opc, left, b2);
-            } else if (left instanceof ImIntVal && right instanceof ImIntVal) {
-                wasViable = optimizeIntInt(opc, wasViable, (ImIntVal) left, (ImIntVal) right);
             } else if (left instanceof ImRealVal && right instanceof ImRealVal) {
                 wasViable = optimizeRealReal(opc, wasViable, (ImRealVal) left, (ImRealVal) right);
             } else if (right instanceof ImStringVal) {
@@ -189,6 +280,18 @@ public class SimpleRewrites implements OptimizerPass {
                 } else if (((ImStringVal) right).getValS().equalsIgnoreCase("") && opc.getOp() == WurstOperator.PLUS) {
                     left.setParent(null);
                     opc.replaceBy(left);
+                    wasViable = true;
+                } else {
+                    if(doHashing && opc.getOp() == WurstOperator.EQ && !((ImStringVal) right).getValS().contains("/") && !((ImStringVal) right).getValS().contains("\\")) {
+                        replaceStringCompareWithHash(left, (ImStringVal) right);
+                        wasViable = true;
+                    } else {
+                        wasViable = false;
+                    }
+                }
+            } else if (left instanceof ImStringVal) {
+                if(doHashing && opc.getOp() == WurstOperator.EQ && !((ImStringVal) left).getValS().contains("/") && !((ImStringVal) left).getValS().contains("\\")) {
+                    replaceStringCompareWithHash(right, (ImStringVal) left);
                     wasViable = true;
                 } else {
                     wasViable = false;
@@ -201,6 +304,8 @@ public class SimpleRewrites implements OptimizerPass {
                     opc.setOp(WurstOperator.MULT);
                     right.replaceBy(JassIm.ImIntVal(2));
                     wasViable = true;
+                } else {
+                    wasViable = false;
                 }
             } else {
                 wasViable = false;
@@ -272,6 +377,30 @@ public class SimpleRewrites implements OptimizerPass {
         }
 
     }
+
+
+    private void replaceStringCompareWithHash(ImExpr left, ImStringVal right) {
+        ImExpr copy = left.copy();
+        left.replaceBy(JassIm.ImFunctionCall(left.attrTrace(), stringHashFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(copy), true, CallType.NORMAL));
+        try {
+            right.replaceBy(JassIm.ImIntVal(StringHash.hash(right.getValS())));
+        } catch (UnsupportedEncodingException e) {
+            WLogger.severe(e);
+        }
+    }
+
+//    private boolean rewriteEquals(ImOperatorCall opc, ImIntVal right) {
+//        if (opc.getOp() == WurstOperator.GREATER_EQ) {
+//            right.setValI(right.getValI() - 1);
+//            opc.setOp(WurstOperator.GREATER);
+//            return true;
+//        } else if (opc.getOp() == WurstOperator.LESS_EQ) {
+//            right.setValI(right.getValI() + 1);
+//            opc.setOp(WurstOperator.LESS);
+//            return true;
+//        }
+//        return false;
+//    }
 
     private boolean optimizeStringString(ImOperatorCall opc, ImStringVal left, ImStringVal right) {
         String f1 = left.getValS();
@@ -483,10 +612,50 @@ public class SimpleRewrites implements OptimizerPass {
                     opc.replaceBy(JassIm.ImBoolVal(false));
                 }
                 break;
+            case EQ:
+                if (b2) {
+                    expr.setParent(null);
+                    opc.replaceBy(expr);
+                } else {
+                    expr.setParent(null);
+                    opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(expr)));
+                }
+                break;
+            case NOTEQ:
+                if (!b2) {
+                    expr.setParent(null);
+                    opc.replaceBy(expr);
+                } else {
+                    expr.setParent(null);
+                    opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(expr)));
+                }
+                break;
             default:
                 return false;
         }
         return true;
+    }
+
+    private boolean replaceIntTerm(ImOperatorCall opc, ImExpr expr, int i1) {
+        switch (opc.getOp()) {
+            case PLUS:
+                if (i1 == 0) {
+                    expr.setParent(null);
+                    opc.replaceBy(expr);
+                    return true;
+                }
+                break;
+            case MINUS:
+                if (i1 == 0) {
+                    expr.setParent(null);
+                    opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.UNARY_MINUS, JassIm.ImExprs(expr)));
+                    return true;
+                }
+                break;
+            default:
+                return false;
+        }
+        return false;
     }
 
     /**

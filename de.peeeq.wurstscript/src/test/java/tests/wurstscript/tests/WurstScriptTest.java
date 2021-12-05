@@ -460,7 +460,6 @@ public class WurstScriptTest {
                                   WurstModel model, boolean executeProgOnlyAfterTransforms) throws Error {
         ImProg imProg = compiler.translateProgToIm(model);
 
-
         if (gui.getErrorCount() > 0) {
             throw gui.getErrorList().get(0);
         }

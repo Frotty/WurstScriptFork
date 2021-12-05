@@ -27,7 +27,8 @@ public class ImCompressor {
 
     public void compressGlobals() {
         for (final ImVar global : prog.getGlobals()) {
-            if (global.getIsBJ() || TRVEHelper.protectedVariables.contains(global.getName())) {
+            if (global.getIsBJ() || TRVEHelper.TO_KEEP.contains(global.getName())) {
+
                 // do not rename bj constants
                 // do not rename TRVE vars
                 continue;

@@ -111,6 +111,7 @@ dependencies {
     // The setup tool for wurst.build handling
     implementation 'com.github.wurstscript:wurstsetup:4c65824b40'
 
+
     implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
     implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
 

@@ -43,11 +43,9 @@ public class WurstChecker {
             WurstValidator.computeFlowAttributes(cu);
         }
 
-
         // validate the resource:
         WurstValidator validator = new WurstValidator(root);
         validator.validate(toCheck);
-        WLogger.info("debug - finished checkProg");
     }
 
     private void attachErrorHandler(WurstModel root) {

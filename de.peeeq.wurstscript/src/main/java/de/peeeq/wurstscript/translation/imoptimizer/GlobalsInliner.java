@@ -33,8 +33,9 @@ public class GlobalsInliner implements OptimizerPass {
                 // cannot optimize arrays yet
                 continue;
             }
-            if (TRVEHelper.protectedVariables.contains(v.getName())) {
-                // keep TRVE vars
+
+            if (TRVEHelper.TO_KEEP.contains(v.getName()) || v.getType() instanceof ImStringVal) {
+                // keep TRVE vars and don't inline string constants
                 continue;
             }
 

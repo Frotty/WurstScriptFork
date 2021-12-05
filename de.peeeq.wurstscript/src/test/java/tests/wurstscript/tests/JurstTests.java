@@ -268,11 +268,12 @@ public class JurstTests extends WurstScriptTest {
     public void testKeepTRVE() throws IOException {
         String jassCode = Utils.string(
             "type agent\t\t\t    extends     handle \n" +
-                "type event              extends     agent \n" +
-                "type trigger            extends     agent\n" +
-                "type eventid            extends     handle\n" +
-                "type limitop            extends     eventid\n" +
-                "globals",
+
+            "type event              extends     agent \n" +
+            "type trigger            extends     agent\n" +
+            "type eventid            extends     handle\n" +
+            "type limitop            extends     eventid\n" +
+            "globals",
             "real myVar = 0.",
             "endglobals",
             "native TriggerRegisterVariableEvent takes trigger whichTrigger, string varName, limitop opcode, real limitval returns event",

@@ -28,7 +28,8 @@ public class JassPrinter {
         Preconditions.checkNotNull(sb);
         Preconditions.checkNotNull(prog);
 
-        sb.append(WURST_COMMENT + "\n");
+//        Collections.shuffle(prog.getGlobals());
+
         printTypes(sb, prog.getDefs());
         printGlobals(sb, prog.getGlobals());
         printNatives(sb, prog.getNatives());

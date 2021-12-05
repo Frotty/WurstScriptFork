@@ -407,7 +407,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                 throw new ModelChangedException();
             }
         }
-
         checker.checkProg(model, toCheck);
     }
 
@@ -421,7 +420,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         beginPhase(2, "Eliminate generics");
         new EliminateGenerics(imTranslator2, imProg2).transform();
         printDebugImProg("./test-output/im " + stage++ + "_genericsEliminated.im");
-
         // eliminate classes
         beginPhase(2, "translate classes");
 
@@ -461,6 +459,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         EliminateTuples.eliminateTuplesProg(getImProg(), imTranslator2);
         getImTranslator().assertProperties(AssertProperty.NOTUPLES);
 
+
+
         printDebugImProg("./test-output/im " + stage++ + "_withouttuples.im");
 
         new MultiArrayEliminator(imProg2, imTranslator2, runArgs.isIncludeStacktraces() && !runArgs.isNoDebugMessages()).run();
@@ -473,7 +473,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         // remove cycles:
         beginPhase(8, "remove cyclic functions");
         new CyclicFunctionRemover(imTranslator2, imProg2).work();
-
         printDebugImProg("./test-output/im " + stage++ + "_nocyc.im");
 
         // flatten
@@ -487,6 +486,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             beginPhase(10, "local optimizations");
             optimizer.localOptimizations();
         }
+
+        optimizer.encryptStrings();
 
         printDebugImProg("./test-output/im " + stage++ + "_afterlocalopts.im");
 
@@ -605,6 +606,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     private void beginPhase(int phase, String description) {
         errorHandler.setProgress("Translating wurst. Phase " + phase + ": " + description, 0.6 + 0.01 * phase);
         timeTaker.beginPhase(description);
+        WLogger.info("Translating wurst. Phase " + phase + ": " + description);
     }
 
     private void printDebugImProg(String debugFile) {
@@ -681,8 +683,10 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                 throw new Error("Could not move war3map.j from " + tempFile + " to " + wurstwar3map);
             }
         } catch (RuntimeException e) {
+            WLogger.warning("RTE: ", e);
             throw e;
         } catch (Exception e) {
+            WLogger.warning("Exception: ", e);
             throw new Error(e);
         }
 
