@@ -219,12 +219,13 @@ public class StringCryptor {
             prog.accept(new ImProg.DefaultVisitor() {
                 @Override
                 public void visit(ImStringVal stringVal) {
-                    Optional<String> forbidden = StringCryptor.forbidden.stream().filter(f -> stringVal.getValS().startsWith(f)).findFirst();
+                    String valS = stringVal.getValS();
+                    Optional<String> forbidden = StringCryptor.forbidden.stream().filter(valS::startsWith).findFirst();
                     if (!forbidden.isPresent()) {
-                        if (stringVal.getValS().startsWith("w3pro_")) {
-                            stringVal.replaceBy(JassIm.ImStringVal(stringVal.getValS().substring(6)));
+                        if (valS.length() <= 1 || (valS.length() == 2 && valS.startsWith("\\"))) {
+                            // Do not process
                         } else {
-                            String text = stringVal.getValS();
+                            String text = valS;
                             StringBuilder crypted = new StringBuilder();
                             int i = 0;
                             for (char c : text.toCharArray()) {
