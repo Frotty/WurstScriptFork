@@ -104,7 +104,7 @@ dependencies {
     implementation group: 'net.sourceforge.jchardet', name: 'jchardet', version: '1.0'
 
     // Crigges' jmpq
-    implementation 'com.github.inwc3:jmpq3:0aaca2373d'
+    implementation 'com.github.inwc3:jmpq3:17ee2e12d3'
 
     // Water's wc3 libs
     implementation 'com.github.inwc3:wc3libs:ee5ea97325'
