@@ -63,6 +63,8 @@ public class ImTranslator {
 
     private static final de.peeeq.wurstscript.ast.Element emptyTrace = Ast.NoExpr();
 
+    public static int forceMapFlag = -1;
+
     private @Nullable Multimap<ImFunction, ImFunction> callRelations = null;
     private @Nullable Set<ImVar> usedVariables = null;
     private @Nullable Set<ImVar> readVariables = null;
@@ -157,6 +159,7 @@ public class ImTranslator {
             }
 
             finishInitFunctions();
+            setMapFlags();
             EliminateCallFunctionsWithAnnotation.process(imProg);
             removeDuplicateNatives(imProg);
             sortEverything();
@@ -171,6 +174,26 @@ public class ImTranslator {
                     + ": "
                     + t.getMessage()
                     + "\nPlease open a ticket with source code and the error log.", t);
+        }
+    }
+
+    private void setMapFlags() {
+        if (forceMapFlag > 0) {
+            configFunc.getBody().add(4,
+                JassIm.ImFunctionCall(emptyTrace, getNativeFunc("SetMapFlag"),
+                    ImTypeArguments(),
+                JassIm.ImExprs(JassIm.ImFunctionCall(emptyTrace, getNativeFunc("ConvertMapFlag"), ImTypeArguments(),
+                    JassIm.ImExprs(JassIm.ImIntVal(1)), false, CallType.NORMAL), JassIm.ImBoolVal(1 == forceMapFlag)), false, CallType.NORMAL));
+            configFunc.getBody().add(4,
+                JassIm.ImFunctionCall(emptyTrace, getNativeFunc("SetMapFlag"),
+                    ImTypeArguments(),
+                    JassIm.ImExprs(JassIm.ImFunctionCall(emptyTrace, getNativeFunc("ConvertMapFlag"), ImTypeArguments(),
+                        JassIm.ImExprs(JassIm.ImIntVal(2)), false, CallType.NORMAL), JassIm.ImBoolVal(2 == forceMapFlag)), false, CallType.NORMAL));
+            configFunc.getBody().add(4,
+                JassIm.ImFunctionCall(emptyTrace, getNativeFunc("SetMapFlag"),
+                    ImTypeArguments(),
+                    JassIm.ImExprs(JassIm.ImFunctionCall(emptyTrace, getNativeFunc("ConvertMapFlag"), ImTypeArguments(),
+                        JassIm.ImExprs(JassIm.ImIntVal(4)), false, CallType.NORMAL), JassIm.ImBoolVal(4 == forceMapFlag)), false, CallType.NORMAL));
         }
     }
 
