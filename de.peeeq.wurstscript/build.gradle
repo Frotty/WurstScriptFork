@@ -86,7 +86,7 @@ dependencies {
     implementation 'com.google.guava:guava:30.0-jre'
 
     // Better functional data structures:
-    implementation 'io.vavr:vavr:1.0.0-alpha-3'
+    implementation 'io.vavr:vavr:0.10.4'
 
     // Support for the vscode language server protocol
     implementation group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.12.0'
