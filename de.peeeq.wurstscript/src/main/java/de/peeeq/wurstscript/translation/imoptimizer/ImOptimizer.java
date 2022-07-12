@@ -153,12 +153,12 @@ public class ImOptimizer {
                             }
                         } else if (e.getLeft() instanceof ImTupleSelection) {
                             ImVar var = TypesHelper.getTupleVar((ImTupleSelection) e.getLeft());
-                            if(!trans.getReadVariables().contains(var) && !TRVEHelper.protectedVariables.contains(var.getName())) {
+                            if(!trans.getReadVariables().contains(var) && !TRVEHelper.TO_KEEP.contains(var.getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if(e.getLeft() instanceof ImMemberAccess) {
                             ImMemberAccess va = ((ImMemberAccess) e.getLeft());
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.protectedVariables.contains(va.getVar().getName())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         }
