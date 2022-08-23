@@ -8,6 +8,7 @@ import de.peeeq.wurstscript.jassIm.JassIm;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Utils;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,7 +18,8 @@ public class StringCryptor {
     public static HashSet<String> forbidden = new HashSet<>();
     public static HashMap<String, Integer> charToVal = new HashMap<>();
     public static HashMap<Integer, String> valToChar = new HashMap<>();
-    public static int[] key = new int[]{25, 12, 33, 17};
+    public static int[] key = new int[]{2,3,20,56,42,75};
+    public static int protectCount = 500;
 
     static {
         forbidden.add("TRIGSTR");
@@ -228,27 +230,12 @@ public class StringCryptor {
                     if (!forbidden.isPresent()) {
                         if (valS.length() <= 1 || (valS.length() == 2 && valS.startsWith("\\"))) {
                             // Do not process
-                        } else {
+                        } else if (protectCount > 0) {
+                            protectCount--;
                             String text = valS;
-                            StringBuilder crypted = new StringBuilder();
-                            int i = 0;
-                            for (char c : text.toCharArray()) {
-                                if (charToVal.containsKey("" + c)) {
-                                    int shifted = (charToVal.get("" + c) - (key[i]));
-                                    if (shifted < 32) {
-                                        shifted += (127 - 32);
-                                    }
-                                    crypted.append(valToChar.get(shifted));
-                                } else {
-                                    crypted.append(c);
-                                }
-                                i++;
-                                if (i >= key.length) {
-                                    i = 0;
-                                }
-                            }
+                            StringBuilder crypted = cryptString(text);
                             stringVal.replaceBy(JassIm.ImFunctionCall(decryptFunction.attrTrace(), decryptFunction,
-                                JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImStringVal(Utils.escapeString(crypted.toString(), false))), true, CallType.NORMAL));
+                                JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImStringVal(crypted.toString())), true, CallType.NORMAL));
                         }
                     }
 
@@ -257,5 +244,26 @@ public class StringCryptor {
         }
     }
 
+    @NotNull
+    private static StringBuilder cryptString(String text) {
+        StringBuilder crypted = new StringBuilder();
+        int i = 0;
+        for (char c : text.toCharArray()) {
+            if (charToVal.containsKey("" + c)) {
+                int shifted = (charToVal.get("" + c) - (key[i]));
+                if (shifted < 32) {
+                    shifted += (127 - 32);
+                }
+                crypted.append(valToChar.get(shifted));
+            } else {
+                crypted.append(c);
+            }
+            i++;
+            if (i >= key.length) {
+                i = 0;
+            }
+        }
+        return crypted;
+    }
 
 }
