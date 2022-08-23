@@ -16,7 +16,6 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'application'
-    id 'maven-publish'
 }
 
 import de.undercouch.gradle.tasks.download.Download
@@ -33,7 +32,7 @@ version = "1.8.1.0"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(11))
+        languageVersion.set(JavaLanguageVersion.of(8))
     }
 }
 
@@ -104,14 +103,13 @@ dependencies {
     implementation group: 'net.sourceforge.jchardet', name: 'jchardet', version: '1.0'
 
     // Crigges' jmpq
-    implementation 'com.github.inwc3:jmpq3:acf47d566f'
+    implementation group: 'com.github.inwc3', name: 'jmpq3', version: 'b4ef7121a4'
 
     // Water's wc3 libs
-    implementation 'com.github.inwc3:wc3libs:5bf9b0b60f'
+    implementation 'com.github.inwc3:wc3libs:a6bbe12d03'
 
     // The setup tool for wurst.build handling
     implementation 'com.github.wurstscript:wurstsetup:4c65824b40'
-
 
     implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
     implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
@@ -232,14 +230,3 @@ task downloadAndUnzipFile(dependsOn: downloadZipFile, type: Copy) {
 }
 
 apply from: 'deploy.gradle'
-
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            groupId = 'com.github.frotty'
-            artifactId = 'wurstscript'
-
-            from components.java
-        }
-    }
-}
