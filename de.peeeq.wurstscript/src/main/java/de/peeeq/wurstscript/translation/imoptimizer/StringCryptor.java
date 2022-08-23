@@ -1,10 +1,7 @@
 package de.peeeq.wurstscript.translation.imoptimizer;
 
 import de.peeeq.wurstscript.WLogger;
-import de.peeeq.wurstscript.jassIm.ImFunction;
-import de.peeeq.wurstscript.jassIm.ImProg;
-import de.peeeq.wurstscript.jassIm.ImStringVal;
-import de.peeeq.wurstscript.jassIm.JassIm;
+import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.utils.Utils;
@@ -231,9 +228,20 @@ public class StringCryptor {
                         if (valS.length() <= 1 || (valS.length() == 2 && valS.startsWith("\\"))) {
                             // Do not process
                         } else if (protectCount > 0) {
+                            Element parent = stringVal.getParent();
+                            while(parent != null) {
+                                if (parent instanceof ImFunction) {
+                                    ImFunction parentFunc = (ImFunction) parent;
+                                    if (parentFunc.getName().equals("config")) {
+                                        return;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                parent = parent.getParent();
+                            }
                             protectCount--;
-                            String text = valS;
-                            StringBuilder crypted = cryptString(text);
+                            StringBuilder crypted = cryptString(valS);
                             stringVal.replaceBy(JassIm.ImFunctionCall(decryptFunction.attrTrace(), decryptFunction,
                                 JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImStringVal(crypted.toString())), true, CallType.NORMAL));
                         }
