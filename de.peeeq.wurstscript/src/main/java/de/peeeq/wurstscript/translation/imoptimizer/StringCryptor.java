@@ -1,11 +1,13 @@
 package de.peeeq.wurstscript.translation.imoptimizer;
 
+import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.jassIm.ImFunction;
 import de.peeeq.wurstscript.jassIm.ImProg;
 import de.peeeq.wurstscript.jassIm.ImStringVal;
 import de.peeeq.wurstscript.jassIm.JassIm;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
+import de.peeeq.wurstscript.utils.Utils;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -214,8 +216,10 @@ public class StringCryptor {
     public static void encrypt(ImTranslator trans) {
         ImProg prog = trans.getImProg();
         Optional<ImFunction> decryptFunc = prog.getFunctions().stream().filter(f -> f.getName().contains("w3pro_decrypt_string")).findFirst();
+        WLogger.info("searched for decrypt");
         if (decryptFunc.isPresent()) {
-            ImFunction descryptFunction = decryptFunc.get();
+            WLogger.info("decrypt func found");
+            ImFunction decryptFunction = decryptFunc.get();
             prog.accept(new ImProg.DefaultVisitor() {
                 @Override
                 public void visit(ImStringVal stringVal) {
@@ -243,8 +247,8 @@ public class StringCryptor {
                                     i = 0;
                                 }
                             }
-                            stringVal.replaceBy(JassIm.ImFunctionCall(descryptFunction.attrTrace(), descryptFunction,
-                                JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImStringVal(crypted.toString())), true, CallType.NORMAL));
+                            stringVal.replaceBy(JassIm.ImFunctionCall(decryptFunction.attrTrace(), decryptFunction,
+                                JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImStringVal(Utils.escapeString(crypted.toString(), false))), true, CallType.NORMAL));
                         }
                     }
 

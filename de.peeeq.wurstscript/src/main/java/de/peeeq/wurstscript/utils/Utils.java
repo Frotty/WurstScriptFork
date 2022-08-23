@@ -594,10 +594,19 @@ public class Utils {
     }
 
     public static String escapeString(String v) {
+        return escapeString(v, true);
+    }
+
+
+    public static String escapeString(String v, boolean addQuotes) {
         StringBuilder builder = new StringBuilder();
-        builder.append("\"");
+        if (addQuotes) {
+            builder.append("\"");
+        }
         escapeStringParts(v, builder);
-        builder.append("\"");
+        if (addQuotes) {
+            builder.append("\"");
+        }
         return builder.toString();
     }
 

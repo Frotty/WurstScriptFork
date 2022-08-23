@@ -200,6 +200,7 @@ public class ImOptimizer {
     }
 
     public void encryptStrings() {
+        WLogger.info("encrypting strings");
         StringCryptor.encrypt(trans);
         removeGarbage();
         trans.getImProg().flatten(trans);
