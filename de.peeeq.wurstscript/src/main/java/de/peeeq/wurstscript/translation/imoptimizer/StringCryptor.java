@@ -16,7 +16,7 @@ public class StringCryptor {
     public static HashMap<String, Integer> charToVal = new HashMap<>();
     public static HashMap<Integer, String> valToChar = new HashMap<>();
     public static int[] key = new int[]{2,3,20,56,42,75};
-    public static int protectCount = 999999999;
+    public static int protectCount = 9999999;
 
     static {
         forbidden.add("TRIGSTR");
