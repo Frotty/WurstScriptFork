@@ -202,15 +202,13 @@ public class ProgramStateIO extends ProgramState {
         }
     }
 
-    private void deleteWurstObjects(ObjMod<? extends ObjMod.Obj> unitStore) {
-        Iterator<? extends ObjMod.Obj> iterator = unitStore.getCustomObjs().iterator();
-        while (iterator.hasNext()) {
-            ObjMod.Obj next = iterator.next();
+    private void deleteWurstObjects(ObjMod<? extends ObjMod.Obj> dataStore) {
+        for (ObjMod.Obj next : dataStore.getCustomObjs()) {
             for (ObjMod.Obj.Mod om : next.getMods()) {
                 if (om.getId().getVal().equals("wurs") && om.getVal() instanceof War3Int) {
                     War3Int val = (War3Int) om.getVal();
                     if (val.getVal() == GENERATED_BY_WURST) {
-                        iterator.remove();
+                        dataStore.removeObj(next.getId());
                         break;
                     }
                 }
@@ -340,7 +338,9 @@ public class ProgramStateIO extends ProgramState {
                 } else {
                     out.append("\t..set").append(valTypeToFuncPostfix(m.getValType())).append("(\"");
                     out.append(m.toString());
-                    out.append("\", ").append(m.getVal().toString()).append(")\n");
+                    out.append("\", ").append((m.getValType() == ObjMod.ValType.STRING) ?
+                        Utils.escapeString(m.getVal().toString()) :
+                        m.getVal().toString()).append(")\n");
                 }
             }
             out.append("\n\n");
