@@ -21,7 +21,6 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -95,7 +94,7 @@ public class ProgramStateIO extends ProgramState {
         if (mpqEditor == null) {
             // without a map: create empty object file
             dataStore = filetypeToObjmod(filetype);
-            dataStore.setFormat(ObjMod.EncodingFormat.AUTO);
+            dataStore.setFormat(ObjMod.EncodingFormat.OBJ_0x2);
             dataStoreMap.put(filetype, dataStore);
             return dataStore;
         }
@@ -103,47 +102,104 @@ public class ProgramStateIO extends ProgramState {
         try {
             // extract specific object file:
             String fileName = "war3map." + filetype.getExt();
+            String skinFileName = "war3mapSkin." + filetype.getExt();
             try {
                 if (mpqEditor.hasFile(fileName)) {
                     byte[] w3_ = mpqEditor.extractFile(fileName);
-                    try (Wc3BinInputStream in = new Wc3BinInputStream(new ByteArrayInputStream(w3_))) {
-                        switch (filetype) {
-                            case UNITS:
-                                dataStore = new W3U(in);
-                                break;
-                            case ITEMS:
-                                dataStore = new W3T(in);
-                                break;
-                            case DESTRUCTABLES:
-                                dataStore = new W3B(in);
-                                break;
-                            case DOODADS:
-                                dataStore = new W3D(in);
-                                break;
-                            case ABILITIES:
-                                dataStore = new W3A(in);
-                                break;
-                            case BUFFS:
-                                dataStore = new W3H(in);
-                                break;
-                            case UPGRADES:
-                                dataStore = new W3Q(in);
-                                break;
-                        }
-
-                        replaceTrigStrings(dataStore);
+                    Wc3BinInputStream in = new Wc3BinInputStream(new ByteArrayInputStream(w3_));
+                    switch (filetype) {
+                        case UNITS:
+                            W3U w3u = new W3U(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3U skin = new W3U(inS);
+                                w3u.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3u;
+                            break;
+                        case ITEMS:
+                            W3T w3t = new W3T(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3T skin = new W3T(inS);
+                                w3t.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3t;
+                            break;
+                        case DESTRUCTABLES:
+                            W3B w3b = new W3B(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3B skin = new W3B(inS);
+                                w3b.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3b;
+                            break;
+                        case DOODADS:
+                            W3D w3d = new W3D(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3D skin = new W3D(inS);
+                                w3d.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3d;
+                            break;
+                        case ABILITIES:
+                            W3A w3a = new W3A(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3A skin = new W3A(inS);
+                                w3a.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3a;
+                            break;
+                        case BUFFS:
+                            W3H w3h = new W3H(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3H skin = new W3H(inS);
+                                w3h.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3h;
+                            break;
+                        case UPGRADES:
+                            W3Q w3q = new W3Q(in);
+                            if (mpqEditor.hasFile(skinFileName)) {
+                                byte[] w3s_ = mpqEditor.extractFile(skinFileName);
+                                Wc3BinInputStream inS = new Wc3BinInputStream(new ByteArrayInputStream(w3s_));
+                                W3Q skin = new W3Q(inS);
+                                w3q.merge(skin);
+                                mpqEditor.deleteFile(skinFileName);
+                            }
+                            dataStore = w3q;
+                            break;
                     }
+
+                    in.close();
+                    replaceTrigStrings(dataStore);
 
                 } else {
                     dataStore = filetypeToObjmod(filetype);
-                    dataStore.setFormat(ObjMod.EncodingFormat.AUTO);
+                    dataStore.setFormat(ObjMod.EncodingFormat.OBJ_0x2);
                 }
             } catch (IOException | InterruptedException e) {
                 // TODO maybe tell the user, that something has gone wrong
                 WLogger.info("Could not extract file: " + fileName);
                 WLogger.info(e);
                 dataStore = filetypeToObjmod(filetype);
-                dataStore.setFormat(ObjMod.EncodingFormat.AUTO);
+                dataStore.setFormat(ObjMod.EncodingFormat.OBJ_0x2);
             }
             dataStoreMap.put(filetype, dataStore);
 
@@ -253,7 +309,7 @@ public class ProgramStateIO extends ProgramState {
                 ObjMod<? extends ObjMod.Obj> dataStore = getDataStore(fileType);
                 if (!dataStore.getObjs().isEmpty()) {
                     objFileStream.writeInt32(1); // exists
-                    dataStore.write(objFileStream, ObjMod.EncodingFormat.AS_DEFINED);
+                    dataStore.write(objFileStream, ObjMod.EncodingFormat.OBJ_0x2);
                 } else {
                     objFileStream.writeInt32(0); // does not exist
                 }
@@ -264,14 +320,15 @@ public class ProgramStateIO extends ProgramState {
     }
 
     private void writebackObjectFile(ObjMod<? extends ObjMod.Obj> dataStore, ObjectFileType fileType, boolean inject) throws Error {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (Wc3BinOutputStream out = new Wc3BinOutputStream(baos)) {
+
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            Wc3BinOutputStream out = new Wc3BinOutputStream(baos);
             Optional<File> folder = getObjectEditingOutputFolder();
 
-            dataStore.write(out, ObjMod.EncodingFormat.AS_DEFINED);
+            dataStore.write(out, ObjMod.EncodingFormat.OBJ_0x2);
 
             out.close();
-
             byte[] w3_ = baos.toByteArray();
 
             // TODO  wurst exported objects
