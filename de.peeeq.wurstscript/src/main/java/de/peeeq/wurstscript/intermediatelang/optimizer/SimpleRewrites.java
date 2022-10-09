@@ -408,7 +408,9 @@ public class SimpleRewrites implements OptimizerPass {
         String f2 = right.getValS();
         switch (opc.getOp()) {
             case PLUS:
-                opc.replaceBy(JassIm.ImStringVal(f1 + f2));
+                if (f1.length() + f2.length() < 700) {
+                    opc.replaceBy(JassIm.ImStringVal(f1 + f2));
+                }
                 return true;
             default:
                 break;
