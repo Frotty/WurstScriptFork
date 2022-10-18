@@ -55,6 +55,7 @@ import java.util.stream.Stream;
 import static de.peeeq.wurstscript.jassIm.JassIm.*;
 import static de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.*;
 import static de.peeeq.wurstscript.utils.Utils.elementNameWithPath;
+import static de.peeeq.wurstscript.utils.Utils.emptyList;
 
 public class ImTranslator {
 
@@ -386,8 +387,15 @@ public class ImTranslator {
 
         ImVar initTrigVar = prepareTrigger();
 
+
         for (WPackage p : Utils.sortByName(initFuncMap.keySet())) {
-            callInitFunc(calledInitializers, p, initTrigVar);
+            if (p.hasAnnotation("mainhook")) {
+                ImFunction initFunc = initFuncMap.get(p);
+                mainFunc.getBody().add(0, JassIm.ImFunctionCall(emptyTrace, initFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(), false, CallType.NORMAL));
+            } else {
+                callInitFunc(calledInitializers, p, initTrigVar);
+            }
+
         }
 
         ImFunction native_DestroyTrigger = getNativeFunc("DestroyTrigger");
@@ -404,6 +412,7 @@ public class ImTranslator {
     private ImVar prepareTrigger() {
         ImVar initTrigVar = JassIm.ImVar(emptyTrace, JassIm.ImSimpleType("trigger"), "initTrig", false);
         metaMainFunc.getLocals().add(initTrigVar);
+
 
         // initTrigVar = CreateTrigger()
         ImFunction createTrigger = getNativeFunc("CreateTrigger");
