@@ -387,7 +387,7 @@ public class ImTranslator {
 
 
         for (WPackage p : Utils.sortByName(initFuncMap.keySet())) {
-            if (p.hasAnnotation("mainhook")) {
+            if (p.getName().startsWith("MainHook_")) {
                 ImFunction initFunc = initFuncMap.get(p);
                 mainFunc.getBody().add(0, JassIm.ImFunctionCall(emptyTrace, initFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(), false, CallType.NORMAL));
             } else {
