@@ -87,15 +87,23 @@ public class OptimizerTests extends WurstScriptTest {
     public void test_inline_globals() {
         test().lines(
                 "package test",
-                "	int testVar1 = 1",
-                "	real testVar2 = 1.1",
-                "	string testVar3 = \"blub\"",
-                "	boolean testVar4 = true",
+                "	native prints(string s)",
+                "	native printi(int s)",
+                "	native printb(boolean s)",
+                "	native printr(real s)",
+                "	constant testVar1 = 1",
+                "	constant testVar2 = 1.1",
+                "	constant testVar3 = \"blub\"",
+                "	constant testVar4 = true",
                 "	init",
                 "		int i = testVar1",
                 "		real r = testVar2",
                 "		string s = testVar3",
                 "		boolean b = testVar4",
+                "		printi(i)",
+                "		printr(r)",
+                "		prints(s)",
+                "		printb(b)",
                 "endpackage");
     }
 

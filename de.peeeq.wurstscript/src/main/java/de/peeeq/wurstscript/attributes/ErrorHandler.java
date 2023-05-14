@@ -40,10 +40,12 @@ public class ErrorHandler {
     public void sendError(CompileError err) {
         if (err.getErrorType() == ErrorType.ERROR) {
             errors.add(err);
-        } else {
-            warnings.add(err);
+            gui.sendError(err);
         }
-        gui.sendError(err);
+//        } else {
+////            warnings.add(err);
+//        }
+
     }
 
     public void enableUnitTestMode() {

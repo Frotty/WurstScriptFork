@@ -17,6 +17,7 @@ public class ImOptimizer {
     private int totalFunctionsRemoved = 0;
     private int totalGlobalsRemoved = 0;
 
+    public static int localOptRounds = 1;
     private static final ArrayList<OptimizerPass> localPasses = new ArrayList<>();
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
 
@@ -67,11 +68,11 @@ public class ImOptimizer {
         trans.getImProg().flatten(trans);
 
         int finalItr = 0;
-        for (int i = 1; i <= 10 && optCount > 0; i++) {
+        for (int i = 1; i <= localOptRounds && optCount > 0; i++) {
             optCount = 0;
             localPasses.forEach(pass -> {
-                WLogger.info("executing localopt " + pass.getName());
                 int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
+                WLogger.info("executed localopt " + pass.getName() + " " + count);
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
             });
