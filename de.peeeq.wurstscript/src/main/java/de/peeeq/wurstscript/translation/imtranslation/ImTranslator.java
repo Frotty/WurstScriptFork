@@ -549,9 +549,14 @@ public class ImTranslator {
             Expr expr = (Expr) initialExpr;
             ImExpr translated = expr.imTranslateExpr(this, f);
             ImSet imSet = ImSet(trace, ImVarAccess(v), translated);
-            if (!v.getIsBJ()) {
+            if (!v.getIsBJ() && !(
+                    v.getType() instanceof ImSimpleType &&
+                    ImHelper.defaultValueForType((ImSimpleType) v.getType()).structuralEquals(translated)
+                )
+            ) {
                 // add init statement for non-bj vars
                 // bj-vars are already initalized by blizzard
+                // Don't add init statement for default value
                 f.getBody().add(imSet);
             }
             imProg.getGlobalInits().put(v, Collections.singletonList(imSet));
