@@ -22,6 +22,8 @@ import java.util.Locale;
 public class SimpleRewrites implements OptimizerPass {
     private SideEffectAnalyzer sideEffectAnalysis;
     public static boolean doHashing = false;
+
+    public static boolean hideEvents = false;
     public static boolean removeWurstErrors = false;
     private int totalRewrites = 0;
     private boolean showRewrites = false;
@@ -144,7 +146,7 @@ public class SimpleRewrites implements OptimizerPass {
         } else if (elem instanceof ImVarRead) {
             ImVarRead varRef = (ImVarRead) elem;
             String name = varRef.getVar().getName();
-            if (varRef.getVar().getIsBJ()) {
+            if (hideEvents && varRef.getVar().getIsBJ()) {
                 if (name.startsWith("EVENT_PLAYER_UNIT_")) {
                     varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerUnitEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerUnitEvents.getValForName(name))), true, CallType.NORMAL));
                 } else if (name.startsWith("PLAYER_STATE_")) {
