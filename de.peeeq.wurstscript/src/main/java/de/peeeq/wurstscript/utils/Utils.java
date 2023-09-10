@@ -83,9 +83,9 @@ public class Utils {
 
     public static int parseInt(String yytext) {
         if (yytext.startsWith("0")) {
-            return Integer.parseInt(yytext, 8);
+            return (int) Long.parseLong(yytext, 8);
         } else {
-            return Integer.parseInt(yytext);
+            return (int) Long.parseLong((yytext));
         }
     }
 
