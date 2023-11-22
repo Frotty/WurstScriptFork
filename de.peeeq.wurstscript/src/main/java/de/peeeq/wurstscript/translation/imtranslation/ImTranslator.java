@@ -1582,7 +1582,9 @@ public class ImTranslator {
         if (e instanceof ElementWithVar) {
             checkVar(((ElementWithVar) e).getVar(), properties);
         }
-        properties.parallelStream().forEach(p -> p.check(e));
+        for (AssertProperty p : properties) {
+            p.check(e);
+        }
         if (properties.contains(AssertProperty.NOTUPLES)) {
             // TODO ?
         }
