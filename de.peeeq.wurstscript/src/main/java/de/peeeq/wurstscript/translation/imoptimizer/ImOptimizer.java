@@ -70,12 +70,14 @@ public class ImOptimizer {
         int finalItr = 0;
         for (int i = 1; i <= localOptRounds && optCount > 0; i++) {
             optCount = 0;
+            StringBuilder sb = new StringBuilder();
             localPasses.forEach(pass -> {
                 int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
-                WLogger.info("executed localopt " + pass.getName() + " " + count);
+                sb.append("<").append(pass.getName()).append(": ").append(count).append("> ");
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
             });
+            WLogger.info(sb.toString());
             trans.getImProg().flatten(trans);
             removeGarbage();
 
@@ -86,7 +88,9 @@ public class ImOptimizer {
             doStrictInline();
         }
         WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
-        totalCount.forEach((k, v) -> WLogger.info("== " + k + ":   " + v));
+        StringBuilder sb = new StringBuilder("Total: ");
+        totalCount.forEach((k, v) -> sb.append("<").append(k).append(": ").append(v).append("> "));
+        WLogger.info(sb.toString());
 
         InitFunctionCleaner.clean(trans.getImProg());
     }
