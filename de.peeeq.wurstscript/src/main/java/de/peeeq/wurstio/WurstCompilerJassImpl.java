@@ -472,7 +472,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
 
         // remove cycles:
         beginPhase(8, "remove cyclic functions");
-        new CyclicFunctionRemover(imTranslator2, imProg2).work();
+        new CyclicFunctionRemover(imTranslator2, imProg2, timeTaker).work();
+
         printDebugImProg("./test-output/im " + stage++ + "_nocyc.im");
 
         // flatten
@@ -753,6 +754,9 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         }
         if (fileName.endsWith(".jurst")) {
             return parser.parseJurst(reader, fileName, hasCommonJ);
+        }
+        if (runArgs.isPrettyPrint()) {
+            parser.setRemoveSugar(false);
         }
         return parser.parse(reader, fileName, hasCommonJ);
     }

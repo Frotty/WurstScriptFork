@@ -24,21 +24,29 @@ import org.antlr.v4.runtime.misc.Interval;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class WurstParser {
     private static final int MAX_SYNTAX_ERRORS = 15;
     private final ErrorHandler errorHandler;
     private final WurstGui gui;
+    private boolean removeSugar = true;
 
     public WurstParser(ErrorHandler errorHandler, WurstGui gui) {
         this.errorHandler = errorHandler;
         this.gui = gui;
     }
 
+    public void setRemoveSugar(boolean removeSugar) {
+        this.removeSugar = removeSugar;
+    }
+
     public CompilationUnit parse(Reader reader, String source, boolean hasCommonJ) {
         return parseWithAntlr(reader, source, hasCommonJ);
     }
 
+    private static final Pattern pattern = Pattern.compile("\\s*");
 
     private CompilationUnit parseWithAntlr(Reader reader, final String source, boolean hasCommonJ) {
         try {
@@ -52,6 +60,8 @@ public class WurstParser {
             ANTLRErrorListener l = new BaseErrorListener() {
 
                 int errorCount = 0;
+
+
 
                 @Override
                 public void syntaxError(@SuppressWarnings("null") Recognizer<?, ?> recognizer, @SuppressWarnings("null") Object offendingSymbol, int line,
@@ -85,7 +95,8 @@ public class WurstParser {
                         posStop = input.size() - 1;
                     }
 
-                    while (pos > 0 && input.getText(new Interval(pos, posStop)).matches("\\s*")){
+                    Matcher matcher = pattern.matcher(input.getText(new Interval(pos, posStop)));
+                    while (pos > 0 && matcher.matches()){
                         pos--;
                     }
                     CompileError err = new CompileError(new WPos(source, offsets, pos, posStop), msg);
@@ -110,8 +121,10 @@ public class WurstParser {
                 gui.sendError(warning);
             }
 
-            CompilationUnit root = new AntlrWurstParseTreeTransformer(source, errorHandler, lexer.getLineOffsets()).transform(cu);
-            removeSyntacticSugar(root, hasCommonJ);
+            CompilationUnit root = new AntlrWurstParseTreeTransformer(source, errorHandler, lexer.getLineOffsets(), lexer.getCommentTokens(), true).transform(cu);
+            if (this.removeSugar) {
+                removeSyntacticSugar(root, hasCommonJ);
+            }
             root.getCuInfo().setIndentationMode(lexer.getIndentationMode());
             return root;
 
@@ -161,7 +174,8 @@ public class WurstParser {
 
                     msg = "line " + line + ": " + msg;
 
-                    while (pos > 0 && input.getText(new Interval(pos, posStop)).matches("\\s*")) {
+                    Matcher matcher = pattern.matcher(input.getText(new Interval(pos, posStop)));
+                    while (pos > 0 && matcher.matches()) {
                         pos--;
                     }
                     CompileError err = new CompileError(new WPos(source, offsets, pos, posStop), msg);
@@ -181,7 +195,9 @@ public class WurstParser {
 
             de.peeeq.wurstscript.jurst.antlr.JurstParser.CompilationUnitContext cu = parser.compilationUnit(); // begin parsing at init rule
             CompilationUnit root = new AntlrJurstParseTreeTransformer(source, errorHandler, lexer.getLineOffsets()).transform(cu);
-            removeSyntacticSugar(root, hasCommonJ);
+            if (this.removeSugar) {
+                removeSyntacticSugar(root, hasCommonJ);
+            }
             return root;
 
         } catch (IOException e) {
@@ -229,7 +245,8 @@ public class WurstParser {
 
                     msg = "line " + line + ": " + msg;
 
-                    while (pos > 0 && input.getText(new Interval(pos, posStop)).matches("\\s*")) {
+                    Matcher matcher = pattern.matcher(input.getText(new Interval(pos, posStop)));
+                    while (pos > 0 && matcher.matches()) {
                         pos--;
                     }
                     CompileError err = new CompileError(new WPos(source, offsets, pos, posStop), msg);
