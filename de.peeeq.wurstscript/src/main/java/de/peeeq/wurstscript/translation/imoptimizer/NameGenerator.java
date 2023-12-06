@@ -66,9 +66,9 @@ public class NameGenerator {
     /**
      * length of charmap
      */
-    private final int lengthFirst;
-    private final int length;
-    private final int lengthMid;
+    private int lengthFirst;
+    private int length;
+    private int lengthMid;
     private final int TElength = 25;
 
 

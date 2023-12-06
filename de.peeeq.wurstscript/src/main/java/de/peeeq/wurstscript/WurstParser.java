@@ -27,7 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class WurstParser {
-    private static final int MAX_SYNTAX_ERRORS = 15;
+    private static final int MAX_SYNTAX_ERRORS = 1;
     private final ErrorHandler errorHandler;
     private final WurstGui gui;
     private boolean removeSugar = true;
