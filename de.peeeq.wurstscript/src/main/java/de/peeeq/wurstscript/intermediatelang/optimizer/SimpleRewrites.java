@@ -375,7 +375,7 @@ public class SimpleRewrites implements OptimizerPass {
         if (wasViable) {
             totalRewrites++;
             if (showRewrites) {
-                WLogger.info("opcall rewrite: " + opc.toString());
+                WLogger.info("opcall rewrite: " + opc);
             }
         }
 
