@@ -263,10 +263,10 @@ public class StringCryptor {
                     shifted += (127 - 32);
                 }
                 crypted.append(valToChar.get(shifted));
+                i++;
             } else {
                 crypted.append(c);
             }
-            i++;
             if (i >= key.length) {
                 i = 0;
             }
