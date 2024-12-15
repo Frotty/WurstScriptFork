@@ -267,11 +267,11 @@ public class SimpleRewrites implements OptimizerPass {
                     wasViable = optimizeIntInt(opc, wasViable, (ImIntVal) left, (ImIntVal) right);
                 } else {
                     int i1 = ((ImIntVal) left).getValI();
-                    wasViable = replaceIntTerm(opc, right, i1);
+                    wasViable = replaceIntTerm(opc, right, i1, true);
                 }
             } else if (right instanceof ImIntVal) {
                 int i1 = ((ImIntVal) right).getValI();
-                wasViable = replaceIntTerm(opc, left, i1);
+                wasViable = replaceIntTerm(opc, left, i1, false);
             }  else if (right instanceof ImBoolVal) {
                 boolean b2 = ((ImBoolVal) right).getValB();
                 wasViable = replaceBoolTerm(opc, left, b2);
@@ -641,10 +641,12 @@ public class SimpleRewrites implements OptimizerPass {
         return true;
     }
 
-    private boolean replaceIntTerm(ImOperatorCall opc, ImExpr expr, int i1) {
+    private boolean replaceIntTerm(ImOperatorCall opc, ImExpr expr, int i1, boolean intIsLeft) {
         switch (opc.getOp()) {
             case PLUS:
                 if (i1 == 0) {
+                    // 0 + x -> x
+                    // x + 0 -> x
                     expr.setParent(null);
                     opc.replaceBy(expr);
                     return true;
@@ -652,9 +654,17 @@ public class SimpleRewrites implements OptimizerPass {
                 break;
             case MINUS:
                 if (i1 == 0) {
-                    expr.setParent(null);
-                    opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.UNARY_MINUS, JassIm.ImExprs(expr)));
-                    return true;
+                    if (intIsLeft) {
+                        // 0 - x -> -x
+                        expr.setParent(null);
+                        opc.replaceBy(JassIm.ImOperatorCall(WurstOperator.UNARY_MINUS, JassIm.ImExprs(expr)));
+                        return true;
+                    } else {
+                        // x - 0 -> x
+                        expr.setParent(null);
+                        opc.replaceBy(expr);
+                        return true;
+                    }
                 }
                 break;
             default:
