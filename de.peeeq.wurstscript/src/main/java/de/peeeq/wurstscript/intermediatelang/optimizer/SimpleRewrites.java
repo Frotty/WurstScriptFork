@@ -299,16 +299,22 @@ public class SimpleRewrites implements OptimizerPass {
                 } else {
                     wasViable = false;
                 }
-            } else if (opc.getOp() == WurstOperator.PLUS
-                    && (left.attrTyp().equalsType(TypesHelper.imInt()) || left.attrTyp().equalsType(TypesHelper.imReal()))
-                    && left.structuralEquals(right)) {
-                // x + x ---> 2*x
-                if (!sideEffectAnalysis.hasSideEffects(left)) {
-                    opc.setOp(WurstOperator.MULT);
-                    right.replaceBy(JassIm.ImIntVal(2));
-                    wasViable = true;
-                } else {
-                    wasViable = false;
+            } else if (opc.getOp() == WurstOperator.PLUS) {
+                // avoid multiple type checks triggering recursive calls
+                ImType leftType = left.attrTyp();
+
+                // avoid null pointers if typing is incomplete
+                if (leftType != null && (leftType.equalsType(TypesHelper.imInt()) || leftType.equalsType(TypesHelper.imReal()))) {
+                    if (left.structuralEquals(right)) {
+                        // x + x ---> 2*x
+                        if (!sideEffectAnalysis.hasSideEffects(left)) {
+                            opc.setOp(WurstOperator.MULT);
+                            right.replaceBy(JassIm.ImIntVal(2));
+                            wasViable = true;
+                        } else {
+                            wasViable = false;
+                        }
+                    }
                 }
             } else {
                 wasViable = false;
