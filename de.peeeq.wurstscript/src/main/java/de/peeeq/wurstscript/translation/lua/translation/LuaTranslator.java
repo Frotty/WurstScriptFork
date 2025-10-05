@@ -135,7 +135,7 @@ public class LuaTranslator {
     LuaFunction ensureRealFunction = LuaAst.LuaFunction(uniqueName("realEnsure"), LuaAst.LuaParams(), LuaAst.LuaStatements());
 
     private final Lazy<LuaFunction> errorFunc = Lazy.create(() ->
-        this.getProg().getFunctions().stream()
+        Objects.requireNonNull(this.getProg().getFunctions().stream()
             .flatMap(f -> {
                 Element trace = f.attrTrace();
                 if (trace instanceof FuncDef) {
@@ -150,7 +150,7 @@ public class LuaTranslator {
                 }
                 return Stream.empty();
             })
-            .findFirst().orElse(null));
+            .findFirst().orElse(null)));
 
     private final ImTranslator imTr;
 
@@ -391,19 +391,20 @@ public class LuaTranslator {
         LuaFunction[] ensureTypeFunctions = {ensureIntFunction, ensureBoolFunction, ensureRealFunction, ensureStrFunction};
         String[] defaultValue = {"0", "false", "0.0", "\"\""};
         for(int i = 0; i < ensureTypeFunctions.length; ++i) {
+            LuaFunction ensureTypeFunction = ensureTypeFunctions[i];
             String[] code = {
                 "if x == nil then",
                 "    return " + defaultValue[i],
                 "else",
-                "    return x",
+                "    return " + (ensureTypeFunction == ensureIntFunction ? "math.tointeger(x)" : "x"),
                 "end"
             };
 
-            ensureTypeFunctions[i].getParams().add(LuaAst.LuaVariable("x", LuaAst.LuaNoExpr()));
+            ensureTypeFunction.getParams().add(LuaAst.LuaVariable("x", LuaAst.LuaNoExpr()));
             for (String c : code) {
-                ensureTypeFunctions[i].getBody().add(LuaAst.LuaLiteral(c));
+                ensureTypeFunction.getBody().add(LuaAst.LuaLiteral(c));
             }
-            luaModel.add(ensureTypeFunctions[i]);
+            luaModel.add(ensureTypeFunction);
         }
     }
 

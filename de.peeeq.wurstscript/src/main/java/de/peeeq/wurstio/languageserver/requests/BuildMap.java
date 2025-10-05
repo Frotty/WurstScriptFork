@@ -27,7 +27,7 @@ public class BuildMap extends MapRequest {
 
     public BuildMap(WurstLanguageServer languageServer, WFile workspaceRoot, Optional<String> wc3Path, Optional<File> map,
                     List<String> compileArgs) {
-        super(languageServer, map, compileArgs, workspaceRoot, wc3Path);
+        super(languageServer, map, compileArgs, workspaceRoot, wc3Path, Optional.empty());
     }
 
     @Override
@@ -52,6 +52,9 @@ public class BuildMap extends MapRequest {
                 throw new RequestFailedException(MessageType.Error, map.get().getAbsolutePath() + " does not exist.");
             }
 
+            MapRequest.mapLastModified = map.get().lastModified();
+            MapRequest.mapPath = map.get().getAbsolutePath();
+
             gui.sendProgress("Copying map");
 
             // first we copy in same location to ensure validity
@@ -63,9 +66,12 @@ public class BuildMap extends MapRequest {
 
             injectMapData(gui, targetMap, result);
 
-            //noinspection EmptyTryBlock
-            try(MpqEditor ignored = MpqEditorFactory.getEditor(targetMap)) {
-                // Just finalization
+            gui.sendProgress("Finalizing map");
+
+            try (MpqEditor mpq = MpqEditorFactory.getEditor(targetMap)) {
+                if (mpq != null) {
+                    mpq.closeWithCompression();
+                }
             }
 
             gui.sendProgress("Done.");
