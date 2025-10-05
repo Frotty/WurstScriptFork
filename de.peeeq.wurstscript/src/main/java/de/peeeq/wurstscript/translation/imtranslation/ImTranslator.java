@@ -1091,7 +1091,7 @@ public class ImTranslator {
         // mark protected globals as read
         // TRVEHelper.protectedVariables is presumably a HashSet<String> (O(1) contains)
         for (ImVar global : imProg.getGlobals()) {
-            if (TRVEHelper.protectedVariables.contains(global.getName())) {
+            if (TRVEHelper.TO_KEEP.contains(global.getName())) {
                 readVariables.add(global);
             }
         }

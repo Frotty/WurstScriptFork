@@ -155,7 +155,7 @@ public class ImOptimizer {
                             }
                         } else if (e.getLeft() instanceof ImVarArrayAccess) {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.protectedVariables.contains(va.getVar().getName())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
                                 // IMPORTANT: removeAll() clears parent references
                                 List<ImExpr> exprs = va.getIndexes().removeAll();
                                 exprs.add(e.getRight());
@@ -163,7 +163,7 @@ public class ImOptimizer {
                             }
                         } else if (e.getLeft() instanceof ImTupleSelection) {
                             ImVar var = TypesHelper.getTupleVar((ImTupleSelection) e.getLeft());
-                            if(var != null && !trans.getReadVariables().contains(var) && !TRVEHelper.protectedVariables.contains(var.getName())) {
+                            if(var != null && !trans.getReadVariables().contains(var) && !TRVEHelper.TO_KEEP.contains(var.getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if(e.getLeft() instanceof ImMemberAccess) {
