@@ -2,6 +2,7 @@ package de.peeeq.wurstio.mpq;
 
 import java.io.Closeable;
 import java.io.File;
+import java.io.IOException;
 
 public interface MpqEditor extends Closeable {
 
@@ -15,7 +16,9 @@ public interface MpqEditor extends Closeable {
 
     void deleteFile(String filenameInMpq) throws Exception;
 
-    boolean hasFile(String fileName) throws Exception;
+    boolean hasFile(String fileName);
 
     void setKeepHeaderOffset(boolean flag);
+
+    void closeWithCompression() throws IOException;
 }

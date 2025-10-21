@@ -1,0 +1,75 @@
+name: Release slim runtimes (jlink)
+
+on:
+  push:
+    tags:
+      - 'v*' 
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.plat }}
+    strategy:
+      fail-fast: false
+    # keep four platforms as you had
+      matrix:
+        include:
+          - os: windows-latest
+            plat: win-x64
+          - os: ubuntu-latest
+            plat: linux-x64
+          - os: macos-13
+            plat: macos-x64
+          - os: macos-14
+            plat: macos-arm64
+
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    env:
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+    defaults:
+      run:
+        working-directory: de.peeeq.wurstscript
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # your version task uses git describe
+
+      - name: Setup Temurin JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      # Build fat jar + jdeps + jlink + package + checksum for this OS
+      - name: Package slim runtime (per-OS)
+        run: ./gradlew --no-daemon --stacktrace checksumSlimCompilerDist
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Attaches the per-OS files produced on this runner
+          files: |
+            de.peeeq.wurstscript/build/releases/wurst-compiler-*-*.zip
+            de.peeeq.wurstscript/build/releases/wurst-compiler-*-*.tar.gz
+            de.peeeq.wurstscript/build/releases/*.sha256
+          tag_name: ${{ github.ref_name }}   # ensures assets attach to the pushed v* tag
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

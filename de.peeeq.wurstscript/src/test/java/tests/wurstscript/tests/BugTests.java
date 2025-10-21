@@ -827,6 +827,26 @@ public class BugTests extends WurstScriptTest {
         );
     }
 
+    @Test
+    public void unreadVarWarning3() { // #380
+        testAssertErrorsLines(true, "closure-captured variable",
+            "package test",
+            "@annotation public function annotation()",
+            "@annotation public function extern()",
+            "@extern native I2S(int x) returns string",
+            "native testSuccess()",
+            "interface Fn",
+            "	function apply()",
+            "function foo(Fn _f)",
+            "init",
+            "	var i = 5",
+            "	foo() ->",
+            "		i++",
+            "	if i == 5",
+            "		testSuccess()"
+        );
+    }
+
 
     @Test
     public void unreadVarWarningArrays() { // #813
@@ -992,6 +1012,23 @@ public class BugTests extends WurstScriptTest {
     }
 
     @Test
+    public void testNameShadowError() {
+        testAssertErrorsLines(true, "Variable x hides another local variable with the same name",
+            "package Test",
+            "native testSuccess()",
+            "function foo() returns bool",
+            "    var x = 0",
+            "    var sum = 0",
+            "    for x in x",
+            "        sum += x",
+            "    return true",
+            "init",
+            "    if foo()",
+            "        testSuccess()"
+        );
+    }
+
+    @Test
     public void testCyclicDependencyError() {
         testAssertErrorsLines(true, "For loop target int doesn't provide a iterator() function",
                 "package Test",
@@ -999,8 +1036,8 @@ public class BugTests extends WurstScriptTest {
                 "function foo() returns bool",
                 "    var x = 0",
                 "    var sum = 0",
-                "    for x in x",
-                "        sum += x",
+                "    for i in x",
+                "        sum += i",
                 "    return true",
                 "init",
                 "    if foo()",
@@ -1402,6 +1439,103 @@ public class BugTests extends WurstScriptTest {
             "    let i = 0 - 100",
             "    if i == -100",
             "        testSuccess()"
+        );
+    }
+
+    @Test
+    public void duplicateNameInClassHierachy() {
+        testAssertErrorsLines(false, "Variable x in class B hides variable x from superclass A",
+            "package test",
+            "native testSuccess()",
+            "class A",
+            "    int x",
+            "class B extends A",
+            "    int x",
+            "init",
+            "	let b = new B()",
+            "	if b != null",
+            "		testSuccess()",
+            "endpackage");
+    }
+
+    @Test
+    public void callingDestroyThisInConstructor() {
+        testAssertErrorsLines(false, "Cannot destroy 'this' in constructor",
+            "package test",
+            "native testSuccess()",
+            "class A",
+            "    construct()",
+            "       destroy this",
+            "init",
+            "	let b = new A()",
+            "	if b != null",
+            "		testSuccess()",
+            "endpackage");
+    }
+    @Test
+    public void derivedGenericClassConstructor() {
+        testAssertOkLinesWithStdLib(true,
+            "package test",
+            "import LinkedList",
+            "public class ListIterator<T> extends LLIterator<T>",
+            "    construct(LinkedList<T> parent)",
+            "        super(parent)",
+            "init",
+            "	let b = new ListIterator<int>(new LinkedList<int>())",
+            "	if b != null",
+            "		testSuccess()",
+            "endpackage");
+    }
+
+    @Test
+    public void derivedGenericClassConstructorNewGenerics() {
+        testAssertOkLines(true,
+            "package test",
+            "native testSuccess()",
+            "class A<T:>",
+            "    T value",
+            "class B<X:>",
+            "    A<X> a",
+            "    construct(A<X> a)",
+            "        this.a = a",
+            "public class C<T:> extends B<T>",
+            "    construct(A<T> parent)",
+            "        super(parent)",
+            "init",
+            "	let b = new C<int>(new A<int>())",
+            "	if b != null",
+            "		testSuccess()",
+            "endpackage");
+    }
+
+
+    @Test
+    public void overloadsHiddenBySubclassName_onlyZeroArgSeen_errorsOnArgs() {
+        testAssertOkLines(true,
+            "package Test",
+            "native testSuccess()",
+            "native println(string s)",
+            "class A",
+            "    function func(int i)",
+            "        println(\"func_int...\")",
+            "",
+            "    function func(string s)",
+            "        println(\"func_string...\")",
+            "",
+            "class B extends A",
+            "    function func()",
+            "        println(\"func_noarg\")",
+            "",
+            "    function func(bool b)",
+            "        println(\"func_boolean...\")",
+            "",
+            "init",
+            "    let b = new B()",
+            "    b.func()",
+            "    b.func(true)",
+            "    b.func(1)",
+            "    b.func(\"1\")",
+            "    testSuccess()"
         );
     }
 

@@ -1,9 +1,9 @@
 package de.peeeq.wurstio.intermediateLang.interpreter;
 
 import com.google.common.collect.Maps;
+import de.peeeq.wurstio.map.importer.ImportFile;
 import de.peeeq.wurstio.mpq.MpqEditor;
 import de.peeeq.wurstio.objectreader.ObjectFileType;
-import de.peeeq.wurstio.utils.FileUtils;
 import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.gui.WurstGui;
 import de.peeeq.wurstscript.intermediatelang.interpreter.ProgramState;
@@ -21,22 +21,108 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ProgramStateIO extends ProgramState {
 
     private static final int GENERATED_BY_WURST = 42;
+    private static final String OBJECT_CACHE_MANIFEST = "wurst_object_cache.txt";
+
     private @Nullable ImStmt lastStatement;
-    private @Nullable
-    final MpqEditor mpqEditor;
+    private @Nullable final MpqEditor mpqEditor;
     private final Map<ObjectFileType, ObjMod<? extends ObjMod.Obj>> dataStoreMap = Maps.newLinkedHashMap();
+    private final Map<ObjectFileType, String> dataStoreHashes = Maps.newLinkedHashMap();
     private int id = 0;
     private final Map<String, ObjMod.Obj> objDefinitions = Maps.newLinkedHashMap();
     private PrintStream outStream = System.err;
     private @Nullable WTS trigStrings = null;
     private final Optional<File> mapFile;
+
+    /**
+     * Tracks which object files have been modified during compiletime
+     */
+    private static class ObjectCacheManifest {
+        Map<String, ObjectFileEntry> objectFiles = new HashMap<>();
+
+        static class ObjectFileEntry {
+            String fileType;
+            String hash;
+            long timestamp;
+            int objectCount;
+
+            ObjectFileEntry(String fileType, String hash, long timestamp, int objectCount) {
+                this.fileType = fileType;
+                this.hash = hash;
+                this.timestamp = timestamp;
+                this.objectCount = objectCount;
+            }
+        }
+
+        String serialize() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("# Wurst Object Cache Manifest v1\n");
+            sb.append("# Format: fileType|hash|timestamp|objectCount\n");
+
+            for (Map.Entry<String, ObjectFileEntry> entry : objectFiles.entrySet()) {
+                ObjectFileEntry e = entry.getValue();
+                sb.append(e.fileType)
+                    .append("|")
+                    .append(e.hash)
+                    .append("|")
+                    .append(e.timestamp)
+                    .append("|")
+                    .append(e.objectCount)
+                    .append("\n");
+            }
+            return sb.toString();
+        }
+
+        static ObjectCacheManifest deserialize(String data) {
+            ObjectCacheManifest manifest = new ObjectCacheManifest();
+            if (data == null || data.isEmpty()) {
+                return manifest;
+            }
+
+            String[] lines = data.split("\n");
+            for (String line : lines) {
+                if (line.startsWith("#") || line.trim().isEmpty()) {
+                    continue;
+                }
+                String[] parts = line.split("\\|");
+                if (parts.length == 4) {
+                    try {
+                        String fileType = parts[0];
+                        String hash = parts[1];
+                        long timestamp = Long.parseLong(parts[2]);
+                        int objectCount = Integer.parseInt(parts[3]);
+
+                        manifest.objectFiles.put(fileType,
+                            new ObjectFileEntry(fileType, hash, timestamp, objectCount));
+                    } catch (NumberFormatException e) {
+                        WLogger.warning("Invalid object cache manifest line: " + line);
+                    }
+                }
+            }
+            return manifest;
+        }
+
+        boolean hasEntry(String fileType) {
+            return objectFiles.containsKey(fileType);
+        }
+
+        boolean hashMatches(String fileType, String hash) {
+            ObjectFileEntry entry = objectFiles.get(fileType);
+            return entry != null && entry.hash.equals(hash);
+        }
+
+        void putEntry(String fileType, String hash, int objectCount) {
+            objectFiles.put(fileType, new ObjectFileEntry(fileType, hash, System.currentTimeMillis(), objectCount));
+        }
+    }
 
     public ProgramStateIO(Optional<File> mapFile, @Nullable MpqEditor mpqEditor, WurstGui gui, ImProg prog, boolean isCompiletime) {
         super(gui, prog, isCompiletime);
@@ -84,7 +170,6 @@ public class ProgramStateIO extends ProgramState {
     ObjMod<? extends ObjMod.Obj> getDataStore(String fileExtension) {
         return getDataStore(ObjectFileType.fromExt(fileExtension));
     }
-
 
     private ObjMod<? extends ObjMod.Obj> getDataStore(ObjectFileType filetype) throws Error {
         ObjMod<? extends ObjMod.Obj> dataStore = dataStoreMap.get(filetype);
@@ -272,7 +357,6 @@ public class ProgramStateIO extends ProgramState {
         }
     }
 
-
     String addObjectDefinition(ObjMod.Obj objDef) {
         id++;
         String key = "obj" + id;
@@ -284,22 +368,136 @@ public class ProgramStateIO extends ProgramState {
         return objDefinitions.get(key);
     }
 
+    /**
+     * Calculate hash of an object file's contents
+     */
+    private String calculateObjectFileHash(ObjMod<? extends ObjMod.Obj> dataStore) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            Wc3BinOutputStream out = new Wc3BinOutputStream(baos);
+            dataStore.write(out, ObjMod.EncodingFormat.OBJ_0x2);
+            out.close();
+            byte[] data = baos.toByteArray();
+            return ImportFile.calculateHash(data);
+        } catch (Exception e) {
+            WLogger.warning("Could not calculate object file hash: " + e.getMessage());
+            return String.valueOf(System.currentTimeMillis());
+        }
+    }
+
+    /**
+     * Load the object cache manifest from MPQ
+     */
+    private ObjectCacheManifest loadObjectCacheManifest() {
+        if (mpqEditor == null) {
+            return new ObjectCacheManifest();
+        }
+
+        try {
+            if (mpqEditor.hasFile(OBJECT_CACHE_MANIFEST)) {
+                byte[] data = mpqEditor.extractFile(OBJECT_CACHE_MANIFEST);
+                String content = new String(data, StandardCharsets.UTF_8);
+                WLogger.info("Loaded object cache manifest from MPQ");
+                return ObjectCacheManifest.deserialize(content);
+            }
+        } catch (Exception e) {
+            WLogger.info("Could not load object cache manifest: " + e.getMessage());
+        }
+        return new ObjectCacheManifest();
+    }
+
+    /**
+     * Save the object cache manifest to MPQ
+     */
+    private void saveObjectCacheManifest(ObjectCacheManifest manifest) {
+        if (mpqEditor == null) {
+            return;
+        }
+
+        try {
+            String serialized = manifest.serialize();
+            byte[] data = serialized.getBytes(StandardCharsets.UTF_8);
+            mpqEditor.deleteFile(OBJECT_CACHE_MANIFEST);
+            mpqEditor.insertFile(OBJECT_CACHE_MANIFEST, data);
+            WLogger.info("Saved object cache manifest to MPQ");
+        } catch (Exception e) {
+            WLogger.warning("Could not save object cache manifest: " + e.getMessage());
+        }
+    }
+
     @Override
     public void writeBack(boolean inject) {
         gui.sendProgress("Writing back generated objects");
+        long startTime = System.currentTimeMillis();
+
+        ObjectCacheManifest oldManifest = loadObjectCacheManifest();
+        ObjectCacheManifest newManifest = new ObjectCacheManifest();
+
+        int filesProcessed = 0, filesUpdated = 0, filesSkipped = 0;
+        boolean anyFileWritten = false;
 
         for (ObjectFileType fileType : ObjectFileType.values()) {
-            WLogger.info("Writing back " + fileType);
+            filesProcessed++;
             ObjMod<? extends ObjMod.Obj> dataStore = getDataStore(fileType);
-            if (!dataStore.getObjsList().isEmpty()) {
-                WLogger.info("Writing back filetype " + fileType);
-                writebackObjectFile(dataStore, fileType, inject);
-            } else {
-                WLogger.info("Writing back empty for " + fileType);
+
+            if (dataStore.getObjsList().isEmpty()) {
+                WLogger.info("Object file " + fileType.getExt() + " is empty, skipping");
+                continue;
+            }
+
+            // Compute hash of what we intend to write
+            String currentHash = calculateObjectFileHash(dataStore);
+            dataStoreHashes.put(fileType, currentHash);
+
+            boolean mpqHasSame = false;
+            if (mpqEditor != null && mpqEditor.hasFile("war3map." + fileType.getExt())) {
+                try {
+                    byte[] existing = mpqEditor.extractFile("war3map." + fileType.getExt());
+                    String existingHash = ImportFile.calculateHash(existing);
+                    mpqHasSame = existingHash.equals(currentHash);
+                } catch (Exception e) {
+                    WLogger.info("Could not validate MPQ content for " + fileType.getExt() + ": " + e.getMessage());
+                }
+            }
+
+            boolean manifestSaysSame = oldManifest.hasEntry(fileType.getExt())
+                && oldManifest.hashMatches(fileType.getExt(), currentHash);
+
+            // Only skip if BOTH the manifest and the actual MPQ content match
+            if (manifestSaysSame && mpqHasSame) {
+                WLogger.info("Object file " + fileType.getExt() + " unchanged (hash match), skipping writeback");
+                filesSkipped++;
+                if (inject) {
+                    newManifest.putEntry(fileType.getExt(), currentHash, dataStore.getObjsList().size());
+                }
+                continue;
+            }
+
+            WLogger.info("Object file " + fileType.getExt() + " changed or MPQ out of sync, writing back");
+            filesUpdated++;
+            writebackObjectFile(dataStore, fileType, inject);
+            anyFileWritten = anyFileWritten || inject;
+            if (inject) {
+                newManifest.putEntry(fileType.getExt(), currentHash, dataStore.getObjsList().size());
             }
         }
-        writeW3oFile();
+
+        // Always write the .w3o (debug aid) – but do NOT touch the manifest for it
+//        writeW3oFile();
+
+        // Only persist a new manifest if we actually injected files
+        if (inject && anyFileWritten) {
+            saveObjectCacheManifest(newManifest);
+        } else {
+            WLogger.info("Skipping manifest update (inject=" + inject + ", anyFileWritten=" + anyFileWritten + ")");
+        }
+
+        long endTime = System.currentTimeMillis();
+        WLogger.info(String.format(
+            "Object writeback complete in %dms: %d files processed, %d updated, %d skipped",
+            endTime - startTime, filesProcessed, filesUpdated, filesSkipped));
     }
+
 
     private void writeW3oFile() {
         Optional<File> objFile = getObjectEditingOutputFolder().map(fo -> new File(fo, "wurstCreatedObjects.w3o"));
@@ -320,7 +518,6 @@ public class ProgramStateIO extends ProgramState {
     }
 
     private void writebackObjectFile(ObjMod<? extends ObjMod.Obj> dataStore, ObjectFileType fileType, boolean inject) throws Error {
-
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             Wc3BinOutputStream out = new Wc3BinOutputStream(baos);
@@ -331,10 +528,7 @@ public class ProgramStateIO extends ProgramState {
             out.close();
             byte[] w3_ = baos.toByteArray();
 
-            // TODO  wurst exported objects
-            FileUtils.write(
-                exportToWurst(dataStore, fileType),
-                new File(folder.get(), "WurstExportedObjects_" + fileType.getExt() + ".wurst.txt"));
+            exportToWurst(dataStore, fileType, new File(folder.get(), "WurstExportedObjects_" + fileType.getExt() + ".wurst.txt").toPath());
 
             if (inject) {
                 if (mpqEditor == null) {
@@ -343,29 +537,28 @@ public class ProgramStateIO extends ProgramState {
                 String filenameInMpq = "war3map." + fileType.getExt();
                 mpqEditor.deleteFile(filenameInMpq);
                 mpqEditor.insertFile(filenameInMpq, w3_);
+                WLogger.info("Injected modified object file: " + filenameInMpq);
             }
         } catch (Exception e) {
             WLogger.severe(e);
             throw new Error(e);
         }
-
     }
 
-    public String exportToWurst(ObjMod<? extends ObjMod.Obj> dataStore, ObjectFileType fileType) throws IOException {
+    public void exportToWurst(ObjMod<? extends ObjMod.Obj> dataStore,
+                              ObjectFileType fileType, Path outFile) throws IOException {
+        try (BufferedWriter out = Files.newBufferedWriter(outFile, StandardCharsets.UTF_8)) {
+            out.write("package WurstExportedObjects_" + fileType.getExt() + "\n");
+            out.write("import ObjEditingNatives\n\n");
 
-        Appendable out = new StringBuilder();
-        out.append("package WurstExportedObjects_").append(fileType.getExt()).append("\n");
-        out.append("import ObjEditingNatives\n\n");
+            out.write("// Modified Table (contains all custom objects)\n\n");
+            exportToWurst(dataStore.getCustomObjs(), fileType, out);
 
-        out.append("// Modified Table (contains all custom objects)\n\n");
-        exportToWurst(dataStore.getCustomObjs(), fileType, out);
-
-        out.append("// Original Table (contains all modified default objects)\n" +
-            "// Wurst does not support modifying default objects\n" +
-            "// but you can copy these functions and replace 'xxxx' with a new, custom id.\n\n");
-        exportToWurst(dataStore.getOrigObjs(), fileType, out);
-
-        return out.toString();
+            out.write("// Original Table (contains all modified default objects)\n" +
+                "// Wurst does not support modifying default objects\n" +
+                "// but you can copy these functions and replace 'xxxx' with a new, custom id.\n\n");
+            exportToWurst(dataStore.getOrigObjs(), fileType, out);
+        }
     }
 
     public void exportToWurst(List<? extends ObjMod.Obj> customObjs, ObjectFileType fileType, Appendable out) throws IOException {
@@ -374,7 +567,7 @@ public class ProgramStateIO extends ProgramState {
             String newId = (obj.getNewId() != null ? obj.getNewId().getVal() : "xxxx");
             out.append("@compiletime function create_").append(fileType.getExt()).append("_").append(newId)
                 .append("()\n");
-            out.append("	let def = createObjectDefinition(\"").append(fileType.getExt()).append("\", '");
+            out.append("\tlet def = createObjectDefinition(\"").append(fileType.getExt()).append("\", '");
             out.append(newId);
             out.append("', '");
             out.append(oldId);
@@ -418,7 +611,6 @@ public class ProgramStateIO extends ProgramState {
         return "Int";
     }
 
-
     private Optional<File> getObjectEditingOutputFolder() {
         if (!mapFile.isPresent()) {
             File folder = new File("_build", "objectEditingOutput");
@@ -442,7 +634,4 @@ public class ProgramStateIO extends ProgramState {
     public void setOutStream(PrintStream os) {
         outStream = os;
     }
-
-
 }
-

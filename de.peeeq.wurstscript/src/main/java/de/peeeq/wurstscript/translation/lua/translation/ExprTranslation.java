@@ -75,6 +75,8 @@ public class ExprTranslation {
         LuaFunction f = tr.luaFunc.getFor(e.getFunc());
         if (f.getName().equals(ImTranslator.$DEBUG_PRINT)) {
             f.setName("BJDebugMsg");
+        } else if (f.getName().equals("I2S")) {
+            f.setName("tostring");
         }
         return LuaAst.LuaExprFunctionCall(f, tr.translateExprList(e.getArguments()));
     }
@@ -128,9 +130,8 @@ public class ExprTranslation {
                 return LuaAst.LuaExprFunctionCallE(LuaAst.LuaLiteral("math.floor"),
                     LuaAst.LuaExprlist(LuaAst.LuaExprBinary(leftExpr, op, rightExpr)));
             } else if (e.getOp() == WurstOperator.DIV_INT) {
-                op = LuaAst.LuaOpDiv();
-                return LuaAst.LuaExprFunctionCallE(LuaAst.LuaLiteral("math.floor"),
-                    LuaAst.LuaExprlist(LuaAst.LuaExprBinary(leftExpr, op, rightExpr)));
+                op = LuaAst.LuaOpFloorDiv();
+                return LuaAst.LuaExprBinary(leftExpr, op, rightExpr);
             } else {
                 // TODO special cases for integer division and modulo
                 op = e.getOp().luaTranslateBinary();
@@ -169,9 +170,13 @@ public class ExprTranslation {
 
 
     private static LuaFunction getTupleEqualsFunc(ImTupleType t, LuaTranslator tr) {
-        Optional<TupleFunc> tfo = tr.tupleEqualsFuncs.stream()
-            .filter(f -> f.tupleType.equalsType(t))
-            .findFirst();
+        Optional<TupleFunc> tfo = Optional.empty();
+        for (TupleFunc f : tr.tupleEqualsFuncs) {
+            if (f.tupleType.equalsType(t)) {
+                tfo = Optional.of(f);
+                break;
+            }
+        }
         TupleFunc tf;
         if (tfo.isPresent()) {
             tf = tfo.get();
@@ -202,9 +207,13 @@ public class ExprTranslation {
 
 
     public static LuaFunction getTupleCopyFunc(ImTupleType t, LuaTranslator tr) {
-        Optional<TupleFunc> tfo = tr.tupleCopyFuncs.stream()
-            .filter(f -> f.tupleType.equalsType(t))
-            .findFirst();
+        Optional<TupleFunc> tfo = Optional.empty();
+        for (TupleFunc f : tr.tupleCopyFuncs) {
+            if (f.tupleType.equalsType(t)) {
+                tfo = Optional.of(f);
+                break;
+            }
+        }
         TupleFunc tf;
         if (tfo.isPresent()) {
             tf = tfo.get();

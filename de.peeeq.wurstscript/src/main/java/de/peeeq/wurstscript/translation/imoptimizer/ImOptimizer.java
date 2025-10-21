@@ -3,7 +3,10 @@ package de.peeeq.wurstscript.translation.imoptimizer;
 import com.google.common.collect.Lists;
 import de.peeeq.wurstio.TimeTaker;
 import de.peeeq.wurstscript.WLogger;
-import de.peeeq.wurstscript.intermediatelang.optimizer.*;
+import de.peeeq.wurstscript.intermediatelang.optimizer.BranchMerger;
+import de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation;
+import de.peeeq.wurstscript.intermediatelang.optimizer.LocalMerger;
+import de.peeeq.wurstscript.intermediatelang.optimizer.SimpleRewrites;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -23,16 +26,14 @@ public class ImOptimizer {
 
     static {
         localPasses.add(new SimpleRewrites());
+        localPasses.add(new LocalMerger());
+        localPasses.add(new BranchMerger());
         localPasses.add(new ConstantAndCopyPropagation());
         localPasses.add(new UselessFunctionCallsRemover());
         localPasses.add(new GlobalsInliner());
-        localPasses.add(new BranchMerger());
         localPasses.add(new SimpleRewrites());
-        localPasses.add(new TempMerger());
-        localPasses.add(new LocalMerger());
         localPasses.add(new LocalInliner());
     }
-
 
     private final TimeTaker timeTaker;
     ImTranslator trans;
@@ -64,6 +65,7 @@ public class ImOptimizer {
 
     public void localOptimizations() {
         totalCount.clear();
+
         removeGarbage();
         trans.getImProg().flatten(trans);
 
@@ -71,15 +73,18 @@ public class ImOptimizer {
         for (int i = 1; i <= localOptRounds && optCount > 0; i++) {
             optCount = 0;
             StringBuilder sb = new StringBuilder();
-            localPasses.forEach(pass -> {
+            for (OptimizerPass pass : localPasses) {
                 int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
                 sb.append("<").append(pass.getName()).append(": ").append(count).append("> ");
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
+            }
+
+
             });
             WLogger.info(sb.toString());
-            trans.getImProg().flatten(trans);
             removeGarbage();
+            trans.getImProg().flatten(trans);
 
             finalItr = i;
             WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
@@ -114,12 +119,14 @@ public class ImOptimizer {
             int globalsAfter = prog.getGlobals().size();
             int globalsRemoved = globalsBefore - globalsAfter;
             totalGlobalsRemoved += globalsRemoved;
+
             // keep only functions reachable from main and config
             int functionsBefore = prog.getFunctions().size();
             changes |= prog.getFunctions().retainAll(trans.getUsedFunctions());
             int functionsAfter = prog.getFunctions().size();
             int functionsRemoved = functionsBefore - functionsAfter;
             totalFunctionsRemoved += functionsRemoved;
+
             // also consider class functions
             Set<ImFunction> allFunctions = new HashSet<>(prog.getFunctions());
             for (ImClass c : prog.getClasses()) {
@@ -134,6 +141,7 @@ public class ImOptimizer {
                 int classFieldsAfter = c.getFields().size();
                 totalGlobalsRemoved += classFieldsBefore - classFieldsAfter;
             }
+
             for (ImFunction f : allFunctions) {
                 // remove set statements to unread variables
                 final List<Pair<ImStmt, List<ImExpr>>> replacements = Lists.newArrayList();
@@ -168,21 +176,25 @@ public class ImOptimizer {
                             }
                         }
                     }
-
                 });
+
                 Replacer replacer = new Replacer();
                 for (Pair<ImStmt, List<ImExpr>> pair : replacements) {
                     changes = true;
                     ImExpr r;
                     if (pair.getB().size() == 1) {
                         r = pair.getB().get(0);
+                        // CRITICAL: Clear parent before reusing the node
                         r.setParent(null);
                     } else {
-                        List<ImStmt> exprs = Collections.unmodifiableList(pair.getB());
-                        for (ImStmt expr : exprs) {
+                        // CRITICAL: Create proper list wrapper for multiple expressions
+                        List<ImStmt> stmts = new ArrayList<>();
+                        for (ImExpr expr : pair.getB()) {
+                            // Clear parent for each expression
                             expr.setParent(null);
+                            stmts.add(expr);
                         }
-                        r = ImHelper.statementExprVoid(JassIm.ImStmts(exprs));
+                        r = ImHelper.statementExprVoid(JassIm.ImStmts(stmts));
                     }
                     replacer.replace(pair.getA(), r);
                 }

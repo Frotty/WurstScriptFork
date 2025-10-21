@@ -14,8 +14,8 @@ import de.peeeq.wurstio.mpq.MpqEditor;
 import de.peeeq.wurstio.utils.FileReading;
 import de.peeeq.wurstio.utils.FileUtils;
 import de.peeeq.wurstscript.*;
-import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.ast.*;
+import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.attributes.CompilationUnitInfo;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.ErrorHandler;
@@ -47,6 +47,8 @@ import java.util.Map.Entry;
 import java.util.function.Function;
 
 import static de.peeeq.wurstio.CompiletimeFunctionRunner.FunctionFlagToRun.CompiletimeFunctions;
+import static de.peeeq.wurstscript.WurstOperator.PLUS;
+import static de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_EXTERN;
 
 public class WurstCompilerJassImpl implements WurstCompiler {
 
@@ -111,7 +113,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
             // TODO run optimizations later?
             gui.sendProgress("Running compiletime functions");
             CompiletimeFunctionRunner ctr = new CompiletimeFunctionRunner(imTranslator, getImProg(), getMapFile(), getMapfileMpqEditor(), gui,
-                    CompiletimeFunctions, projectConfigData, isProd, cache);
+                CompiletimeFunctions, projectConfigData, isProd, cache);
             ctr.setInjectObjects(runArgs.isInjectObjects());
             ctr.setOutputStream(new PrintStream(System.err));
             ctr.run();
@@ -119,7 +121,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
 
         if (gui.getErrorCount() > 0) {
             CompileError compileError = gui
-                    .getErrorList().get(0);
+                .getErrorList().get(0);
             throw new RequestFailedException(MessageType.Error, "Could not compile project (error in running compiletime functions/expressions): ", compileError);
         }
 
@@ -205,7 +207,6 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         }
 
 
-
         // import wurst folder if it exists
         Optional<File> l_mapFile = mapFile;
         if (l_mapFile.isPresent()) {
@@ -289,9 +290,17 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         File[] depProjects = dependencyFolder.listFiles();
         if (depProjects != null) {
             for (File depFile : depProjects) {
-                if (depFile.isDirectory()
-                        && dependencies.stream().noneMatch(f -> FileUtils.sameFile(f, depFile))) {
-                    dependencies.add(depFile);
+                if (depFile.isDirectory()) {
+                    boolean b = true;
+                    for (File f : dependencies) {
+                        if (FileUtils.sameFile(f, depFile)) {
+                            b = false;
+                            break;
+                        }
+                    }
+                    if (b) {
+                        dependencies.add(depFile);
+                    }
                 }
             }
         }
@@ -352,7 +361,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                     // ignore this package
                 } else {
                     imp.addError("The import '" + imp.getPackagename() + "' could not be resolved.\n" + "Available packages: "
-                            + Utils.join(getLibs().keySet(), ", "));
+                        + Utils.join(getLibs().keySet(), ", "));
                 }
             }
         } else {
@@ -460,6 +469,7 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         // inliner
         if (runArgs.isInline()) {
             beginPhase(5, "inlining");
+            getImProg().flatten(imTranslator2);
             optimizer.doInlining();
             imTranslator2.assertProperties();
 
@@ -469,8 +479,13 @@ public class WurstCompilerJassImpl implements WurstCompiler {
 
         // eliminate tuples
         beginPhase(6, "eliminate tuples");
-        timeTaker.measure("flatten", () -> getImProg().flatten(imTranslator2));
-        timeTaker.measure("kill tuples", () -> EliminateTuples.eliminateTuplesProg(getImProg(), imTranslator2));
+        timeTaker.beginPhase("flatten");
+        getImProg().flatten(imTranslator2);
+        timeTaker.endPhase();
+        timeTaker.beginPhase("kill tuples");
+        EliminateTuples.eliminateTuplesProg(getImProg(), imTranslator2);
+        timeTaker.endPhase();
+
         getImTranslator().assertProperties(AssertProperty.NOTUPLES);
 
 
@@ -545,13 +560,12 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         }
 
 
-
         // translate flattened intermediate lang to jass:
 
         beginPhase(14, "translate to jass");
         getImTranslator().calculateCallRelationsAndUsedVariables();
         ImToJassTranslator translator =
-                new ImToJassTranslator(getImProg(), getImTranslator().getCalledFunctions(), getImTranslator().getMainFunc(), getImTranslator().getConfFunc());
+            new ImToJassTranslator(getImProg(), getImTranslator().getCalledFunctions(), getImTranslator().getMainFunc(), getImTranslator().getConfFunc());
         prog = translator.translate();
         if (errorHandler.getErrorCount() > 0) {
             prog = null;
@@ -572,17 +586,22 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         // add call to JHCR_Init_init in main
         stmts.add(callExtern(trace, CallType.EXECUTE, "JHCR_Init_init"));
 
-        ImFunction statusFunc = findFunction("JHCR_API_GetLastStatus", trace.attrErrorPos());
-        ImFunctionCall jhcrStatusCall = JassIm.ImFunctionCall(trace, statusFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(), false, CallType.NORMAL);
+        ImFunction statusFunction = JassIm.ImFunction(trace, "JHCR_API_GetLastStatus", JassIm.ImTypeVars(),
+            JassIm.ImVars(), JassIm.ImSimpleType("integer"), JassIm.ImVars(), JassIm.ImStmts(JassIm.ImReturn(trace, JassIm.ImIntVal(0))),
+                List.of());
+
+        imProg.getFunctions().add(statusFunction);
+
+        ImFunctionCall jhcrStatusCall = JassIm.ImFunctionCall(trace, statusFunction, JassIm.ImTypeArguments(), JassIm.ImExprs(), false, CallType.NORMAL);
         ImFunction I2S = findNative("I2S", trace.attrErrorPos());
         ImFunctionCall statusCall = JassIm.ImFunctionCall(trace, I2S, JassIm.ImTypeArguments(), JassIm.ImExprs(jhcrStatusCall), false, CallType.NORMAL);
 
 
         // add reload trigger for pressing escape
         ImStmts reloadBody = JassIm.ImStmts(
-                callExtern(trace, CallType.EXECUTE, "JHCR_Init_parse")
-//            callExtern(trace, CallType.NORMAL, "BJDebugMsg", JassIm.ImOperatorCall(PLUS, JassIm.ImExprs(JassIm.ImStringVal("Code reloaded, status: "), statusCall))
-        );
+            callExtern(trace, CallType.EXECUTE, "JHCR_Init_parse"),
+            callExtern(trace, CallType.NORMAL, "BJDebugMsg", JassIm.ImOperatorCall(PLUS, JassIm.ImExprs(JassIm.ImStringVal("Code reloaded, status: "), statusCall)))
+            );
         ImFunction jhcr_reload = JassIm.ImFunction(trace, "jhcr_reload_on_escape", JassIm.ImTypeVars(), JassIm.ImVars(), JassIm.ImVoid(), JassIm.ImVars(), reloadBody, Collections.emptyList());
 
 
@@ -591,39 +610,46 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         // TriggerRegisterPlayerEventEndCinematic(trig, Player(0))
         stmts.add(JassIm.ImSet(trace, JassIm.ImVarAccess(trig), callExtern(trace, CallType.NORMAL, "CreateTrigger")));
         stmts.add(callExtern(trace, CallType.NORMAL, "TriggerRegisterPlayerEventEndCinematic", JassIm.ImVarAccess(trig),
-                callExtern(trace, CallType.NORMAL, "Player", JassIm.ImIntVal(0))));
+            callExtern(trace, CallType.NORMAL, "Player", JassIm.ImIntVal(0))));
         stmts.add(callExtern(trace, CallType.NORMAL, "TriggerAddAction", JassIm.ImVarAccess(trig),
-                JassIm.ImFuncRef(trace, jhcr_reload)));
+            JassIm.ImFuncRef(trace, jhcr_reload)));
 
         mainFunc.getBody().addAll(0, stmts);
     }
 
     @NotNull
     private ImFunction findNative(String funcName, WPos trace) {
-        return imProg.getFunctions()
-            .stream()
-            .filter(ImFunction::isNative)
-            .filter(func -> func.getName().equals(funcName))
-            .findFirst()
-            .orElseGet(() -> {
-                throw new CompileError(trace, "Could not find native " + funcName);
-            });
+        for (ImFunction func : imProg.getFunctions()) {
+            if (func.isNative()) {
+                if (func.getName().equals(funcName)) {
+                    return Optional.of(func)
+                        .orElseGet(() -> {
+                            throw new CompileError(trace, "Could not find native " + funcName);
+                        });
+                }
+            }
+        }
+        return Optional.<ImFunction>empty()
+            .orElseThrow(() -> new CompileError(trace, "Could not find native " + funcName));
     }
 
     @NotNull
     private ImFunction findFunction(String funcName, WPos trace) {
-        return imProg.getFunctions()
-            .stream()
-            .filter(func -> func.getName().equals(funcName))
-            .findFirst()
-            .orElseGet(() -> {
-                throw new CompileError(trace, "Could not find native " + funcName);
-            });
+        for (ImFunction func : imProg.getFunctions()) {
+            if (func.getName().equals(funcName)) {
+                return Optional.of(func)
+                    .orElseGet(() -> {
+                        throw new CompileError(trace, "Could not find native " + funcName);
+                    });
+            }
+        }
+        return Optional.<ImFunction>empty()
+            .orElseThrow(() -> new CompileError(trace, "Could not find native " + funcName));
     }
 
     @NotNull
     private ImFunctionCall callExtern(Element trace, CallType callType, String functionName, ImExpr... arguments) {
-        ImFunction jhcrinit = JassIm.ImFunction(trace, functionName, JassIm.ImTypeVars(), JassIm.ImVars(), JassIm.ImVoid(), JassIm.ImVars(), JassIm.ImStmts(), Collections.singletonList(FunctionFlagEnum.IS_EXTERN));
+        ImFunction jhcrinit = JassIm.ImFunction(trace, functionName, JassIm.ImTypeVars(), JassIm.ImVars(), JassIm.ImVoid(), JassIm.ImVars(), JassIm.ImStmts(), Collections.singletonList(IS_EXTERN));
         return JassIm.ImFunctionCall(trace, jhcrinit, JassIm.ImTypeArguments(), JassIm.ImExprs(arguments), true, callType);
     }
 
@@ -664,10 +690,11 @@ public class WurstCompilerJassImpl implements WurstCompiler {
     }
 
     private void printDebugImProg(String debugFile) {
-        if (!errorHandler.isUnitTestMode() ) {
+        if (!errorHandler.isUnitTestMode() || !errorHandler.isOutputTestSource()) {
             // output only in unit test mode
             return;
         }
+
         try {
             // TODO remove test output
             File file = new File(debugFile);
@@ -719,8 +746,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
                 // the war3map.j file was generated by wurst
                 // this should not be the case, as we will get duplicate function errors in this case
                 throw new AbortCompilationException(
-                        "Map was not saved correctly. Please try saving the map again.\n\n" + "This usually happens if you change the name of the map or \n"
-                                + "if you have used the test-map-button without saving the map first.");
+                    "Map was not saved correctly. Please try saving the map again.\n\n" + "This usually happens if you change the name of the map or \n"
+                        + "if you have used the test-map-button without saving the map first.");
             }
 
             // move file to wurst directory

@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
+import de.peeeq.wurstscript.attributes.names.NameResolution;
 import de.peeeq.wurstscript.attributes.names.Visibility;
 import de.peeeq.wurstscript.types.*;
 import de.peeeq.wurstscript.utils.Utils;
@@ -17,6 +18,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static de.peeeq.wurstscript.attributes.AttrPossibleFunctionSignatures.*;
+import static de.peeeq.wurstscript.attributes.names.NameResolution.lookupMemberFuncs;
 
 
 /**
@@ -65,17 +69,101 @@ public class AttrFuncDef {
     }
 
     public static @Nullable FuncLink calculate(final ExprMemberMethod node) {
+        WurstType recvT = node.getLeft().attrTyp();
+        var raw = NameResolution.lookupMemberFuncs(node, recvT, node.getFuncName(), /*showErrors=*/false);
 
-        Expr left = node.getLeft();
-        WurstType leftType = left.attrTyp();
-        String funcName = node.getFuncName();
-
-        @Nullable FuncLink result = searchMemberFunc(node, leftType, funcName, argumentTypes(node));
-        if (result == null) {
-            node.addError("The method " + funcName + " is undefined for receiver of type " + leftType);
+        java.util.ArrayList<FuncLink> visible = new java.util.ArrayList<>(raw.size());
+        java.util.ArrayList<FuncLink> hidden  = new java.util.ArrayList<>(raw.size());
+        for (var f : raw) {
+            if (isVisible(f)) visible.add(f); else hidden.add(f);
         }
-        return result;
+
+        if (!raw.isEmpty() && visible.isEmpty()) {
+            // Keep the classic diagnostic the tests look for:
+            node.addError("The method " + node.getFuncName() + " is not visible here.");
+            return null; // don’t leak a def to downstream passes/codegen
+        }
+
+        java.util.List<FuncLink> methods = new java.util.ArrayList<>();
+        java.util.List<FuncLink> exts    = new java.util.ArrayList<>();
+        for (var f : visible) {
+            if (isExtension(f)) exts.add(f); else methods.add(f);
+        }
+
+        if (!exts.isEmpty()) {
+            exts = keepMostSpecificReceivers(exts, FuncLink::getReceiverType, node);
+        }
+
+        java.util.ArrayList<FuncLink> cands = new java.util.ArrayList<>(methods.size() + exts.size());
+        cands.addAll(methods);
+        cands.addAll(exts);
+
+        var argTypes = AttrFuncDef.argumentTypesPre(node);
+
+        // Pass 1: exact matches
+        java.util.ArrayList<FuncLink> exactLinks = new java.util.ArrayList<>();
+        java.util.ArrayList<FunctionSignature> exactSigs = new java.util.ArrayList<>();
+        for (var f : cands) {
+            var sig = FunctionSignature.fromNameLink(f);
+            var m = sig.matchAgainstArgs(argTypes, node);
+            if (m != null) {
+                exactLinks.add(f);
+                exactSigs.add(m);
+            }
+        }
+        if (!exactLinks.isEmpty()) {
+            // methods vs others
+            java.util.ArrayList<Integer> methodIdxs = new java.util.ArrayList<>();
+            for (int i = 0; i < exactLinks.size(); i++) {
+                if (!isExtension(exactLinks.get(i))) methodIdxs.add(i);
+            }
+            if (methodIdxs.size() > 1) {
+                // filter method candidates by most specific receiver
+                java.util.ArrayList<FunctionSignature> methSigs = new java.util.ArrayList<>();
+                for (int i : methodIdxs) methSigs.add(exactSigs.get(i));
+                methSigs = (java.util.ArrayList<FunctionSignature>) keepMostSpecificReceivers(
+                    methSigs, FunctionSignature::getReceiverType, node
+                );
+                // pick the first of the survivors
+                var chosenSig = methSigs.get(0);
+                // find corresponding link
+                for (int i = 0; i < exactSigs.size(); i++) {
+                    if (exactSigs.get(i) == chosenSig) {
+                        return exactLinks.get(i).withTypeArgBinding(node, chosenSig.getMapping());
+                    }
+                }
+            } else if (methodIdxs.size() == 1) {
+                int i = methodIdxs.get(0);
+                return exactLinks.get(i).withTypeArgBinding(node, exactSigs.get(i).getMapping());
+            } else {
+                // no methods, only extensions exact → pick first (they were narrowed already)
+                return exactLinks.get(0).withTypeArgBinding(node, exactSigs.get(0).getMapping());
+            }
+        }
+
+        // Pass 2: best-effort (unchanged)
+        int bestBad = Integer.MAX_VALUE;
+        FuncLink best = null;
+        FunctionSignature bestSig = null;
+        for (var f : cands) {
+            var sig = FunctionSignature.fromNameLink(f);
+            var r = sig.tryMatchAgainstArgs(argTypes, node.getArgs(), node);
+            if (r.getBadness() < bestBad) {
+                bestBad = r.getBadness();
+                best = f;
+                bestSig = r.getSig();
+            }
+        }
+        return best == null ? null : best.withTypeArgBinding(node, bestSig.getMapping());
     }
+
+
+
+    public static @Nullable FunctionDefinition calculateDef(final ExprMemberMethod node) {
+        var fl = node.attrFuncLink();
+        return fl == null ? null : fl.getDef();
+    }
+
 
     public static @Nullable FuncLink calculate(final ExprFunctionCall node) {
         FuncLink result = searchFunction(node.getFuncName(), node, argumentTypes(node));
@@ -126,7 +214,14 @@ public class AttrFuncDef {
             if (arg instanceof ExprClosure) {
                 // for closures, we only calculate the type, if all argument types are specified:
                 ExprClosure closure = (ExprClosure) arg;
-                if (closure.getShortParameters().stream().allMatch(p -> p.getTypOpt() instanceof TypeExpr)) {
+                boolean b = true;
+                for (WShortParameter wShortParameter : closure.getShortParameters()) {
+                    if (!(wShortParameter.getTypOpt() instanceof TypeExpr)) {
+                        b = false;
+                        break;
+                    }
+                }
+                if (b) {
                     argType = arg.attrTyp();
                 } else {
                     WurstType expected = arg.attrExpectedTyp();
@@ -171,7 +266,14 @@ public class AttrFuncDef {
             if (arg instanceof ExprClosure) {
                 // for closures, we only calculate the type, if all argument types are specified:
                 ExprClosure closure = (ExprClosure) arg;
-                if (closure.getShortParameters().stream().allMatch(p -> p.getTypOpt() instanceof TypeExpr)) {
+                boolean b = true;
+                for (WShortParameter wShortParameter : closure.getShortParameters()) {
+                    if (!(wShortParameter.getTypOpt() instanceof TypeExpr)) {
+                        b = false;
+                        break;
+                    }
+                }
+                if (b) {
                     argType = arg.attrTyp();
                 } else {
                     List<WurstType> paramTypes = new ArrayList<>();
@@ -267,9 +369,13 @@ public class AttrFuncDef {
     }
 
     private static List<FuncLink> ignoreWithIfNotDefinedAnnotation(FuncRef node, List<FuncLink> funcs) {
-        return funcs.stream()
-                .filter(fl -> !fl.hasIfNotDefinedAnnotation())
-                .collect(Collectors.toList());
+        List<FuncLink> list = new ArrayList<>();
+        for (FuncLink fl : funcs) {
+            if (!fl.hasIfNotDefinedAnnotation()) {
+                list.add(fl);
+            }
+        }
+        return list;
     }
 
 
@@ -365,9 +471,12 @@ public class AttrFuncDef {
             return ImmutableList.of(Utils.getFirst(funcs3));
         } else if (funcs4.size() == 1) {
             return ImmutableList.of(Utils.getFirst(funcs4));
-        } else if (argumentTypes.stream().anyMatch(t -> t instanceof WurstTypeUnknown)) {
-            // if some argument type could not be determined, we don't want errors here, just take the first one
-            return ImmutableList.of(Utils.getFirst(funcs4));
+        } else {// if some argument type could not be determined, we don't want errors here, just take the first one
+            for (WurstType t : argumentTypes) {
+                if (t instanceof WurstTypeUnknown) {
+                    return ImmutableList.of(Utils.getFirst(funcs4));
+                }
+            }
         }
         return funcs4;
     }
@@ -454,9 +563,11 @@ public class AttrFuncDef {
     }
 
     public static FuncLink calculate(Annotation node) {
-        List<WurstType> argumentTypes = node.getArgs().stream()
-                .map(Expr::attrTyp)
-                .collect(Collectors.toList());
+        List<WurstType> argumentTypes = new ArrayList<>();
+        for (Expr expr : node.getArgs()) {
+            WurstType attrTyp = expr.attrTyp();
+            argumentTypes.add(attrTyp);
+        }
         FuncLink result = searchFunction(node.getFuncName(), node, argumentTypes);
         if (result == null) {
             return null;

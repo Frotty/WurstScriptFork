@@ -33,6 +33,18 @@ public class SimpleRewrites implements OptimizerPass {
     private ImFunction convertPlayerEventFunc;
     private ImFunction convertStateFunc;
 
+    private static boolean isNumberLiteral(ImExpr e) {
+        return e instanceof ImIntVal || e instanceof ImRealVal;
+    }
+
+    private static float asFloat(ImExpr e) {
+        if (e instanceof ImRealVal) {
+            return Float.parseFloat(((ImRealVal) e).getValR());
+        } else {
+            return ((ImIntVal) e).getValI();
+        }
+    }
+
     @Override
     public int optimize(ImTranslator trans) {
         prog = trans.getImProg();
@@ -60,7 +72,9 @@ public class SimpleRewrites implements OptimizerPass {
             @Override
             public void visit(ImStmts stmts) {
                 super.visit(stmts);
-                removeUnreachableCode(stmts);
+                if (stmts.size() > 1) {
+                    removeUnreachableCode(stmts);
+                }
             }
         });
 
@@ -88,29 +102,46 @@ public class SimpleRewrites implements OptimizerPass {
     }
 
     private void removeUnreachableCode(ImStmts stmts) {
-        Iterator<ImStmt> it = stmts.iterator();
         boolean reachable = true;
-        while (it.hasNext()) {
-            ImStmt s = it.next();
-            if (reachable) {
+        for (int i = 0; i < stmts.size(); ) {
+            ImStmt s = stmts.get(i);
+
+            if (!reachable) {
+                stmts.remove(i);
+                totalRewrites++;
+            } else {
+                // Check various ways code becomes unreachable
                 if (s instanceof ImReturn) {
                     reachable = false;
                 } else if (s instanceof ImExitwhen) {
-                    ImExitwhen imExitwhen = (ImExitwhen) s;
-                    ImExpr expr = imExitwhen.getCondition();
-                    if (expr instanceof ImBoolVal) {
-                        boolean b = ((ImBoolVal) expr).getValB();
-                        if (b) {
-                            // found "exitwhen true"
+                    ImExitwhen exitwhen = (ImExitwhen) s;
+                    if (exitwhen.getCondition() instanceof ImBoolVal) {
+                        boolean exits = ((ImBoolVal) exitwhen.getCondition()).getValB();
+                        if (exits) {
+                            reachable = false;
+                        }
+                    }
+                } else if (s instanceof ImIf) {
+                    // Check for "if true then return" patterns
+                    ImIf ifStmt = (ImIf) s;
+                    if (ifStmt.getCondition() instanceof ImBoolVal) {
+                        boolean condition = ((ImBoolVal) ifStmt.getCondition()).getValB();
+                        if (condition && endsWithReturn(ifStmt.getThenBlock())) {
+                            reachable = false;
+                        } else if (!condition && endsWithReturn(ifStmt.getElseBlock())) {
                             reachable = false;
                         }
                     }
                 }
-            } else {
-                totalRewrites++;
-                it.remove();
+                i++;
             }
         }
+    }
+
+    private boolean endsWithReturn(ImStmts block) {
+        if (block.isEmpty()) return false;
+        ImStmt last = block.get(block.size() - 1);
+        return last instanceof ImReturn;
     }
 
     /**
@@ -275,8 +306,31 @@ public class SimpleRewrites implements OptimizerPass {
             }  else if (right instanceof ImBoolVal) {
                 boolean b2 = ((ImBoolVal) right).getValB();
                 wasViable = replaceBoolTerm(opc, left, b2);
-            } else if (left instanceof ImRealVal && right instanceof ImRealVal) {
-                wasViable = optimizeRealReal(opc, wasViable, (ImRealVal) left, (ImRealVal) right);
+            } else if (isNumberLiteral(left) && isNumberLiteral(right)) {
+                // If any side is real (or the op is a real op), fold as real; otherwise fold as int.
+                boolean foldAsReal =
+                    (left instanceof ImRealVal) ||
+                        (right instanceof ImRealVal) ||
+                        opc.getOp() == WurstOperator.DIV_REAL ||
+                        opc.getOp() == WurstOperator.MOD_REAL;
+
+                if (foldAsReal) {
+                    wasViable = optimizeRealRealMixed(opc, wasViable, left, right);
+                } else if (left instanceof ImIntVal && right instanceof ImIntVal) {
+                    wasViable = optimizeIntInt(opc, wasViable, (ImIntVal) left, (ImIntVal) right);
+                } else {
+                    wasViable = false; // unknown numeric combo
+                }
+            } else if (left instanceof ImStringVal) {
+                // Fold "" + expr  =>  expr
+                if (opc.getOp() == WurstOperator.PLUS
+                    && ((ImStringVal) left).getValS().isEmpty()) {
+                    right.setParent(null);
+                    opc.replaceBy(right);
+                    wasViable = true;
+                } else {
+                    wasViable = false;
+                }
             } else if (right instanceof ImStringVal) {
                 if (left instanceof ImStringVal) {
                     wasViable = optimizeStringString(opc, (ImStringVal) left, (ImStringVal) right);
@@ -308,13 +362,12 @@ public class SimpleRewrites implements OptimizerPass {
         else {
             ImExpr expr = opc.getArguments().get(0);
             if (opc.getOp() == WurstOperator.UNARY_MINUS && expr instanceof ImIntVal) {
-                ImIntVal imIntVal = (ImIntVal) expr;
-                if (imIntVal.getValI() <= 0) {
-                    int inverseVal = imIntVal.getValI() * -1;
-                    ImIntVal newVal = JassIm.ImIntVal(inverseVal);
-                    opc.replaceBy(newVal);
+                int v = ((ImIntVal) expr).getValI();
+                if (v != Integer.MIN_VALUE && v <= 0) {
+                    opc.replaceBy(JassIm.ImIntVal(-v));
+                } else {
+                    wasViable = false;
                 }
-                wasViable = false;
             } else if (expr instanceof ImBoolVal) {
                 boolean b1 = ((ImBoolVal) expr).getValB();
                 boolean result;
@@ -348,7 +401,7 @@ public class SimpleRewrites implements OptimizerPass {
                         List<ImExpr> args = inner.getArguments().removeAll();
                         ImExprs imExprs = JassIm.ImExprs();
                         args.forEach((e) ->
-                                imExprs.add(JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(e.copy()))));
+                            imExprs.add(JassIm.ImOperatorCall(WurstOperator.NOT, JassIm.ImExprs(e.copy()))));
 
                         ImOperatorCall opCall = JassIm.ImOperatorCall(oppositeOperator(inner.getOp()), imExprs);
                         opc.replaceBy(opCall);
@@ -381,18 +434,89 @@ public class SimpleRewrites implements OptimizerPass {
         }
     }
 
-//    private boolean rewriteEquals(ImOperatorCall opc, ImIntVal right) {
-//        if (opc.getOp() == WurstOperator.GREATER_EQ) {
-//            right.setValI(right.getValI() - 1);
-//            opc.setOp(WurstOperator.GREATER);
-//            return true;
-//        } else if (opc.getOp() == WurstOperator.LESS_EQ) {
-//            right.setValI(right.getValI() + 1);
-//            opc.setOp(WurstOperator.LESS);
-//            return true;
-//        }
-//        return false;
-//    }
+
+    private boolean optimizeRealRealMixed(ImOperatorCall opc, boolean wasViable, ImExpr left, ImExpr right) {
+        float f1 = asFloat(left);
+        float f2 = asFloat(right);
+        boolean isConditional = false;
+        boolean isArithmetic = false;
+        boolean result = false;
+        float resultVal = 0f;
+
+        switch (opc.getOp()) {
+            case GREATER:
+                result = f1 > f2;
+                isConditional = true;
+                break;
+            case GREATER_EQ:
+                result = f1 >= f2;
+                isConditional = true;
+                break;
+            case LESS:
+                result = f1 < f2;
+                isConditional = true;
+                break;
+            case LESS_EQ:
+                result = f1 <= f2;
+                isConditional = true;
+                break;
+            case EQ:
+                result = f1 == f2;
+                isConditional = true;
+                break;
+            case NOTEQ:
+                result = f1 != f2;
+                isConditional = true;
+                break;
+
+            case PLUS:
+                resultVal = f1 + f2;
+                isArithmetic = true;
+                break;
+            case MINUS:
+                resultVal = f1 - f2;
+                isArithmetic = true;
+                break;
+            case MULT:
+                resultVal = f1 * f2;
+                isArithmetic = true;
+                break;
+            case MOD_REAL:
+                if (f2 != 0f) {
+                    resultVal = f1 % f2;
+                    isArithmetic = true;
+                }
+                break;
+            case DIV_INT:
+            case DIV_REAL:
+                if (f2 != 0f) {
+                    resultVal = f1 / f2;
+                    isArithmetic = true;
+                }
+                break;
+
+            default:
+                return false;
+        }
+
+        if (isConditional) {
+            opc.replaceBy(JassIm.ImBoolVal(result));
+            return true;
+        } else if (isArithmetic) {
+            String s = floatToStringWithDecimalDigits(resultVal, 4);
+            if (Float.parseFloat(s) != resultVal) {
+                s = floatToStringWithDecimalDigits(resultVal, 9);
+                if (Float.parseFloat(s) != resultVal) {
+                    return false;
+                }
+            }
+            opc.replaceBy(JassIm.ImRealVal(s));
+            return true;
+        } else {
+            return false;
+        }
+    }
+
 
     private boolean optimizeStringString(ImOperatorCall opc, ImStringVal left, ImStringVal right) {
         String f1 = left.getValS();
@@ -550,26 +674,50 @@ public class SimpleRewrites implements OptimizerPass {
                     isArithmetic = true;
                 }
                 break;
-            case MOD_REAL:
+            case MOD_REAL: {
                 float f1 = i1;
                 float f2 = i2;
-                if (f2 != 0) {
+                if (f2 != 0f) {
                     float resultF = f1 % f2;
-                    opc.replaceBy(JassIm.ImRealVal(String.valueOf(resultF)));
+                    String s = floatToStringWithDecimalDigits(resultF, 4);
+                    if (Float.parseFloat(s) != resultF) {
+                        s = floatToStringWithDecimalDigits(resultF, 9);
+                        if (Float.parseFloat(s) != resultF) {
+                            wasViable = false;
+                            break;
+                        }
+                    }
+                    opc.replaceBy(JassIm.ImRealVal(s));
+                    // keep wasViable as-is (true) so the caller counts this rewrite
+                } else {
+                    wasViable = false; // don’t fold div-by-zero
                 }
                 break;
+            }
+            case DIV_REAL: {
+                float f1 = i1;
+                float f2 = i2;
+                if (f2 != 0f) {
+                    float resultF = f1 / f2;
+                    String s = floatToStringWithDecimalDigits(resultF, 4);
+                    if (Float.parseFloat(s) != resultF) {
+                        s = floatToStringWithDecimalDigits(resultF, 9);
+                        if (Float.parseFloat(s) != resultF) {
+                            wasViable = false;
+                            break;
+                        }
+                    }
+                    opc.replaceBy(JassIm.ImRealVal(s));
+                    // keep wasViable as-is (true) so the caller counts this rewrite
+                } else {
+                    wasViable = false; // don’t fold div-by-zero
+                }
+                break;
+            }
             case DIV_INT:
                 if (i2 != 0) {
                     resultVal = i1 / i2;
                     isArithmetic = true;
-                }
-                break;
-            case DIV_REAL:
-                float f3 = i1;
-                float f4 = i2;
-                if (f4 != 0) {
-                    float resultF = f3 / f4;
-                    opc.replaceBy(JassIm.ImRealVal(String.valueOf(resultF)));
                 }
                 break;
             default:

@@ -3,10 +3,6 @@ package de.peeeq.wurstscript.translation.imtojass;
 
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.attributes.CompileError;
-import de.peeeq.wurstscript.jassAst.JassExprNull;
-import de.peeeq.wurstscript.jassAst.JassExprVarAccess;
-import de.peeeq.wurstscript.jassAst.JassExprVarArrayAccess;
-import de.peeeq.wurstscript.jassAst.JassExprlist;
 import de.peeeq.wurstscript.jassAst.*;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -51,10 +47,34 @@ public class ExprTranslation {
     }
 
     public static JassExpr translate(ImNull e, ImToJassTranslator translator) {
-        if (e.getType() instanceof ImAnyType
-            || TypesHelper.isIntType(e.getType())) {
+        ImType type = e.getType();
+
+        // Handle simple types (after EliminateGenerics specialization)
+        if (type instanceof ImSimpleType simpleType) {
+            String typename = simpleType.getTypename();
+
+            if (typename.equals("integer") || typename.equals("int")) {
+                return JassExprIntVal("0");
+            } else if (typename.equals("real")) {
+                return JassExprRealVal("0.");
+            } else if (typename.equals("boolean") || typename.equals("bool")) {
+                return JassExprBoolVal(false);
+            } else if (typename.equals("string")) {
+                return JassExprStringVal("");
+            }
+        }
+
+        // Handle AnyType and int-like types
+        if (type instanceof ImAnyType || TypesHelper.isIntType(type)) {
             return JassExprIntVal("0");
         }
+
+        // Class types (reference types) can be null, represented as 0 in Jass
+        if (type instanceof ImClassType) {
+            return JassExprIntVal("0");
+        }
+
+        // Default: actual null (for handle types, etc.)
         return JassExprNull();
     }
 
