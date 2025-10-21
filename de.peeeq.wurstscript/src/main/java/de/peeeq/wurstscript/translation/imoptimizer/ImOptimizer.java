@@ -3,10 +3,7 @@ package de.peeeq.wurstscript.translation.imoptimizer;
 import com.google.common.collect.Lists;
 import de.peeeq.wurstio.TimeTaker;
 import de.peeeq.wurstscript.WLogger;
-import de.peeeq.wurstscript.intermediatelang.optimizer.BranchMerger;
-import de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation;
-import de.peeeq.wurstscript.intermediatelang.optimizer.LocalMerger;
-import de.peeeq.wurstscript.intermediatelang.optimizer.SimpleRewrites;
+import de.peeeq.wurstscript.intermediatelang.optimizer.*;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -15,6 +12,8 @@ import de.peeeq.wurstscript.utils.Pair;
 import de.peeeq.wurstscript.validation.TRVEHelper;
 
 import java.util.*;
+
+import static de.peeeq.wurstscript.validation.TRVEHelper.TO_KEEP;
 
 public class ImOptimizer {
     private int totalFunctionsRemoved = 0;
@@ -80,8 +79,6 @@ public class ImOptimizer {
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
             }
 
-
-            });
             WLogger.info(sb.toString());
             removeGarbage();
             trans.getImProg().flatten(trans);
@@ -115,7 +112,13 @@ public class ImOptimizer {
 
             // keep only used variables
             int globalsBefore = prog.getGlobals().size();
-            changes = prog.getGlobals().retainAll(trans.getReadVariables());
+
+            int globalsCount = prog.getGlobals().size();
+            Set<ImVar> readVars = trans.getReadVariables();
+            prog.getGlobals().removeIf(g ->
+                !readVars.contains(g) && !TO_KEEP.contains(g.getName())
+            );
+            changes = prog.getGlobals().size() != globalsCount;
             int globalsAfter = prog.getGlobals().size();
             int globalsRemoved = globalsBefore - globalsAfter;
             totalGlobalsRemoved += globalsRemoved;
@@ -152,13 +155,13 @@ public class ImOptimizer {
                         if (e.getLeft() instanceof ImVarAccess) {
                             ImVarAccess va = (ImVarAccess) e.getLeft();
 
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TO_KEEP.contains(va.getVar().getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if (e.getLeft() instanceof ImVarArrayAccess) {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
 
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TO_KEEP.contains(va.getVar().getName())) {
                                 // TODO indexes might have side effects that we need to keep
                                 List<ImExpr> exprs = va.getIndexes().removeAll();
                                 exprs.add(e.getRight());
@@ -166,12 +169,12 @@ public class ImOptimizer {
                             }
                         } else if (e.getLeft() instanceof ImTupleSelection) {
                             ImVar var = TypesHelper.getTupleVar((ImTupleSelection) e.getLeft());
-                            if(!trans.getReadVariables().contains(var) && !TRVEHelper.TO_KEEP.contains(var.getName())) {
+                            if(!trans.getReadVariables().contains(var) && !TO_KEEP.contains(var.getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         } else if(e.getLeft() instanceof ImMemberAccess) {
                             ImMemberAccess va = ((ImMemberAccess) e.getLeft());
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TRVEHelper.TO_KEEP.contains(va.getVar().getName())) {
+                            if (!trans.getReadVariables().contains(va.getVar()) && !TO_KEEP.contains(va.getVar().getName())) {
                                 replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
                             }
                         }

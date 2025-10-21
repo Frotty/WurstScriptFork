@@ -333,6 +333,9 @@ public class JurstTests extends WurstScriptTest {
 
         String jurstCode = Utils.string(
             "package test",
+            "  init",
+            "    call foo()",
+            "  endinit",
             "endpackage");
 
         testJurstWithJass(false, false, jassCode, jurstCode);

@@ -154,19 +154,17 @@ public class WurstValidator {
         ValidateClassMemberUsage.checkClassMembers(toCheck);
         ValidateLocalUsage.checkLocalsUsage(toCheck);
 
-        for (String wrapper : trveWrapperFuncs) {
-            if (wrapperCalls.containsKey(wrapper)) {
-                for (FunctionCall call : wrapperCalls.get(wrapper)) {
-                    if (call.getArgs().size() > 1 && call.getArgs().get(1) instanceof ExprStringVal) {
-                        ExprStringVal varName = (ExprStringVal) call.getArgs().get(1);
-                        TRVEHelper.TO_KEEP.add(varName.getValS());
-                        WLogger.info("keep: " + varName.getValS());
-                    } else {
-                        call.addError("Map contains TriggerRegisterVariableEvent with non-constant arguments. Can't be optimized.");
-                    }
+        TRVEHelper.WRAPPERS.forEach(wrapper -> {
+            calls.getOrDefault(wrapper, new HashSet<>()).forEach(call -> {
+                if (call.getArgs().size() > 1 && call.getArgs().get(1) instanceof ExprStringVal) {
+                    ExprStringVal varName = (ExprStringVal) call.getArgs().get(1);
+                    TRVEHelper.TO_KEEP.add(varName.getValS());
+                    WLogger.info("keep: " + varName.getValS());
+                } else {
+                    call.addError("Map contains TriggerRegisterVariableEvent with non-constant arguments. Can't be optimized.");
                 }
-            }
-        }
+            });
+        });
     }
 
     private void checkUnusedImports(Collection<CompilationUnit> toCheck) {
