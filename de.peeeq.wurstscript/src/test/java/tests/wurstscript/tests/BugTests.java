@@ -10,6 +10,8 @@ import org.testng.annotations.Test;
 import java.io.File;
 import java.io.IOException;
 
+import static de.peeeq.wurstscript.utils.Utils.string;
+
 public class BugTests extends WurstScriptTest {
     private static final String TEST_DIR = "./testscripts/concept/";
 
@@ -1460,7 +1462,7 @@ public class BugTests extends WurstScriptTest {
 
     @Test
     public void callingDestroyThisInConstructor() {
-        testAssertErrorsLines(false, "Cannot destroy 'this' in constructor",
+        testAssertWarningsLines(false, "Should not destroy 'this' in constructor",
             "package test",
             "native testSuccess()",
             "class A",
@@ -1538,6 +1540,145 @@ public class BugTests extends WurstScriptTest {
             "    testSuccess()"
         );
     }
+
+    @Test
+    public void iteratorManualType() {
+        testAssertOkLinesWithStdLib(true,
+            "package test",
+            "import Printing",
+            "import LinkedListModule",
+            "class A",
+            "    use LinkedListModule",
+            "    string s",
+            "init",
+            "    A a1 = new A()",
+            "    a1.s = \"hello\"",
+            "    A a2 = new A()",
+            "    a2.s = \"world\"",
+            "    int itrCount = 0",
+            "    let itr = A.iterator()",
+            "    while itr.hasNext()",
+            "        let a = itr.next()",
+            "        itrCount += 1",
+            "        print(a.s)",
+            "    itr.close()",
+            "    if itrCount == 2",
+            "        testSuccess()",
+            "endpackage"
+
+            );
+    }
+
+    @Test
+    public void moduleInOtherPackage() {
+        String pkgLinkedList = string(
+            "package LinkedListModule",
+            "public module LinkedListModule",
+            "    static function iterator() returns Iterator",
+            "        return new Iterator()",
+            "    static class Iterator",
+            "        LinkedListModule.thistype current = null",
+            "        function hasNext() returns boolean",
+            "            return false",
+            "        function next() returns LinkedListModule.thistype",
+            "            return current",
+            "        function close()",
+            "            destroy this",
+            "endpackage"
+        );
+
+        // --- Minimal string iterator stub to create competing iterator symbol ---
+        String pkgStrIter = string(
+            "package StrIter",
+            "public function string.iterator() returns StringIterator",
+            "    return new StringIterator(this)",
+            "public class StringIterator",
+            "    string str",
+            "    construct(string s)",
+            "        this.str = s",
+            "    function hasNext() returns boolean",
+            "        return false",
+            "    function next() returns string",
+            "        return \"\"",
+            "    function close()",
+            "        destroy this",
+            "endpackage"
+        );
+
+        // --- Reproducer using both packages ---
+        String pkgHello = string(
+            "package Hello",
+            "import LinkedListModule",
+            "import StrIter",
+            "native print(string s)",
+            "native testSuccess()",
+            "",
+            "class A",
+            "    use LinkedListModule",
+            "",
+            "init",
+            "    let itr = A.iterator()",
+            "    while itr.hasNext()",
+            "        let a = itr.next()",
+            "        destroy a",
+            "    itr.close()",
+            "    let s = \"hello\".iterator()",
+            "    while s.hasNext()",
+            "        print(s.next())",
+            "    s.close()",
+            "    testSuccess()",
+            "endpackage"
+        );
+        testAssertOkLines(true,
+            pkgLinkedList,
+            pkgStrIter,
+            pkgHello
+        );
+    }
+
+    @Test
+    public void linkedListModule_perClassStatics_andTyping_ok() {
+        testAssertOkLinesWithStdLib(true,
+            "package Test",
+            "import LinkedListModule",
+            "",
+            "native println(string s)",
+            "",
+            "class A",
+            "    use LinkedListModule",
+            "",
+            "class B extends A",
+            "    use LinkedListModule",
+            "",
+            "class C extends A",
+            "",
+            "class D extends C",
+            "    use LinkedListModule",
+            "",
+            "function doSmth()",
+            "    // Iteration should compile for any class that uses LinkedListModule:",
+            "    for a in A",
+            "        // ok: iterates A list",
+            "    for b in B",
+            "        // ok: iterates B list (distinct from A)",
+            "",
+            "    // Accessing class statics should be typed to that concrete class:",
+            "    B b2 = B.first        // must typecheck as B, not A",
+            "    A a2 = A.first        // must typecheck as A",
+            "",
+            "    // D extends C but only D uses the module; typing must be D:",
+            "    var d = D.first       // type D",
+            "    while d != null",
+            "        d = d.next        // type D",
+            "",
+            "init",
+            "    // We don’t rely on runtime behavior here—this test targets typing/name resolution.",
+            "    // If all lines above typecheck and run, we count it as success:",
+            "    doSmth()",
+            "    testSuccess()"
+        );
+    }
+
 
 
 }

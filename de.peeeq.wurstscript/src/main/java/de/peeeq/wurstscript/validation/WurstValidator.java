@@ -23,7 +23,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static de.peeeq.wurstscript.attributes.SmallHelpers.superArgs;
-import static de.peeeq.wurstscript.validation.GlobalCaches.SUBTYPE_MEMO;
 
 /**
  * this class validates a wurstscript program
@@ -65,7 +64,7 @@ public class WurstValidator {
             visitedFunctions = 0;
             heavyFunctions.clear();
             heavyBlocks.clear();
-            SUBTYPE_MEMO.clear();
+            GlobalCaches.clearAll();
 
             lightValidation(toCheck);
 
@@ -524,8 +523,11 @@ public class WurstValidator {
                         }
                         loc.addError("Non-abstract class " + c.getName() + " cannot have abstract functions like " + f.getName());
                     } else if (link instanceof FuncLink) {
-                        toImplement.append("\n    ");
-                        toImplement.append(((FuncLink) link).printFunctionTemplate());
+                        FuncLink abstractLink = (FuncLink) link;
+                        if (!hasImplementationInHierarchy(c, abstractLink)) {
+                            toImplement.append("\n    ");
+                            toImplement.append(abstractLink.printFunctionTemplate());
+                        }
                     }
                 }
             }
@@ -533,6 +535,66 @@ public class WurstValidator {
                 c.addError("Non-abstract class " + c.getName() + " must implement the following functions:" + toImplement);
             }
         }
+    }
+
+    private boolean hasImplementationInHierarchy(ClassDef c, FuncLink abstractFunc) {
+        return findImplementationLink(c, abstractFunc) != null;
+    }
+
+    private @Nullable FuncLink findImplementationLink(ClassDef c, FuncLink abstractFunc) {
+        FuncLink best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (NameLink nameLink : c.attrNameLinks().get(abstractFunc.getName())) {
+            if (!(nameLink instanceof FuncLink)) {
+                continue;
+            }
+            FuncLink candidate = (FuncLink) nameLink;
+            if (!WurstValidator.canOverride(candidate, abstractFunc, false)) {
+                continue;
+            }
+            FunctionDefinition candidateDef = candidate.getDef();
+            if (!(candidateDef instanceof FuncDef)) {
+                continue;
+            }
+            if (candidateDef.attrIsAbstract()) {
+                continue;
+            }
+            ClassDef owner = candidateDef.attrNearestClassDef();
+            if (owner == null) {
+                continue;
+            }
+            int distance = distanceToOwner(c, owner);
+            if (distance == Integer.MAX_VALUE) {
+                continue;
+            }
+            if (best == null || distance < bestDistance) {
+                best = candidate;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    private int distanceToOwner(ClassDef start, ClassDef owner) {
+        int distance = 0;
+        ClassDef current = start;
+        Set<ClassDef> visited = new HashSet<>();
+        while (current != null && visited.add(current)) {
+            if (current == owner) {
+                return distance;
+            }
+            WurstTypeClass currentType = current.attrTypC();
+            if (currentType == null) {
+                break;
+            }
+            WurstTypeClass superType = currentType.extendedClass();
+            if (superType == null) {
+                break;
+            }
+            current = superType.getClassDef();
+            distance++;
+        }
+        return Integer.MAX_VALUE;
     }
 
     private void visit(StmtExitwhen exitwhen) {
@@ -1256,15 +1318,7 @@ public class WurstValidator {
         if (rightType instanceof WurstTypeVoid) {
             if (pos.attrNearestPackage() instanceof WPackage) {
                 WPackage pack = (WPackage) pos.attrNearestPackage();
-                if (pack != null && !pack.getName().equals("WurstREPL")) { // allow
-                    // assigning
-                    // nothing
-                    // to
-                    // a
-                    // variable
-                    // in
-                    // the
-                    // Repl
+                if (pack != null && !pack.getName().equals("WurstREPL")) { // allow assigning nothing to a variable in the Repl
                     pos.addError("Function or expression returns nothing. Cannot assign nothing to a variable.");
                 }
             }
@@ -1614,26 +1668,12 @@ public class WurstValidator {
         return false;
     }
 
-    private static boolean isSubtypeCached(WurstType actual, WurstType expected, Annotation site) {
+    private static boolean isSubtypeCached(WurstType actual, WurstType expected, Element site) {
+        // Fast paths first
         if (actual == expected) return true;
-        // quick structural equality before expensive check
         if (actual.equalsType(expected, site)) return true;
 
-        Reference2BooleanOpenHashMap<WurstType> inner = SUBTYPE_MEMO.get(actual);
-        if (inner != null && inner.containsKey(expected)) {
-            return inner.getBoolean(expected);
-        }
-
-        boolean res = actual.isSubtypeOf(expected, site);
-
-        if (inner == null) {
-            inner = new Reference2BooleanOpenHashMap<>();
-            SUBTYPE_MEMO.put(actual, inner);
-        }
-        if (!inner.containsKey(expected)) {
-            inner.put(expected, res);
-        }
-        return res;
+        return actual.isSubtypeOf(expected, site);
     }
 
     private void checkAnnotation(Annotation a) {
@@ -1865,8 +1905,7 @@ public class WurstValidator {
     private void visit(ExprDestroy stmtDestroy) {
         if (stmtDestroy.getDestroyedObj() instanceof ExprThis) {
             if (isInConstructor(stmtDestroy)) {
-                stmtDestroy.addError("Cannot destroy 'this' in constructor");
-                return;
+                stmtDestroy.addWarning("Should not destroy 'this' in constructor, because 'new' would return an invalid object.\nMove destruction logic into a separate function outside the constructor.\nThis will be an error in the future.");
             }
         }
 
