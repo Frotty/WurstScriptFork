@@ -4,7 +4,6 @@ import org.gradle.internal.os.OperatingSystem
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            from components.java
             artifact tasks.shadowJar
             groupId    = project.group ?: 'de.peeeq'
             artifactId = 'wurstscript'
