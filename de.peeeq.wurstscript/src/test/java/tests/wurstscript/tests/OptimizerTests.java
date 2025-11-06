@@ -1050,6 +1050,32 @@ public class OptimizerTests extends WurstScriptTest {
 
 
     @Test
+    public void localInliner_noCrossBranchSubstitution() throws IOException {
+        testAssertOkLines(false,
+            "package test",
+            "    native randomFlag() returns boolean",
+            "    native testSuccess()",
+            "    native testFail(string msg)",
+            "    function run()",
+            "        int value",
+            "        if randomFlag()",
+            "            value = 5",
+            "        else",
+            "            if value == 0",
+            "                testSuccess()",
+            "            else",
+            "                testFail(\"value changed\")",
+            "    init",
+            "        run()",
+            "endpackage");
+
+        String compiled = Files.toString(new File("test-output/OptimizerTests_localInliner_noCrossBranchSubstitution_opt.j"), Charsets.UTF_8);
+        assertTrue(compiled.contains("if value == 0") || compiled.contains("if 0 == value"), compiled);
+        assertFalse(compiled.contains("if 5 == 0"), compiled);
+    }
+
+
+    @Test
     public void localMergerLiveness() throws IOException {
         LocalMerger localMerger = new LocalMerger();
 

@@ -91,11 +91,14 @@ public class SimpleRewrites implements OptimizerPass {
                         message.endsWith("on invalid object.") ||
                         message.startsWith("Could not initialize package ")||
                         message.startsWith("Index out of bounds")) {
-                        if (funcCall.attrTrace().attrSource().getFile().contains("Crypto.wurst") || removeWurstErrors) {
+                        boolean fromCrypto = false;
+                        if (funcCall.attrTrace() != null && funcCall.attrTrace().attrSource() != null) {
+                            fromCrypto = funcCall.attrTrace().attrSource().getFile().contains("Crypto.wurst");
+                        }
+                        if (fromCrypto || removeWurstErrors) {
                             funcCall.replaceBy(ImHelper.nullExpr());
                         }
                     }
-
                 }
             }
         });
