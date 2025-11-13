@@ -321,16 +321,6 @@ public class SimpleRewrites implements OptimizerPass {
                 } else {
                     wasViable = false; // unknown numeric combo
                 }
-            } else if (left instanceof ImStringVal) {
-                // Fold "" + expr  =>  expr
-                if (opc.getOp() == WurstOperator.PLUS
-                    && ((ImStringVal) left).getValS().isEmpty()) {
-                    right.setParent(null);
-                    opc.replaceBy(right);
-                    wasViable = true;
-                } else {
-                    wasViable = false;
-                }
             } else if (right instanceof ImStringVal) {
                 if (left instanceof ImStringVal) {
                     wasViable = optimizeStringString(opc, (ImStringVal) left, (ImStringVal) right);
@@ -351,7 +341,14 @@ public class SimpleRewrites implements OptimizerPass {
                     replaceStringCompareWithHash(right, (ImStringVal) left);
                     wasViable = true;
                 } else {
-                    wasViable = false;
+                    if (opc.getOp() == WurstOperator.PLUS
+                        && ((ImStringVal) left).getValS().isEmpty()) {
+                        right.setParent(null);
+                        opc.replaceBy(right);
+                        wasViable = true;
+                    } else {
+                        wasViable = false;
+                    }
                 }
             } else {
                 wasViable = false;
