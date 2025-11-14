@@ -10,6 +10,7 @@ import de.peeeq.wurstscript.ast.WurstModel;
 import de.peeeq.wurstscript.intermediatelang.optimizer.FunctionSplitter;
 import de.peeeq.wurstscript.intermediatelang.optimizer.LocalMerger;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imoptimizer.ImOptimizer;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 import de.peeeq.wurstscript.types.TypesHelper;
 import de.peeeq.wurstscript.utils.Utils;
@@ -1386,6 +1387,39 @@ public class OptimizerTests extends WurstScriptTest {
         String out = Files.toString(new File("test-output/OptimizerTests_realRealMixed_equality_roundTripGuard_opt.j"), Charsets.UTF_8);
         // We don't assert true/false (depends on float), we only ensure no sci-notation
         assertFalse(out.matches("(?s).*E[-+]?\\d+.*"));
+    }
+
+    @Test
+    public void test_parsedJassUnaryMinusStaysLocal() throws IOException {
+        ImOptimizer.localOptRounds = 10;
+        CompilationResult compilation = test().compilationUnits(compilationUnit("unaryMinusCheck.j",
+            "native DebugNative takes integer p1, integer value returns nothing",
+            "native SomeNative takes nothing returns integer",
+            "globals",
+            "endglobals",
+            "",
+            "function Foo takes nothing returns nothing",
+            "    local integer i = SomeNative()",
+            "    local integer k = SomeNative()",
+            "    local integer j = 1337",
+            "    call DebugNative(j, -i - i / k * k)",
+            "endfunction",
+            "",
+            "function main takes nothing returns nothing",
+            "    call Foo()",
+            "endfunction",
+            "",
+            "function config takes nothing returns nothing",
+            "endfunction"));
+
+        assertEquals(compilation.getGui().getErrorCount(), 0,
+            "jass snippet should compile: " + compilation.getGui().getErrorList());
+
+        String output = Files.toString(new File("test-output/OptimizerTests_test_parsedJassUnaryMinusStaysLocal_inlopt.j"), Charsets.UTF_8);
+        String normalized = output.replaceAll("\\s+", "");
+        assertTrue(normalized.contains("(-i)-i/k*k"), "unary minus should stay local to the left operand");
+        assertFalse(normalized.contains("-(i-i/k*k)"), "unary minus must not negate the entire subtraction");
+        ImOptimizer.localOptRounds = 1;
     }
 
 }
