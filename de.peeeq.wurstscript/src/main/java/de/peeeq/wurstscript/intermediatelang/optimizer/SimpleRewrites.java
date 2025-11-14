@@ -19,6 +19,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
+import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation.floatToStringWithDecimalDigits;
+import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation.isIntegerLikeConstant;
+import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation.isNearInteger;
+
 public class SimpleRewrites implements OptimizerPass {
     private SideEffectAnalyzer sideEffectAnalysis;
     public static boolean doHashing = false;
@@ -431,7 +435,6 @@ public class SimpleRewrites implements OptimizerPass {
         }
     }
 
-
     private boolean optimizeRealRealMixed(ImOperatorCall opc, boolean wasViable, ImExpr left, ImExpr right) {
         float f1 = asFloat(left);
         float f2 = asFloat(right);
@@ -500,6 +503,13 @@ public class SimpleRewrites implements OptimizerPass {
             opc.replaceBy(JassIm.ImBoolVal(result));
             return true;
         } else if (isArithmetic) {
+            if (isNearInteger(resultVal)) {
+                boolean leftIntLike  = isIntegerLikeConstant(left);
+                boolean rightIntLike = isIntegerLikeConstant(right);
+                if (!(leftIntLike && rightIntLike)) {
+                    return false;
+                }
+            }
             String s = floatToStringWithDecimalDigits(resultVal, 4);
             if (Float.parseFloat(s) != resultVal) {
                 s = floatToStringWithDecimalDigits(resultVal, 9);
@@ -831,20 +841,6 @@ public class SimpleRewrites implements OptimizerPass {
             default:
                 throw new Error("operator " + op + " does not have an opposite.");
         }
-    }
-
-    private static String floatToStringWithDecimalDigits(float resultVal, int digits) {
-        DecimalFormat format = new DecimalFormat();
-        // use a fixed locale, so that it does not randomly replace a dot by
-        // comma on German PCs
-        // hope this works
-        format.setDecimalFormatSymbols(new DecimalFormatSymbols(Locale.US));
-        format.setMinimumIntegerDigits(1);
-        format.setMaximumFractionDigits(digits);
-        format.setMinimumFractionDigits(1);
-        format.setGroupingUsed(false);
-        String s = format.format(resultVal);
-        return s;
     }
 
     private void optimizeIf(ImIf imIf) {

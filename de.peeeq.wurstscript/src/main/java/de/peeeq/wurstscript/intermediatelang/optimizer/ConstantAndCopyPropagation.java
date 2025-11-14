@@ -13,12 +13,76 @@ import io.vavr.Tuple2;
 import io.vavr.collection.HashMap;
 import org.eclipse.jdt.annotation.Nullable;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.*;
 
 import static de.peeeq.wurstscript.WurstOperator.*;
 
 public class ConstantAndCopyPropagation implements OptimizerPass {
     private int totalPropagated = 0;
+
+    // Format reals like SimpleRewrites: single-precision float + fixed number of fraction digits
+    public static String floatToStringWithDecimalDigits(float resultVal, int digits) {
+        DecimalFormat format = new DecimalFormat();
+        format.setDecimalFormatSymbols(new DecimalFormatSymbols(Locale.US));
+        format.setMinimumIntegerDigits(1);
+        format.setMaximumFractionDigits(digits);
+        format.setMinimumFractionDigits(1);
+        format.setGroupingUsed(false);
+        return format.format(resultVal);
+    }
+
+    // Convenience wrapper for this pass: use a fixed precision (6 is what Wurst usually uses)
+    private static String formatReal(float resultVal) {
+        return floatToStringWithDecimalDigits(resultVal, 6);
+    }
+
+    /**
+     * Returns true if the float is very close to an integer.
+     * Used to detect cases where WC3 vs Java differences matter (R2I etc.).
+     */
+    public static boolean isNearInteger(float v) {
+        float nearest = Math.round(v);
+        return Math.abs(v - nearest) < 0.002f;
+    }
+
+    /**
+     * Returns true if this expression is a constant with an exact integer value:
+     *  - ImIntVal
+     *  - ImRealVal whose string is integer-like (e.g. "6", "6.", "6.0", "6.000")
+     *
+     * For non-constants we return false (be conservative).
+     */
+    public static boolean isIntegerLikeConstant(ImExpr e) {
+        if (e instanceof ImIntVal) {
+            return true;
+        }
+        if (e instanceof ImRealVal) {
+            String v = ((ImRealVal) e).getValR();
+            if (v == null || v.isEmpty()) {
+                return false;
+            }
+
+            int start = (v.charAt(0) == '+' || v.charAt(0) == '-') ? 1 : 0;
+            int dot = v.indexOf('.', start);
+
+            if (dot < 0) {
+                // "6", "120"
+                return true;
+            }
+
+            // Ensure everything after '.' is zeros (or empty)
+            for (int i = dot + 1; i < v.length(); i++) {
+                char c = v.charAt(i);
+                if (c != '0') {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
 
     public int optimize(ImTranslator trans) {
         ImProg prog = trans.getImProg();
@@ -498,15 +562,47 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                     case OR: return JassIm.ImIntVal(l | r);
                 }
             } else if (left instanceof ImRealVal && right instanceof ImRealVal) {
-                double l = Double.parseDouble(((ImRealVal) left).getValR());
-                double r = Double.parseDouble(((ImRealVal) right).getValR());
+                float l = Float.parseFloat(((ImRealVal) left).getValR());
+                float r = Float.parseFloat(((ImRealVal) right).getValR());
 
                 switch (op) {
-                    case PLUS: return JassIm.ImRealVal(String.valueOf(l + r));
-                    case MINUS: return JassIm.ImRealVal(String.valueOf(l - r));
-                    case MULT: return JassIm.ImRealVal(String.valueOf(l * r));
-                    case DIV_REAL: if (r != 0.0) return JassIm.ImRealVal(String.valueOf(l / r)); break;
-                    // IMPORTANT: Return ImBoolVal for comparisons!
+                    case PLUS: {
+                        float res = l + r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case MINUS: {
+                        float res = l - r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case MULT: {
+                        float res = l * r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case DIV_REAL: {
+                        if (r != 0f) {
+                            float res = l / r;
+                            if (isNearInteger(res)
+                                && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                                return null;
+                            }
+                            return JassIm.ImRealVal(String.valueOf(res));
+                        }
+                        break;
+                    }
+
+                    // comparisons stay the same
                     case EQ: return JassIm.ImBoolVal(l == r);
                     case NOTEQ: return JassIm.ImBoolVal(l != r);
                     case LESS: return JassIm.ImBoolVal(l < r);
@@ -514,28 +610,51 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                     case GREATER: return JassIm.ImBoolVal(l > r);
                     case GREATER_EQ: return JassIm.ImBoolVal(l >= r);
                 }
-            } else if (left instanceof ImBoolVal && right instanceof ImBoolVal) {
-                // Handle boolean operations
-                boolean l = ((ImBoolVal) left).getValB();
-                boolean r = ((ImBoolVal) right).getValB();
+            }
+
+            // INT op REAL
+            else if (left instanceof ImIntVal && right instanceof ImRealVal) {
+                float l = ((ImIntVal) left).getValI();
+                float r = Float.parseFloat(((ImRealVal) right).getValR());
 
                 switch (op) {
-                    case EQ: return JassIm.ImBoolVal(l == r);
-                    case NOTEQ: return JassIm.ImBoolVal(l != r);
-                    case AND: return JassIm.ImBoolVal(l && r);
-                    case OR: return JassIm.ImBoolVal(l || r);
-                }
-            } else if (left instanceof ImIntVal && right instanceof ImRealVal) {
-                // int op real -> real
-                double l = ((ImIntVal) left).getValI();
-                double r = Double.parseDouble(((ImRealVal) right).getValR());
+                    case PLUS: {
+                        float res = l + r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case MINUS: {
+                        float res = l - r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case MULT: {
+                        float res = l * r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case DIV_REAL: {
+                        if (r != 0f) {
+                            float res = l / r;
+                            if (isNearInteger(res)
+                                && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                                return null;
+                            }
+                            return JassIm.ImRealVal(String.valueOf(res));
+                        }
+                        break;
+                    }
 
-                switch (op) {
-                    case PLUS: return JassIm.ImRealVal(String.valueOf(l + r));
-                    case MINUS: return JassIm.ImRealVal(String.valueOf(l - r));
-                    case MULT: return JassIm.ImRealVal(String.valueOf(l * r));
-                    case DIV_REAL: if (r != 0.0) return JassIm.ImRealVal(String.valueOf(l / r)); break;
-                    // Comparisons return bool
+                    // comparisons unchanged
                     case EQ: return JassIm.ImBoolVal(l == r);
                     case NOTEQ: return JassIm.ImBoolVal(l != r);
                     case LESS: return JassIm.ImBoolVal(l < r);
@@ -543,17 +662,51 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                     case GREATER: return JassIm.ImBoolVal(l > r);
                     case GREATER_EQ: return JassIm.ImBoolVal(l >= r);
                 }
-            } else if (left instanceof ImRealVal && right instanceof ImIntVal) {
-                // real op int -> real
-                double l = Double.parseDouble(((ImRealVal) left).getValR());
-                double r = ((ImIntVal) right).getValI();
+            }
+
+            // REAL op INT
+            else if (left instanceof ImRealVal && right instanceof ImIntVal) {
+                float l = Float.parseFloat(((ImRealVal) left).getValR());
+                float r = ((ImIntVal) right).getValI();
 
                 switch (op) {
-                    case PLUS: return JassIm.ImRealVal(String.valueOf(l + r));
-                    case MINUS: return JassIm.ImRealVal(String.valueOf(l - r));
-                    case MULT: return JassIm.ImRealVal(String.valueOf(l * r));
-                    case DIV_REAL: if (r != 0.0) return JassIm.ImRealVal(String.valueOf(l / r)); break;
-                    // Comparisons return bool
+                    case PLUS: {
+                        float res = l + r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case MINUS: {
+                        float res = l - r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case MULT: {
+                        float res = l * r;
+                        if (isNearInteger(res)
+                            && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                            return null;
+                        }
+                        return JassIm.ImRealVal(String.valueOf(res));
+                    }
+                    case DIV_REAL: {
+                        if (r != 0f) {
+                            float res = l / r;
+                            if (isNearInteger(res)
+                                && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
+                                return null;
+                            }
+                            return JassIm.ImRealVal(String.valueOf(res));
+                        }
+                        break;
+                    }
+
+                    // comparisons unchanged
                     case EQ: return JassIm.ImBoolVal(l == r);
                     case NOTEQ: return JassIm.ImBoolVal(l != r);
                     case LESS: return JassIm.ImBoolVal(l < r);
@@ -577,9 +730,10 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                     case NOT: return JassIm.ImBoolVal(val == 0); // Return ImBoolVal!
                 }
             } else if (arg instanceof ImRealVal) {
-                double val = Double.parseDouble(((ImRealVal) arg).getValR());
+                float val = Float.parseFloat(((ImRealVal) arg).getValR());
                 switch (op) {
-                    case UNARY_MINUS: return JassIm.ImRealVal(String.valueOf(-val));
+                    case UNARY_MINUS:
+                        return JassIm.ImRealVal(formatReal(-val));
                 }
             } else if (arg instanceof ImBoolVal) {
                 boolean val = ((ImBoolVal) arg).getValB();

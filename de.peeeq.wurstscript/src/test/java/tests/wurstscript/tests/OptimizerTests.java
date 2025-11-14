@@ -21,7 +21,10 @@ import org.testng.annotations.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import static org.testng.Assert.*;
@@ -936,6 +939,32 @@ public class OptimizerTests extends WurstScriptTest {
             "    if getDamage(2) > 239 and getDamage(2) < 241",
             "        testSuccess()"
         );
+    }
+
+    @Test
+    public void constantFolding779() throws IOException {
+        testAssertOkLines(false,
+            "package test",
+            "native testSuccess()",
+            "function getDamage(int level) returns real",
+            "    switch level ",
+            "        case 1",
+            "            return 6. * 20",
+            "        case 2",
+            "            return (((7.8)*1.0)*100)",
+            "        case 3 ",
+            "            return 6. * 60",
+            "    return 0",
+            "init",
+            "    if getDamage(2) > 779 and getDamage(2) < 778",
+            "        testSuccess()"
+        );
+
+        String output = Files.toString(new File("test-output/OptimizerTests_constantFolding779_inlopt.j"), Charsets.UTF_8);
+        String normalized = output.replaceAll("\\s+", "");
+        assertTrue(normalized.contains("120."), "should fold int likes");
+        assertTrue(normalized.contains("360."), "should fold int likes");
+        assertTrue(normalized.contains("7.8*100"), "should not fold decimals");
     }
 
     @Test
