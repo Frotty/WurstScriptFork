@@ -12,7 +12,7 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Map;
 
-import static org.junit.Assert.assertFalse;
+import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertTrue;
 
 public class JurstTests extends WurstScriptTest {
