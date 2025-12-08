@@ -1451,4 +1451,51 @@ public class OptimizerTests extends WurstScriptTest {
         ImOptimizer.localOptRounds = 1;
     }
 
+    @Test
+    public void unread_array_assignment_keeps_side_effects() {
+        test().executeProg().lines(
+            "package test",
+            "\tnative testSuccess()",
+            "\tnative testFail(string msg)",
+            "\tint counter = 0",
+            "\tfunction bumpIndex() returns int",
+            "\t\tcounter += 1",
+            "\t\treturn 0",
+            "\tfunction rhsValue() returns int",
+            "\t\tcounter += 10",
+            "\t\treturn 5",
+            "\tinit",
+            "\t\tint array[1] tmp",
+            "\t\ttmp[bumpIndex()] = rhsValue()",
+            "\t\tif counter == 11",
+            "\t\t\ttestSuccess()",
+            "\t\telse",
+            "\t\t\ttestFail(\"side effects were dropped\")",
+            "endpackage");
+    }
+
+    @Test
+    public void test_unused_field_assignment_keeps_receiver_side_effects() {
+        test().executeProg().lines(
+            "package test",
+            "   native testSuccess()",
+            "   native testFail(string s)",
+            "   int calls = 0",
+            "   class C",
+            "       int value",
+            "   function makeC() returns C",
+            "       calls += 1",
+            "       return new C()",
+            "   function sideEffectValue() returns int",
+            "       calls += 10",
+            "       return calls",
+            "   init",
+            "       makeC().value = sideEffectValue()",
+            "       if calls == 11",
+            "           testSuccess()",
+            "       else",
+            "           testFail(\"missing side effects\")",
+            "endpackage");
+    }
+
 }

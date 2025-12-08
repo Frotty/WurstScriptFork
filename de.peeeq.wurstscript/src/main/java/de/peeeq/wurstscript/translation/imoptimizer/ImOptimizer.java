@@ -162,20 +162,38 @@ public class ImOptimizer {
                             ImVarArrayAccess va = (ImVarArrayAccess) e.getLeft();
 
                             if (!trans.getReadVariables().contains(va.getVar()) && !TO_KEEP.contains(va.getVar().getName())) {
-                                // TODO indexes might have side effects that we need to keep
-                                List<ImExpr> exprs = va.getIndexes().removeAll();
+                                List<ImExpr> exprs = new ArrayList<>();
+                                va.getIndexes().forEach(idx -> {
+                                    idx.setParent(null);
+                                    exprs.add(idx);
+                                });
+                                va.getIndexes().clear();
                                 exprs.add(e.getRight());
                                 replacements.add(Pair.create(e, exprs));
                             }
                         } else if (e.getLeft() instanceof ImTupleSelection) {
-                            ImVar var = TypesHelper.getTupleVar((ImTupleSelection) e.getLeft());
-                            if(!trans.getReadVariables().contains(var) && !TO_KEEP.contains(var.getName())) {
-                                replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
+                            ImTupleSelection ts = (ImTupleSelection) e.getLeft();
+                            ImVar var = TypesHelper.getTupleVar(ts);
+                            if (!trans.getReadVariables().contains(var) && !TO_KEEP.contains(var.getName())) {
+                                List<ImExpr> exprs = new ArrayList<>();
+                                ts.getTupleExpr().setParent(null);
+                                exprs.add(ts.getTupleExpr());
+                                exprs.add(e.getRight());
+                                replacements.add(Pair.create(e, exprs));
                             }
                         } else if(e.getLeft() instanceof ImMemberAccess) {
-                            ImMemberAccess va = ((ImMemberAccess) e.getLeft());
-                            if (!trans.getReadVariables().contains(va.getVar()) && !TO_KEEP.contains(va.getVar().getName())) {
-                                replacements.add(Pair.create(e, Collections.singletonList(e.getRight())));
+                            ImMemberAccess ma = ((ImMemberAccess) e.getLeft());
+                            if (!trans.getReadVariables().contains(ma.getVar()) && !TO_KEEP.contains(ma.getVar().getName())) {
+                                List<ImExpr> exprs = new ArrayList<>();
+                                ma.getReceiver().setParent(null);
+                                exprs.add(ma.getReceiver());
+                                ma.getIndexes().forEach(idx -> {
+                                    idx.setParent(null);
+                                    exprs.add(idx);
+                                });
+                                ma.getIndexes().clear();
+                                exprs.add(e.getRight());
+                                replacements.add(Pair.create(e, exprs));
                             }
                         }
                     }
