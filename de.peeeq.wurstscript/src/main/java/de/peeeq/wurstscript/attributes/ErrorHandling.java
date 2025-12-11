@@ -17,7 +17,7 @@ public class ErrorHandling {
     }
 
     public static void addWarning(Element e, String msg) {
-        addErrorOrWarning(e, msg, ErrorType.WARNING);
+//        addErrorOrWarning(e, msg, ErrorType.WARNING);
     }
 
     private static void addErrorOrWarning(Element e, String msg,
