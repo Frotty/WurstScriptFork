@@ -40,21 +40,48 @@ public class LocalInliner implements OptimizerPass {
             Collection<ImVarWrite> writes = local.attrWrites();
             Collection<ImVarRead> reads = local.attrReads();
             if (writes.size() == 1 && reads.size() == 1) {
-                ImExpr writeRight = writes.iterator().next().getRight();
-                Element nearestStmt = reads.iterator().next().getParent();
-                while (nearestStmt != null) {
-                    if (nearestStmt instanceof ImStmt) {
-                        break;
-                    }
-                    nearestStmt = nearestStmt.getParent();
+                ImVarWrite write = writes.iterator().next();
+                ImVarRead read = reads.iterator().next();
+                if (!writeDominatesRead(write, read)) {
+                    continue;
                 }
-                if (!sideEffectAnalyzer.hasSideEffects(writeRight) && sideEffectAnalyzer.usedVariables(writeRight).size() == 0) {
+
+                ImExpr writeRight = write.getRight();
+                if (!sideEffectAnalyzer.hasSideEffects(writeRight) && sideEffectAnalyzer.usedVariables(writeRight).isEmpty()) {
                     writeRight.setParent(null);
-                    reads.iterator().next().replaceBy(writeRight);
+                    read.replaceBy(writeRight);
                     totalLocalsInlined++;
                 }
             }
         }
+    }
+
+
+    private boolean writeDominatesRead(ImVarWrite write, ImVarRead read) {
+        ImStmt writeStmt = findEnclosingStmt(write);
+        ImStmt readStmt = findEnclosingStmt(read);
+        if (writeStmt == null || readStmt == null) {
+            return false;
+        }
+        if (writeStmt == readStmt) {
+            return false;
+        }
+        if (!(writeStmt.getParent() instanceof ImStmts)) {
+            return false;
+        }
+        if (writeStmt.getParent() != readStmt.getParent()) {
+            return false;
+        }
+        ImStmts block = (ImStmts) writeStmt.getParent();
+        return block.indexOf(writeStmt) < block.indexOf(readStmt);
+    }
+
+    private ImStmt findEnclosingStmt(Element element) {
+        Element current = element;
+        while (current != null && !(current instanceof ImStmt)) {
+            current = current.getParent();
+        }
+        return (ImStmt) current;
     }
 
 
