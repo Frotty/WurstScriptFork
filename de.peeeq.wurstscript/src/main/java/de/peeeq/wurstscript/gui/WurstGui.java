@@ -52,5 +52,4 @@ public abstract class WurstGui {
     public final List<CompileError> getErrorsAndWarnings() {
         return Collections.unmodifiableList(errors);
     }
-
 }
