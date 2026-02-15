@@ -572,7 +572,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case MINUS: {
                         float res = l - r;
@@ -580,7 +580,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case MULT: {
                         float res = l * r;
@@ -588,7 +588,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case DIV_REAL: {
                         if (r != 0f) {
@@ -597,7 +597,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                                 && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                                 return null;
                             }
-                            return JassIm.ImRealVal(String.valueOf(res));
+                            return JassIm.ImRealVal(formatReal(res));
                         }
                         break;
                     }
@@ -624,7 +624,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case MINUS: {
                         float res = l - r;
@@ -632,7 +632,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case MULT: {
                         float res = l * r;
@@ -640,7 +640,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case DIV_REAL: {
                         if (r != 0f) {
@@ -649,7 +649,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                                 && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                                 return null;
                             }
-                            return JassIm.ImRealVal(String.valueOf(res));
+                            return JassIm.ImRealVal(formatReal(res));
                         }
                         break;
                     }
@@ -676,7 +676,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case MINUS: {
                         float res = l - r;
@@ -684,7 +684,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case MULT: {
                         float res = l * r;
@@ -692,7 +692,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                             && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                             return null;
                         }
-                        return JassIm.ImRealVal(String.valueOf(res));
+                        return JassIm.ImRealVal(formatReal(res));
                     }
                     case DIV_REAL: {
                         if (r != 0f) {
@@ -701,7 +701,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
                                 && !(isIntegerLikeConstant(left) && isIntegerLikeConstant(right))) {
                                 return null;
                             }
-                            return JassIm.ImRealVal(String.valueOf(res));
+                            return JassIm.ImRealVal(formatReal(res));
                         }
                         break;
                     }

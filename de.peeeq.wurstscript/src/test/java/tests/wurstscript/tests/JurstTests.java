@@ -191,6 +191,38 @@ public class JurstTests extends WurstScriptTest {
     }
 
     @Test
+    public void jassUnreachableWarningAndRemovedInOptimizer() throws IOException {
+        String jassCode = Utils.string(
+            "native testSuccess takes nothing returns nothing",
+            "function foo takes boolean b returns nothing",
+            "	if b then",
+            "		return",
+            "	else",
+            "		return",
+            "	endif",
+            "	call testSuccess()",
+            "endfunction");
+
+        String jurstCode = Utils.string(
+            "package test",
+            "	init",
+            "		foo(true)",
+            "	end",
+            "endpackage");
+
+        test().compilationUnits(
+            compilationUnit("example.j", jassCode),
+            compilationUnit("test.jurst", jurstCode)
+        );
+
+        String output = com.google.common.io.Files.toString(
+            new File("./test-output/JurstTests_jassUnreachableWarningAndRemovedInOptimizer_opt.j"),
+            Charsets.UTF_8
+        );
+        assertFalse("unreachable Jass call should be removed by optimizer", output.contains("call testSuccess"));
+    }
+
+    @Test
     public void jassMultilineString() {
         String jassCode =
             "function bar takes string s returns nothing\r" +

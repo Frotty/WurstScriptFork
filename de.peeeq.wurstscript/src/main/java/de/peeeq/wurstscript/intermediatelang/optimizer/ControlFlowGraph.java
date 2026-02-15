@@ -12,14 +12,20 @@ public class ControlFlowGraph {
 
     public static final class Node {
         private @Nullable ImStmt stmt;
+        private final @Nullable ImStmt ownerStmt;
         private @Nullable String name = null;
         // Use fastutil lists; far less overhead than ArrayList for small lists.
         private final ObjectArrayList<Node> predecessors = new ObjectArrayList<>(2);
         private final ObjectArrayList<Node> successors   = new ObjectArrayList<>(2);
 
-        Node(@Nullable ImStmt stmt) { this.stmt = stmt; }
+        Node(@Nullable ImStmt stmt) {
+            this.stmt = stmt;
+            this.ownerStmt = stmt;
+        }
 
         public @Nullable ImStmt getStmt() { return stmt; }
+
+        public @Nullable ImStmt getOwnerStmt() { return ownerStmt; }
 
         public ObjectArrayList<Node> getPredecessors() { return predecessors; }
 
