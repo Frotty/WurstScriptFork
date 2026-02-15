@@ -42,6 +42,7 @@ import static org.testng.Assert.fail;
 public class WurstScriptTest {
 
     public static final String TEST_OUTPUT_PATH = "./test-output/";
+    private boolean disablePjassForCurrentTest = false;
 
     protected boolean testOptimizer() {
         return true;
@@ -66,6 +67,7 @@ public class WurstScriptTest {
         private boolean executeProgOnlyAfterTransforms;
         private String expectedError;
         private String expectedWarning;
+        private boolean disablePjass;
 
         private final List<File> inputFiles = new ArrayList<>();
         private final List<CU> additionalCompilationUnits = new ArrayList<>();
@@ -87,6 +89,15 @@ public class WurstScriptTest {
                 // stdlib needs compiletime functions
                 this.runCompiletimeFunctions = true;
             }
+            return this;
+        }
+
+        TestConfig disablePjass() {
+            return disablePjass(true);
+        }
+
+        TestConfig disablePjass(boolean b) {
+            this.disablePjass = b;
             return this;
         }
 
@@ -191,6 +202,10 @@ public class WurstScriptTest {
             if (runCompiletimeFunctions) {
                 runArgs = runArgs.with("-runcompiletimefunctions");
             }
+            if (disablePjass) {
+                runArgs = runArgs.with("-noPJass");
+            }
+            disablePjassForCurrentTest = disablePjass;
 
             WurstGui gui = new WurstGuiCliImpl();
             WurstCompilerJassImpl compiler = new WurstCompilerJassImpl(null, gui, null, runArgs);
@@ -607,6 +622,9 @@ public class WurstScriptTest {
 
 
     private void runPjass(File outputFile) throws Error {
+        if (disablePjassForCurrentTest) {
+            return;
+        }
         Result pJassResult = Pjass.runPjass(outputFile);
         WLogger.info(pJassResult.getMessage());
         if (!pJassResult.isOk() && !pJassResult.getMessage().equals("IO Exception")) {

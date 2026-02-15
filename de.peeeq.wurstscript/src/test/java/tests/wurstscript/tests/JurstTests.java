@@ -210,7 +210,7 @@ public class JurstTests extends WurstScriptTest {
             "	end",
             "endpackage");
 
-        test().compilationUnits(
+        test().setStopOnFirstError(false).expectWarning("Unreachable code").compilationUnits(
             compilationUnit("example.j", jassCode),
             compilationUnit("test.jurst", jurstCode)
         );
@@ -338,7 +338,7 @@ public class JurstTests extends WurstScriptTest {
             "package test",
             "endpackage");
 
-        testJurstWithJass(false, false, jassCode, jurstCode);
+        testJurstWithJass(false, true, jassCode, jurstCode);
 
         String output = com.google.common.io.Files.toString(new File("./test-output/JurstJassTest_inlopt.j"), Charsets.UTF_8);
         assertTrue(output.contains("real myVar"));
@@ -410,7 +410,20 @@ public class JurstTests extends WurstScriptTest {
             "  endinit",
             "endpackage");
 
-        testJurstWithJass(false, false, jassCode, jurstCode);
+        Map<String, String> inputs = ImmutableMap.of(
+            "example.j", jassCode,
+            "test.jurst", jurstCode
+        );
+        new TestConfig("JurstJassTest")
+            .withStdLib(false)
+            .disablePjass()
+            .executeTests(false)
+            .executeProgOnlyAfterTransforms(false)
+            .executeProg(false)
+            .withInputFiles(Collections.emptyList())
+            .withInputs(inputs)
+            .run()
+            .getModel();
 
         String output = com.google.common.io.Files.toString(new File("./test-output/JurstJassTest_inlopt.j"), Charsets.UTF_8);
         assertTrue(output.contains("real myVar"));
