@@ -4,6 +4,7 @@ import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 
+import java.util.ArrayDeque;
 import java.util.ListIterator;
 
 /**
@@ -65,6 +66,26 @@ public class BranchMerger  implements OptimizerPass {
                             } else {
                                 break;
                             }
+                        }
+
+                        ArrayDeque<ImStmt> mergedTail = new ArrayDeque<>();
+                        while (!ifStmt.getThenBlock().isEmpty()
+                                && !ifStmt.getElseBlock().isEmpty()) {
+                            int thenLast = ifStmt.getThenBlock().size() - 1;
+                            int elseLast = ifStmt.getElseBlock().size() - 1;
+                            ImStmt lastStmtThen = ifStmt.getThenBlock().get(thenLast);
+                            ImStmt lastStmtElse = ifStmt.getElseBlock().get(elseLast);
+                            if (lastStmtThen.structuralEquals(lastStmtElse)) {
+                                ifStmt.getThenBlock().remove(thenLast);
+                                ifStmt.getElseBlock().remove(elseLast);
+                                mergedTail.addFirst(lastStmtThen);
+                                branchesMerged++;
+                            } else {
+                                break;
+                            }
+                        }
+                        while (!mergedTail.isEmpty()) {
+                            it.add(mergedTail.removeFirst());
                         }
 
                     } else {

@@ -54,6 +54,8 @@ public class WurstScriptTest {
     @BeforeMethod(alwaysRun = true)
     public void _clearBefore() {
         GlobalCaches.clearAll();
+        de.peeeq.wurstscript.gui.WurstGui.silenceWarnings = false;
+        de.peeeq.wurstscript.attributes.ErrorHandling.setWarningsEnabled(true);
     }
 
     class TestConfig {

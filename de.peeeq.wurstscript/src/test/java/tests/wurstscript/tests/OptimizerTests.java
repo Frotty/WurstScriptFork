@@ -731,6 +731,91 @@ public class OptimizerTests extends WurstScriptTest {
         assertNotSame(compiledAndOptimized.indexOf("Test_ghs = 0"), compiledAndOptimized.lastIndexOf("Test_ghs = 0"));
     }
 
+    @Test
+    public void controlFlowTailMergeNoSideEffect() throws IOException {
+        test().lines(
+            "package Test",
+            "native marker(int x)",
+            "@extern native GetRandomInt(int a, int b) returns int",
+            "int ghs = 0",
+            "function nonInlinable(int x) returns bool",
+            "	if x > 6",
+            "		return true",
+            "	else",
+            "		return false",
+            "init",
+            "	var x = GetRandomInt(0, 10)",
+            "	if nonInlinable(x)",
+            "		ghs = 10",
+            "		marker(ghs)",
+            "	else",
+            "		ghs = 20",
+            "		marker(ghs)",
+            "endpackage"
+        );
+        String compiledAndOptimized = Files.toString(new File("test-output/OptimizerTests_controlFlowTailMergeNoSideEffect_opt.j"), Charsets.UTF_8);
+        int first = compiledAndOptimized.indexOf("call marker(Test_ghs)");
+        assertTrue(first >= 0, "tail call should still exist");
+        assertEquals(first, compiledAndOptimized.lastIndexOf("call marker(Test_ghs)"));
+    }
+
+    @Test
+    public void controlFlowTailMergePreservesSideEffects() throws IOException {
+        test().executeProg().lines(
+            "package Test",
+            "native testSuccess()",
+            "native testFail(string msg)",
+            "@extern native I2S(int i) returns string",
+            "@extern native GetRandomInt(int a, int b) returns int",
+            "int a = 0",
+            "int log = 0",
+            "function nonInlinable(int x) returns bool",
+            "	if x > 0",
+            "		return true",
+            "	else",
+            "		return false",
+            "function rec(int v)",
+            "	log = log * 100 + v",
+            "init",
+            "	var x = GetRandomInt(0, 1)",
+            "	if nonInlinable(x)",
+            "		a = 10",
+            "		rec(a)",
+            "	else",
+            "		a = 20",
+            "		rec(a)",
+            "	if log == 10 or log == 20",
+            "		testSuccess()",
+            "	else",
+            "		testFail(I2S(log))",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void controlFlowTailMergeDifferentTailsNotMerged() throws IOException {
+        test().lines(
+            "package Test",
+            "native marker(int x)",
+            "@extern native GetRandomInt(int a, int b) returns int",
+            "function nonInlinable(int x) returns bool",
+            "	if x > 0",
+            "		return true",
+            "	else",
+            "		return false",
+            "init",
+            "	var x = GetRandomInt(0, 1)",
+            "	if nonInlinable(x)",
+            "		marker(10)",
+            "	else",
+            "		marker(20)",
+            "endpackage"
+        );
+        String compiledAndOptimized = Files.toString(new File("test-output/OptimizerTests_controlFlowTailMergeDifferentTailsNotMerged_opt.j"), Charsets.UTF_8);
+        assertTrue(compiledAndOptimized.contains("call marker(10)"), "then-tail call should remain");
+        assertTrue(compiledAndOptimized.contains("call marker(20)"), "else-tail call should remain");
+    }
+
 
     @Test
     public void optimizeSet() {
