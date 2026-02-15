@@ -8,7 +8,9 @@ import de.peeeq.wurstscript.ast.VarDef;
 import de.peeeq.wurstscript.ast.WPackage;
 import de.peeeq.wurstscript.intermediatelang.*;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imtranslation.ImPrinter;
 import de.peeeq.wurstscript.types.TypesHelper;
+import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
 
 import java.util.ArrayList;
@@ -20,6 +22,10 @@ import java.util.stream.Collectors;
 
 public class EvaluateExpr {
 
+    private static void mark(Element e, ProgramState globalState) {
+        globalState.setLastElement(e);
+    }
+
     public static ILconst eval(ImBoolVal e, ProgramState globalState, LocalState localState) {
         return ILconstBool.instance(e.getValB());
     }
@@ -29,46 +35,17 @@ public class EvaluateExpr {
     }
 
     public static @Nullable ILconst eval(ImFunctionCall e, ProgramState globalState, LocalState localState) {
+        mark(e, globalState);
+
         ImFunction f = e.getFunc();
         ImExprs arguments = e.getArguments();
 
-
-        // Evaluate arguments
         ILconst[] args = new ILconst[arguments.size()];
         for (int i = 0; i < arguments.size(); i++) {
             args[i] = arguments.get(i).evaluate(globalState, localState);
         }
 
-        Map<ImTypeVar, ImType> typeSubstitutions = new HashMap<>();
-        @Nullable ILconstObject receiver = null;
-        if (e.getFunc().getParent() != null) {
-            Element parent = e.getFunc().getParent().getParent();
-            if (parent instanceof ImClass) {
-                ImTypeVars typeParams = ((ImClass) parent).getTypeVariables();  // The T74 parameters
-                ImTypeArguments typeArgs = e.getTypeArguments(); // The <integer> arguments
-
-                // Create mapping: T74 -> integer
-                for (int i = 0; i < typeParams.size() && i < typeArgs.size(); i++) {
-                    ImTypeVar genericParam = typeParams.get(i);
-                    ImType concreteArg = typeArgs.get(i).getType();
-                    typeSubstitutions.put(genericParam, concreteArg);
-                }
-
-                if (args.length > 0 && args[0] instanceof ILconstObject) {
-                    receiver = (ILconstObject) args[0];
-                }
-
-            }
-        }
-
-        globalState.pushStackframeWithTypes(f, receiver, args, e.attrTrace().attrErrorPos(), typeSubstitutions);
-
-
-        try {
-            return ILInterpreter.runFunc(globalState, f, e, args).getReturnVal();
-        } finally {
-            globalState.popStackframe();
-        }
+        return ILInterpreter.runFunc(globalState, f, e, args).getReturnVal();
     }
 
     public static @Nullable ILconst evaluateFunc(ProgramState globalState,
@@ -155,10 +132,14 @@ public class EvaluateExpr {
             if (isMagicCompiletimeConstant(var)) {
                 return ILconstBool.instance(globalState.isCompiletime());
             }
-
+            WLogger.trace("VarAccess global " + var.getName() + "@" + System.identityHashCode(var)
+                + " type=" + var.getType());
             ILconst r = globalState.getVal(var);
             if (r == null) {
                 List<ImSet> initExpr = globalState.getProg().getGlobalInits().get(var);
+                WLogger.trace("  -> was null, using globalInits key="
+                    + var.getName() + "@" + System.identityHashCode(var)
+                    + " initExpr=" + (initExpr == null ? "null" : initExpr.size()));
                 if (initExpr != null) {
                     r = initExpr.get(0).getRight().evaluate(globalState, localState);
                 } else {
@@ -216,6 +197,7 @@ public class EvaluateExpr {
                                          ProgramState globalState, LocalState localState) {
         ILconstObject receiver = globalState.toObject(mc.getReceiver().evaluate(globalState, localState));
         globalState.assertAllocated(receiver, mc.attrTrace());
+        mark(mc, globalState);
 
         List<ImExpr> args = mc.getArguments();
 
@@ -244,19 +226,14 @@ public class EvaluateExpr {
             typeSubstitutions.put(typeParams.get(i), typeArgs.get(i).getType());
         }
 
-        globalState.pushStackframeWithTypes(impl, receiver, eargs, mc.attrTrace().attrErrorPos(), typeSubstitutions);
-        try {
-            return evaluateFunc(globalState, impl, mc, eargs);
-        } finally {
-            globalState.popStackframe();
-        }
+        return evaluateFunc(globalState, impl, mc, eargs);
     }
 
 
     public static ILconst eval(ImMemberAccess ma, ProgramState globalState, LocalState localState) {
         ILconstObject receiver = globalState.toObject(ma.getReceiver().evaluate(globalState, localState));
         if (receiver == null) {
-            throw new InterpreterException(ma.getTrace(), "Null pointer dereference");
+            throw new InterpreterException(ma.getTrace(), "Null pointer dereference: " + ImPrinter.asString(ma.getReceiver()));
         }
         List<Integer> indexes = new ArrayList<>();
         for (ImExpr i : ma.getIndexes()) {
@@ -267,14 +244,12 @@ public class EvaluateExpr {
     }
 
     public static ILconst eval(ImAlloc e, ProgramState globalState, LocalState localState) {
-        // Get the generic type from the allocation instruction
-        ImClassType genericType = e.getClazz(); // This is Box<T74>
+        ImClassType genericType = e.getClazz();
+        ImClassType concreteType = (ImClassType) globalState.resolveType(genericType);
 
-        // NEW: Resolve it using current stack frame's type substitutions
-        ImClassType concreteType = (ImClassType) globalState.resolveType(genericType); // This becomes Box<integer>
-
-        // Allocate with the concrete type
-        return globalState.allocate(concreteType, e.attrTrace());
+        ILconstObject obj = globalState.allocate(concreteType, e.attrTrace());
+        obj.captureTypeSubstitutions(globalState.snapshotResolvedTypeSubstitutions());
+        return obj;
     }
 
     public static ILconst eval(ImDealloc imDealloc, ProgramState globalState,
@@ -411,7 +386,7 @@ public class EvaluateExpr {
             }
         }
         if (receiver == null) {
-            throw new InterpreterException(va.attrTrace(), "Null pointer dereference");
+            throw new InterpreterException(va.attrTrace(), "Null pointer dereference: " + ImPrinter.asString(va.getReceiver()));
         }
         ILconstObject receiverFinal = receiver;
         List<Integer> indexes =

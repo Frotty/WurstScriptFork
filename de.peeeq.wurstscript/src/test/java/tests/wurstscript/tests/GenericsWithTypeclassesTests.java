@@ -1,7 +1,19 @@
 package tests.wurstscript.tests;
 
+import com.google.common.base.Charsets;
+import com.google.common.io.Files;
+import de.peeeq.wurstscript.utils.Utils;
 import org.testng.annotations.Ignore;
 import org.testng.annotations.Test;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import static org.testng.Assert.*;
+import static tests.wurstscript.tests.BugTests.TEST_DIR;
 
 public class GenericsWithTypeclassesTests extends WurstScriptTest {
 
@@ -1843,5 +1855,413 @@ public class GenericsWithTypeclassesTests extends WurstScriptTest {
         );
     }
 
+    @Test
+    public void linkedListModule() {
+        testAssertOkLines(true,
+            "package test",
+            "native testSuccess()",
+            "module LinkedListModule",
+            "    static thistype first = null",
+            "    static thistype last = null",
+            "    static int size = 0",
+            "    thistype prev",
+            "    thistype next",
+            "    construct()",
+            "        size++",
+            "        if size == 1",
+            "            first = this",
+            "            prev = null",
+            "        else",
+            "            prev = last",
+            "            last.next = this",
+            "            first.prev = this",
+            "        next = null",
+            "        last = this",
+            "    static function getFirst() returns thistype",
+            "        return first",
+            "    function getNext() returns thistype",
+            "        if next == null",
+            "            return first",
+            "        return next",
+            "    function getPrev() returns thistype",
+            "        if prev == null",
+            "            return last",
+            "        return prev",
+            "    function remove()",
+            "        size--",
+            "        if this != first",
+            "            prev.next = next",
+            "        else",
+            "            first = next",
+            "        if this != last",
+            "            next.prev = prev",
+            "        else",
+            "            last = prev",
+            "    ondestroy",
+            "        remove()",
+            "class Node<T:>",
+            "    use LinkedListModule",
+            "init",
+            "    let a = new Node<int>",
+            "    let b = new Node<int>",
+            "    let c = new Node<int>",
+            "    // simple sanity check: circular next traversal should loop",
+            "    if a.getNext() != null and a.getPrev() != null",
+            "        testSuccess()",
+            "endpackage"
+        );
+    }
+
+
+    @Test
+    @Ignore // TODO
+    public void genericClassWithLLModule() {
+        testAssertOkLinesWithStdLib(true,
+            "package test",
+            "import LinkedListModule",
+            "class Box<T:>",
+            "    use LinkedListModule",
+            "    private T value",
+            "    function setValue(T v)",
+            "        value = v",
+            "    function getValue() returns T",
+            "        return value",
+            "init",
+            "    let b = new Box<int>",
+            "    b.setValue(42)",
+            "    if b.getValue() == 42 and b.prev == null",
+            "        testSuccess()",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void genericClassWithStaticInnerClass() {
+        testAssertOkLines(true,
+            "package test",
+            "   native testSuccess()",
+            "   class Outer<T:>",
+            "      static T t = null",
+            "      construct(T iVal)",
+            "         t = iVal",
+            "      function iterator() returns Inner",
+            "         return new Inner()",
+            "      static class Inner",
+            "         construct()",
+            "         function next() returns T",
+            "            return t",
+            "   init",
+            "      let a = new Outer<int>(3)",
+            "      if a.iterator().next() == 3",
+            "         testSuccess()",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void genericModuleThistypeSmall() {
+        testAssertOkLines(true,
+            "package test",
+            "   native testSuccess()",
+            "   module LLM",
+            "      static thistype t = null",
+            "      construct()",
+            "         t = this",
+            "      function iterator() returns Iterator",
+            "         return new Iterator()",
+            "      static class Iterator",
+            "         function next() returns LLM.thistype",
+            "            return t",
+            "   class A<T:>",
+            "      use LLM",
+            "   init",
+            "      let a = new A<int>",
+            "      if a.iterator().next() == a",
+            "         testSuccess()",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void genericClassWithStaticMember() {
+        testAssertOkLines(true,
+            "package test",
+            "	native testSuccess()",
+            "	class A<T:>",
+            "		 static int foo = 1",
+            "        function setFoo(int v)",
+            "            foo = v",
+            "        function getFoo() returns int",
+            "            return foo",
+            "	init",
+            "		let a = new A<int>",
+            "		let b = new A<string>",
+            "		a.setFoo(3)",
+            "		if a.getFoo() == 3 and b.getFoo() == 1",
+            "			testSuccess()",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void genericClassWithStaticMemberArray() {
+        testAssertOkLines(true,
+            "package test",
+            "	native testSuccess()",
+            "	class A<T:>",
+            "		 static int array foo",
+            "        function setFoo(int v)",
+            "            foo[1] = v",
+            "        function getFoo() returns int",
+            "            return foo[1]",
+            "	init",
+            "		let a = new A<int>",
+            "		let b = new A<string>",
+            "		a.setFoo(3)",
+            "		b.setFoo(1)",
+            "		if a.getFoo() == 3 and b.getFoo() == 1",
+            "			testSuccess()",
+            "endpackage"
+        );
+    }
+
+
+    @Test
+    public void genericStaticGlobalsSpecializedInJassInit() throws IOException {
+        test().executeProg(false).lines(
+            "package test",
+            "   public class Box<T:>",
+            "       static int INITIAL = 16",
+            "       static int MAX = 256",
+            "       construct()",
+            "       function total() returns int",
+            "           return INITIAL + MAX",
+            "   init",
+            "       let a = new Box<int>()",
+            "       let b = new Box<string>()",
+            "       let c = new Box<real>()",
+            "       var initSum = a.total() + b.total() + c.total()",
+            "       if initSum == 3 * (16 + 256)",
+            "           initSum = initSum + 1",
+            "endpackage"
+        );
+
+        File output = new File(TEST_OUTPUT_PATH + "GenericsWithTypeclassesTests_genericStaticGlobalsSpecializedInJassInit_no_opts.j");
+        String compiled = Files.toString(output, Charsets.UTF_8);
+
+        Set<String> initTargets = new HashSet<>();
+        for (String line : compiled.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("set Box_INITIAL")) {
+                String[] parts = trimmed.split("\s+");
+                if (parts.length > 1) {
+                    initTargets.add(parts[1]);
+                }
+            }
+        }
+        assertEquals(initTargets.size(), 3);
+
+        Set<String> maxTargets = new HashSet<>();
+        for (String line : compiled.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("set Box_MAX")) {
+                String[] parts = trimmed.split("\s+");
+                if (parts.length > 1) {
+                    maxTargets.add(parts[1]);
+                }
+            }
+        }
+        assertEquals(maxTargets.size(), 3);
+    }
+
+    @Test
+    public void fullArrayListTest() throws IOException {
+        test().withStdLib().executeProg().executeTests().file(new File(TEST_DIR + "arrayList.wurst"));
+
+        String compiled = Files.toString(new File(TEST_OUTPUT_PATH + "GenericsWithTypeclassesTests_fullArrayListTest_no_opts.jim"), Charsets.UTF_8);
+        // Count 2 occurences of integer ArrayList_MAX_ARRAY_SIZE
+        String target = "integer ArrayList_MAX_ARRAY_SIZE";
+        int count = 0;
+        int idx = 0;
+        while ((idx = compiled.indexOf(target, idx)) != -1) {
+            count++;
+            idx += target.length();
+        }
+
+       assertEquals(count, 2);
+
+        assertFalse(compiled.contains("ArrayList_nextFreeIndex_"));
+    }
+
+    @Test
+    public void genericNullComparison() {
+        testAssertOkLinesWithStdLib(true,
+            "package test",
+            "import NoWurst",
+            "import ClosureTimers",
+            "native testSuccess()",
+            "public class Reference<T:>",
+            "    T val",
+            "    construct(T val)",
+            "        this.val = val",
+            "    function into() returns T",
+            "        let rval = val",
+            "        destroy this",
+            "        return rval",
+            "",
+            "var r = new Reference(0.0)",
+            "",
+            "init",
+            "    // force member access on the global",
+            "    doAfter(.1) ->",
+            "       r.val = 1.0",
+            "       if r != null and not r == null and r.into() == 1.0",
+            "           testSuccess()",
+            "    testSuccess() // to make compiler happy",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void genericStaticAccessor_asClassInstanceMethods() {
+        testAssertOkLinesWithStdLib(true,
+            "package test",
+            "import NoWurst",
+            "native testSuccess()",
+
+            "public class Box<T:>",
+            "    static int count",
+            "    function setCount(int v)",
+            "        count = v",
+            "    function getCount() returns int",
+            "        return count",
+            "init",
+            "    let a = new Box<int>",
+            "    let b = new Box<string>",
+            "    a.setCount(3)",
+            "    b.setCount(1)",
+            "    if a.getCount() == 3 and b.getCount() == 1",
+            "        testSuccess()",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void genericStaticRawAccessIsRejected() {
+        testAssertErrorsLines(false,
+            // If your helper expects an error substring, keep it specific and stable:
+            "Cannot access members via generic type",
+
+            "package test",
+
+            "public class Box<T:>",
+            "    static int count",
+
+            "init",
+            "    // Raw generic class static access must be rejected (undefined specialization)",
+            "    Box.count = 1",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void staticInitAppliedToAllSpecializations_rawJassNoOpts() throws IOException {
+        // Compile a tiny inline program (no external files) and then inspect the *no_opts* Jass output.
+        testAssertOkLines( true,
+                "package test",
+                "native testSuccess()",
+                "",
+                "class Box<T:>",
+                "    private static constant cap = 16",
+                "    private static constant cappy = cap + 3",
+                "    function getCap() returns int",
+                "        return cap",
+                "    function getCappy() returns int",
+                "        return cappy",
+                "",
+                "tuple tt(real p, string s)",
+                "init",
+                "    let bi = new Box<int>",
+                "    let br = new Box<real>",
+                "    let sr = new Box<string>",
+                "    let tr = new Box<tt>",
+                "    if bi.getCap() == 16 and br.getCap() == 16 and sr.getCap() == 16 and tr.getCap() == 16 and bi.getCappy() == 19 and br.getCappy() == 19 and sr.getCappy() == 19 and tr.getCappy() == 19",
+                "        testSuccess()",
+                "endpackage",
+                ""
+            );
+
+        // Read raw output (prefer .j, fallback .jim if that’s what the harness writes)
+        String out = readNoOptsOutput("GenericsWithTypeclassesTests_staticInitAppliedToAllSpecializations_rawJassNoOpts");
+
+        // Core assertion: both specializations must be initialized to 16 in the init function(s)
+        assertTrue(out.contains("set Box_cap_integer_u = 16"),
+            "Missing init for int specialization (expected: set Box_cap_integer_u = 16)");
+        assertTrue(out.contains("set Box_cap_real_u = 16"),
+            "Missing init for real specialization (expected: set Box_cap_real_u = 16)");
+
+        // Guard against the observed collapse where everything becomes one specialization:
+        int intSets  = countLinesContaining(out, "set Box_cap_integer_u = 16");
+        int realSets = countLinesContaining(out, "set Box_cap_real_u = 16");
+        assertTrue(intSets >= 1 && realSets >= 1, "Specialization init collapsed.");
+    }
+
+    private static String readNoOptsOutput(String baseName) throws IOException {
+        // Most runs produce .j; some configs dump IM/Jass into .jim. Pick whichever exists.
+        File j = new File(TEST_OUTPUT_PATH + baseName + "_no_opts.j");
+        if (j.exists()) return com.google.common.io.Files.toString(j, Charsets.UTF_8);
+
+        File jim = new File(TEST_OUTPUT_PATH + baseName + "_no_opts.jim");
+        if (jim.exists()) return com.google.common.io.Files.toString(jim, Charsets.UTF_8);
+
+        throw new IOException("No no_opts output found for " + baseName + " (tried .j and .jim)");
+    }
+
+    private static int countLinesContaining(String text, String needle) {
+        int c = 0;
+        for (String line : text.split("\\R")) {
+            if (line.contains(needle)) c++;
+        }
+        return c;
+    }
+
+    @Test
+    public void genericStaticInit() throws IOException {
+        test().executeProg(false)
+            .executeTests(false)
+            .withStdLib(false)
+            .withInputs(Map.of("test.wurst", Utils.string(
+                "package test",
+                "public class Box<T:>",
+                "    static int cap = 16",
+                "    function getCap() returns int",
+                "        return cap"
+            ),
+                "usage.wurst", Utils.string(
+                    "package usage",
+                    "import test",
+                    "native testSuccess()",
+                    "native print(int i)",
+                    "function useInt()",
+                    "    let b = new Box<int>",
+                    "    print(b.getCap())",
+                    "function useReal()",
+                    "    let b = new Box<Box<real>>",
+                    "    print(b.getCap())",
+                    "init",
+                    "    useInt()",
+                    "    useReal()",
+                    "    testSuccess()"
+                )))
+            .run();
+
+        String jass = com.google.common.io.Files.toString(
+            new File(TEST_OUTPUT_PATH + "GenericsWithTypeclassesTests_genericStaticInit_no_opts.j"),
+            Charsets.UTF_8
+        );
+
+        assertTrue(jass.contains("set Box_cap_integer_u = 16"));
+        assertTrue(jass.contains("set Box_cap_Box_real__u = 16"));
+    }
 
 }

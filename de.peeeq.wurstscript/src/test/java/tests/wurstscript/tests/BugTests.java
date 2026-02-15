@@ -13,7 +13,7 @@ import java.io.IOException;
 import static de.peeeq.wurstscript.utils.Utils.string;
 
 public class BugTests extends WurstScriptTest {
-    private static final String TEST_DIR = "./testscripts/concept/";
+    public static final String TEST_DIR = "./testscripts/concept/";
 
     @Test
     public void localsInOndestroy() throws IOException {
@@ -1376,6 +1376,35 @@ public class BugTests extends WurstScriptTest {
     @Test
     public void middlewareOverload() throws IOException {
         testAssertOkFile(new File(TEST_DIR + "MiddlewareOverload.wurst"), true);
+    }
+
+    @Test
+    public void middlewareOverloadMin() throws IOException {
+        testAssertOkFile(new File(TEST_DIR + "MiddlewareOverload_min.wurst"), false);
+    }
+
+    @Test
+    public void cannotVallDynamicBug() {
+        testAssertOkLines(true,
+            "package Test",
+            "native testSuccess()",
+            "public abstract class VoidFunction<T>",
+            "    abstract function call(T t)",
+            "int x = 0",
+            "function foo(int i)",
+            "    x++",
+            "    VoidFunction<int> f = j -> bar(j - 1)",
+            "    f.call(i)",
+            "function bar(int i)",
+            "    x++",
+            "    VoidFunction<int> f = j -> foo(j - 1)",
+            "    if i > 0",
+            "        f.call(i)",
+            "init",
+            "    bar(10)",
+            "    if x == 11",
+            "        testSuccess()"
+        );
     }
 
     @Test
