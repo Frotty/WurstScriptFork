@@ -43,9 +43,10 @@ public abstract class WurstGui {
     }
 
     public final List<CompileError> getWarningList() {
-        return errors.stream()
-                .filter(e -> e.getErrorType() == ErrorType.WARNING)
-                .collect(Collectors.toList());
+        return Collections.emptyList();
+//        return errors.stream()
+//                .filter(e -> e.getErrorType() == ErrorType.WARNING)
+//                .collect(Collectors.toList());
     }
 
     public final List<CompileError> getErrorsAndWarnings() {
