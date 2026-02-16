@@ -11,6 +11,10 @@ import java.util.stream.Collectors;
 
 public abstract class WurstGui {
 
+    @Deprecated
+    public static boolean silenceWarnings = false;
+    private boolean warningsEnabled = !silenceWarnings;
+
     private final List<CompileError> errors = Lists.newArrayList();
 
 
@@ -38,15 +42,26 @@ public abstract class WurstGui {
 
     public final List<CompileError> getErrorList() {
         return errors.stream()
-                .filter(e -> e.getErrorType() == ErrorType.ERROR)
-                .collect(Collectors.toList());
+            .filter(e -> e.getErrorType() == ErrorType.ERROR)
+            .collect(Collectors.toList());
     }
 
     public final List<CompileError> getWarningList() {
-        return Collections.emptyList();
-//        return errors.stream()
-//                .filter(e -> e.getErrorType() == ErrorType.WARNING)
-//                .collect(Collectors.toList());
+        if (!warningsEnabled) {
+            return Collections.emptyList();
+        } else {
+            return errors.stream()
+                .filter(e -> e.getErrorType() == ErrorType.WARNING)
+                .collect(Collectors.toList());
+        }
+    }
+
+    public final void setWarningsEnabled(boolean warningsEnabled) {
+        this.warningsEnabled = warningsEnabled;
+    }
+
+    public final boolean isWarningsEnabled() {
+        return warningsEnabled;
     }
 
     public final List<CompileError> getErrorsAndWarnings() {

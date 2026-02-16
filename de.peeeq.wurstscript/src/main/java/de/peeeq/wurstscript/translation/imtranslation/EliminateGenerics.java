@@ -284,7 +284,9 @@ public class EliminateGenerics {
             List<ImSet> inits = prog.getGlobalInits().remove(imVar);
             if (inits != null) {
                 for (ImSet init : inits) {
-                    init.replaceBy(ImHelper.nullExpr());
+                    if (init.getParent() != null) {
+                        init.replaceBy(ImHelper.nullExpr());
+                    }
                 }
             }
         }
@@ -832,17 +834,28 @@ public class EliminateGenerics {
             List<ImSet> originalInits = prog.getGlobalInits().get(originalGlobal);
             if (originalInits != null && !originalInits.isEmpty()) {
 
-                ImSet firstOrig = originalInits.getFirst();
-                if (!(firstOrig.getParent() instanceof ImStmts parentStmts)) {
-                    throw new CompileError(originalGlobal,
-                        "Initializer for global " + originalGlobal.getName() + " is not inside ImStmts.");
-                }
-                // ensure all original init sets share the same parent statement list
+                ImStmts parentStmts = null;
+                boolean hasDetachedInits = false;
                 for (ImSet s : originalInits) {
-                    if (s.getParent() != parentStmts) {
+                    if (s.getParent() == null) {
+                        hasDetachedInits = true;
+                        continue;
+                    }
+                    if (!(s.getParent() instanceof ImStmts)) {
+                        throw new CompileError(originalGlobal,
+                            "Initializer for global " + originalGlobal.getName() + " is not inside ImStmts.");
+                    }
+                    ImStmts currParent = (ImStmts) s.getParent();
+                    if (parentStmts == null) {
+                        parentStmts = currParent;
+                    } else if (parentStmts != currParent) {
                         throw new CompileError(originalGlobal,
                             "Initializer statements for global " + originalGlobal.getName() + " are not in the same ImStmts.");
                     }
+                }
+                if (hasDetachedInits && parentStmts != null) {
+                    throw new CompileError(originalGlobal,
+                        "Initializer statements for global " + originalGlobal.getName() + " are inconsistently attached.");
                 }
 
                 // Helper: rebuild LHS as ImLExpr for specialized global
@@ -879,9 +892,13 @@ public class EliminateGenerics {
                     ImSet specSet = JassIm.ImSet(originalGlobal.attrTrace(), newLeft, rhs);
 
                     // schedule insertion right after origSet in its parent ImStmts
-                    IdentityHashMap<ImStmt, List<ImStmt>> byStmt =
-                        insertsByParent.computeIfAbsent(parentStmts, k -> new IdentityHashMap<>());
-                    byStmt.computeIfAbsent(origSet, k -> new ArrayList<>(1)).add(specSet);
+                    // Detached global init sets (e.g. default-value inits) are tracked in globalInits
+                    // but intentionally not materialized in an init function body.
+                    if (parentStmts != null) {
+                        IdentityHashMap<ImStmt, List<ImStmt>> byStmt =
+                            insertsByParent.computeIfAbsent(parentStmts, k -> new IdentityHashMap<>());
+                        byStmt.computeIfAbsent(origSet, k -> new ArrayList<>(1)).add(specSet);
+                    }
 
                     // keep prog.getGlobalInits consistent, but do NOT reuse the tree-attached node elsewhere
                     specializedInitsForMap.add((ImSet) specSet.copy());

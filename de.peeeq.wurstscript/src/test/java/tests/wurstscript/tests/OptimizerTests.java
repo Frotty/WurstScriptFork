@@ -731,6 +731,91 @@ public class OptimizerTests extends WurstScriptTest {
         assertNotSame(compiledAndOptimized.indexOf("Test_ghs = 0"), compiledAndOptimized.lastIndexOf("Test_ghs = 0"));
     }
 
+    @Test
+    public void controlFlowTailMergeNoSideEffect() throws IOException {
+        test().lines(
+            "package Test",
+            "native marker(int x)",
+            "@extern native GetRandomInt(int a, int b) returns int",
+            "int ghs = 0",
+            "function nonInlinable(int x) returns bool",
+            "	if x > 6",
+            "		return true",
+            "	else",
+            "		return false",
+            "init",
+            "	var x = GetRandomInt(0, 10)",
+            "	if nonInlinable(x)",
+            "		ghs = 10",
+            "		marker(ghs)",
+            "	else",
+            "		ghs = 20",
+            "		marker(ghs)",
+            "endpackage"
+        );
+        String compiledAndOptimized = Files.toString(new File("test-output/OptimizerTests_controlFlowTailMergeNoSideEffect_opt.j"), Charsets.UTF_8);
+        int first = compiledAndOptimized.indexOf("call marker(Test_ghs)");
+        assertTrue(first >= 0, "tail call should still exist");
+        assertEquals(first, compiledAndOptimized.lastIndexOf("call marker(Test_ghs)"));
+    }
+
+    @Test
+    public void controlFlowTailMergePreservesSideEffects() throws IOException {
+        test().executeProg().lines(
+            "package Test",
+            "native testSuccess()",
+            "native testFail(string msg)",
+            "@extern native I2S(int i) returns string",
+            "@extern native GetRandomInt(int a, int b) returns int",
+            "int a = 0",
+            "int log = 0",
+            "function nonInlinable(int x) returns bool",
+            "	if x > 0",
+            "		return true",
+            "	else",
+            "		return false",
+            "function rec(int v)",
+            "	log = log * 100 + v",
+            "init",
+            "	var x = GetRandomInt(0, 1)",
+            "	if nonInlinable(x)",
+            "		a = 10",
+            "		rec(a)",
+            "	else",
+            "		a = 20",
+            "		rec(a)",
+            "	if log == 10 or log == 20",
+            "		testSuccess()",
+            "	else",
+            "		testFail(I2S(log))",
+            "endpackage"
+        );
+    }
+
+    @Test
+    public void controlFlowTailMergeDifferentTailsNotMerged() throws IOException {
+        test().lines(
+            "package Test",
+            "native marker(int x)",
+            "@extern native GetRandomInt(int a, int b) returns int",
+            "function nonInlinable(int x) returns bool",
+            "	if x > 0",
+            "		return true",
+            "	else",
+            "		return false",
+            "init",
+            "	var x = GetRandomInt(0, 1)",
+            "	if nonInlinable(x)",
+            "		marker(10)",
+            "	else",
+            "		marker(20)",
+            "endpackage"
+        );
+        String compiledAndOptimized = Files.toString(new File("test-output/OptimizerTests_controlFlowTailMergeDifferentTailsNotMerged_opt.j"), Charsets.UTF_8);
+        assertTrue(compiledAndOptimized.contains("call marker(10)"), "then-tail call should remain");
+        assertTrue(compiledAndOptimized.contains("call marker(20)"), "else-tail call should remain");
+    }
+
 
     @Test
     public void optimizeSet() {
@@ -1498,4 +1583,79 @@ public class OptimizerTests extends WurstScriptTest {
             "endpackage");
     }
 
+    @Test
+    public void ccp_pathAware_repeatedCondition_propagatesBranchValue() throws IOException {
+        test().lines(
+            "package test",
+            "    native coin() returns boolean",
+            "    native useInt(int i)",
+            "    function foo(boolean b)",
+            "        int y = 0",
+            "        if b",
+            "            y = 1",
+            "        if b",
+            "            useInt(y)",
+            "    init",
+            "        foo(coin())",
+            "endpackage"
+        );
+
+        String out = Files.toString(
+            new File("test-output/OptimizerTests_ccp_pathAware_repeatedCondition_propagatesBranchValue_inlopt.j"),
+            Charsets.UTF_8
+        );
+
+        assertTrue(out.contains("call useInt(1)"),
+            "Expected path-aware CCP to replace y with literal 1 in the b-true branch");
+        assertFalse(out.contains("call useInt(y)"),
+            "Expected local y read to be removed in that branch");
+    }
+
+    @Test
+    public void parsedJass_localSeedValue_shouldFlowIntoFirstAssignment_rhs() throws IOException {
+        CompilationResult compilation = test().compilationUnits(compilationUnit("localSeedFlow.j",
+            "native idMap takes integer id returns integer",
+            "native useInt takes integer i returns nothing",
+            "",
+            "function foo takes nothing returns nothing",
+            "    local integer i = 1337",
+            "    set i = idMap(i)",
+            "    call useInt(i)",
+            "endfunction",
+            "",
+            "function main takes nothing returns nothing",
+            "    call foo()",
+            "endfunction",
+            "",
+            "function config takes nothing returns nothing",
+            "endfunction"));
+
+        assertEquals(compilation.getGui().getErrorCount(), 0,
+            "jass snippet should compile: " + compilation.getGui().getErrorList());
+
+        String inl = Files.toString(
+            new File("test-output/OptimizerTests_parsedJass_localSeedValue_shouldFlowIntoFirstAssignment_rhs_inl.j"),
+            Charsets.UTF_8
+        ).replaceAll("\\s+", "");
+        String inlopt = Files.toString(
+            new File("test-output/OptimizerTests_parsedJass_localSeedValue_shouldFlowIntoFirstAssignment_rhs_inlopt.j"),
+            Charsets.UTF_8
+        ).replaceAll("\\s+", "");
+
+        // Baseline sanity: before local optimizations, the temp self-read form is present.
+        assertTrue(inl.contains("seti=idMap(i)"),
+            "Expected baseline inlined output to keep the self-read assignment pattern");
+
+        // Desired optimization: propagate seed into call and remove the now-redundant assignment.
+        assertTrue(inlopt.contains("calluseInt(idMap(1337))") || inlopt.contains("calluseInt(idMap($539))"),
+            "Expected local seed literal to be propagated through to call argument");
+        assertFalse(inlopt.contains("seti=idMap(i)"),
+            "Expected optimized output to remove the self-read RHS pattern");
+        assertFalse(inlopt.contains("seti=idMap(1337)") || inlopt.contains("seti=idMap($539)"),
+            "Expected set-then-call pattern to be merged into a direct call");
+    }
 }
+
+
+
+

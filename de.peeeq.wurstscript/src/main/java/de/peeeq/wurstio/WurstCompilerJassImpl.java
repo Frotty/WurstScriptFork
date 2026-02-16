@@ -19,6 +19,7 @@ import de.peeeq.wurstscript.ast.Element;
 import de.peeeq.wurstscript.attributes.CompilationUnitInfo;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.ErrorHandler;
+import de.peeeq.wurstscript.attributes.ErrorHandling;
 import de.peeeq.wurstscript.gui.WurstGui;
 import de.peeeq.wurstscript.jassAst.JassProg;
 import de.peeeq.wurstscript.jassIm.*;
@@ -80,6 +81,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
         this.projectFolder = projectFolder;
         this.gui = gui;
         this.runArgs = runArgs;
+        this.gui.setWarningsEnabled(runArgs.isWarningsEnabled());
+        ErrorHandling.setWarningsEnabled(runArgs.isWarningsEnabled());
         this.errorHandler = new ErrorHandler(gui);
         this.parser = new WurstParser(errorHandler, gui);
         this.checker = new WurstChecker(gui, errorHandler);
@@ -902,6 +905,8 @@ public class WurstCompilerJassImpl implements WurstCompiler {
 
     public void setRunArgs(RunArgs runArgs) {
         this.runArgs = runArgs;
+        this.gui.setWarningsEnabled(runArgs.isWarningsEnabled());
+        ErrorHandling.setWarningsEnabled(runArgs.isWarningsEnabled());
     }
 
     public void setMapFile(Optional<File> mapFile) {

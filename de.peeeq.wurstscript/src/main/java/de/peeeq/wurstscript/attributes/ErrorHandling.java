@@ -11,13 +11,24 @@ import java.util.List;
 import java.util.ListIterator;
 
 public class ErrorHandling {
+    private static volatile boolean warningsEnabled = true;
 
     public static void addError(Element e, String msg) {
         addErrorOrWarning(e, msg, ErrorType.ERROR);
     }
 
     public static void addWarning(Element e, String msg) {
-//        addErrorOrWarning(e, msg, ErrorType.WARNING);
+        if (warningsEnabled) {
+            addErrorOrWarning(e, msg, ErrorType.WARNING);
+        }
+    }
+
+    public static void setWarningsEnabled(boolean enabled) {
+        warningsEnabled = enabled;
+    }
+
+    public static boolean isWarningsEnabled() {
+        return warningsEnabled;
     }
 
     private static void addErrorOrWarning(Element e, String msg,

@@ -287,28 +287,28 @@ public class JurstTests extends WurstScriptTest {
     @Test
     public void testKeepTRVE() throws IOException {
         String jassCode = Utils.string(
-            "type agent\t\t\t    extends     handle \n" +
+                "type agent\t\t\t    extends     handle \n" +
 
-            "type event              extends     agent \n" +
-            "type trigger            extends     agent\n" +
-            "type eventid            extends     handle\n" +
-            "type limitop            extends     eventid\n" +
-            "globals",
-            "real myVar = 0.",
-            "endglobals",
-            "native TriggerRegisterVariableEvent takes trigger whichTrigger, string varName, limitop opcode, real limitval returns event",
-            "function foo takes nothing returns nothing",
-            "	 call TriggerRegisterVariableEvent(null, \"myVar\", null, 0.)",
-            "endfunction");
-
+                        "type event              extends     agent \n" +
+                        "type trigger            extends     agent\n" +
+                        "type eventid            extends     handle\n" +
+                        "type limitop            extends     eventid\n" +
+                        "globals",
+                "real myVar = 0.",
+                "endglobals",
+                "native TriggerRegisterVariableEvent takes trigger whichTrigger, string varName, limitop opcode, real limitval returns event",
+                "function foo takes nothing returns nothing",
+                "	 call TriggerRegisterVariableEvent(null, \"myVar\", null, 0.)",
+                "endfunction");
 
         String jurstCode = Utils.string(
-            "package test",
-            "endpackage");
+                "package test",
+                "endpackage");
 
         testJurstWithJass(false, false, jassCode, jurstCode);
 
-        String output = com.google.common.io.Files.toString(new File("./test-output/JurstJassTest_inlopt.j"), Charsets.UTF_8);
+        String output = com.google.common.io.Files.toString(new File("./test-output/JurstJassTest_inlopt.j"),
+                Charsets.UTF_8);
         assertTrue(output.contains("real myVar"));
     }
 
@@ -378,7 +378,20 @@ public class JurstTests extends WurstScriptTest {
             "  endinit",
             "endpackage");
 
-        testJurstWithJass(false, false, jassCode, jurstCode);
+        Map<String, String> inputs = ImmutableMap.of(
+            "example.j", jassCode,
+            "test.jurst", jurstCode
+        );
+        new TestConfig("JurstJassTest")
+            .withStdLib(false)
+            .disablePjass()
+            .executeTests(false)
+            .executeProgOnlyAfterTransforms(false)
+            .executeProg(false)
+            .withInputFiles(Collections.emptyList())
+            .withInputs(inputs)
+            .run()
+            .getModel();
 
         String output = com.google.common.io.Files.toString(new File("./test-output/JurstJassTest_inlopt.j"), Charsets.UTF_8);
         assertTrue(output.contains("real myVar"));

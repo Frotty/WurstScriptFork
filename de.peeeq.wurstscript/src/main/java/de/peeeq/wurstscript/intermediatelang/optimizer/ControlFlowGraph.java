@@ -17,7 +17,9 @@ public class ControlFlowGraph {
         private final ObjectArrayList<Node> predecessors = new ObjectArrayList<>(2);
         private final ObjectArrayList<Node> successors   = new ObjectArrayList<>(2);
 
-        Node(@Nullable ImStmt stmt) { this.stmt = stmt; }
+        Node(@Nullable ImStmt stmt) {
+            this.stmt = stmt;
+        }
 
         public @Nullable ImStmt getStmt() { return stmt; }
 
