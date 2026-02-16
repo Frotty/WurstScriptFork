@@ -28,7 +28,6 @@ public class ImOptimizer {
         localPasses.add(new LocalMerger());
         localPasses.add(new BranchMerger());
         localPasses.add(new ConstantAndCopyPropagation());
-        localPasses.add(new UnreachableCodeEliminator());
         localPasses.add(new UselessFunctionCallsRemover());
         localPasses.add(new GlobalsInliner());
         localPasses.add(new SimpleRewrites());
