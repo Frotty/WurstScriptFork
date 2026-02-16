@@ -203,9 +203,170 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
     }
 
     void optimizeFunc(ImFunction func) {
+        optimizeConditionalPathPropagation(func.getBody());
         ControlFlowGraph cfg = new ControlFlowGraph(func.getBody());
         Map<Node, Knowledge> knowledge = calculateKnowledge(cfg);
         rewriteCode(cfg, knowledge);
+    }
+
+    /**
+     * Conservative path-aware propagation for adjacent if-statements sharing the same local boolean condition:
+     *   if b then x = C endif
+     *   if b then use(x) endif
+     * can be rewritten to:
+     *   if b then use(C) endif
+     *
+     * This only performs side-effect-free rewrites:
+     * - only local vars
+     * - only constant/copy RHS
+     * - no writes to the target var in the rewritten branch
+     * - no writes to condition/target between both ifs (adjacent statements only)
+     */
+    private void optimizeConditionalPathPropagation(ImStmts stmts) {
+        for (int i = 0; i < stmts.size(); i++) {
+            ImStmt s = stmts.get(i);
+            if (s instanceof ImIf) {
+                ImIf imIf = (ImIf) s;
+                optimizeConditionalPathPropagation(imIf.getThenBlock());
+                optimizeConditionalPathPropagation(imIf.getElseBlock());
+            } else if (s instanceof ImLoop) {
+                optimizeConditionalPathPropagation(((ImLoop) s).getBody());
+            } else if (s instanceof ImVarargLoop) {
+                optimizeConditionalPathPropagation(((ImVarargLoop) s).getBody());
+            }
+        }
+
+        for (int i = 0; i + 1 < stmts.size(); i++) {
+            ImStmt first = stmts.get(i);
+            ImStmt second = stmts.get(i + 1);
+            if (!(first instanceof ImIf) || !(second instanceof ImIf)) {
+                continue;
+            }
+            applyAdjacentIfPathPropagation((ImIf) first, (ImIf) second);
+        }
+    }
+
+    private void applyAdjacentIfPathPropagation(ImIf first, ImIf second) {
+        ImVar condVar = getLocalBoolConditionVar(first);
+        if (condVar == null || condVar != getLocalBoolConditionVar(second)) {
+            return;
+        }
+
+        for (Tuple2<ImVar, Value> tv : collectConditionalAssignments(first.getThenBlock())) {
+            ImVar target = tv._1;
+            Value value = tv._2;
+            if (target == condVar) {
+                continue;
+            }
+            if (!writesVar(second.getThenBlock(), target)) {
+                totalPropagated += replaceReadsOfVar(second.getThenBlock(), target, value);
+            }
+        }
+
+        for (Tuple2<ImVar, Value> ev : collectConditionalAssignments(first.getElseBlock())) {
+            ImVar target = ev._1;
+            Value value = ev._2;
+            if (target == condVar) {
+                continue;
+            }
+            if (!writesVar(second.getElseBlock(), target)) {
+                totalPropagated += replaceReadsOfVar(second.getElseBlock(), target, value);
+            }
+        }
+    }
+
+    private @Nullable ImVar getLocalBoolConditionVar(ImIf imIf) {
+        ImExpr cond = imIf.getCondition();
+        if (!(cond instanceof ImVarAccess)) {
+            return null;
+        }
+        ImVar v = ((ImVarAccess) cond).getVar();
+        if (v.isGlobal()) {
+            return null;
+        }
+        return v.getType() instanceof ImSimpleType && ((ImSimpleType) v.getType()).getTypename().equals("boolean") ? v : null;
+    }
+
+    private List<Tuple2<ImVar, Value>> collectConditionalAssignments(ImStmts block) {
+        List<Tuple2<ImVar, Value>> result = new ArrayList<>();
+        for (ImStmt s : block) {
+            if (!(s instanceof ImSet)) {
+                continue;
+            }
+            ImSet set = (ImSet) s;
+            if (!(set.getLeft() instanceof ImVarAccess)) {
+                continue;
+            }
+            ImVar target = ((ImVarAccess) set.getLeft()).getVar();
+            if (target.isGlobal()) {
+                continue;
+            }
+            Value v = Value.tryValue(set.getRight());
+            if (v != null) {
+                result.add(new Tuple2<>(target, v));
+            }
+        }
+        return result;
+    }
+
+    private boolean writesVar(Element elem, ImVar var) {
+        if (elem instanceof ImSet) {
+            ImSet set = (ImSet) elem;
+            if (set.getLeft() instanceof ImVarAccess) {
+                if (((ImVarAccess) set.getLeft()).getVar() == var) {
+                    return true;
+                }
+            } else if (set.getLeft() instanceof ImTupleSelection) {
+                ImVar tupleVar = TypesHelper.getSimpleAndPureTupleVar((ImTupleSelection) set.getLeft());
+                if (tupleVar == var) {
+                    return true;
+                }
+            }
+        }
+        for (int i = 0; i < elem.size(); i++) {
+            if (writesVar(elem.get(i), var)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int replaceReadsOfVar(ImStmts block, ImVar target, Value value) {
+        final int[] changed = {0};
+        block.accept(new ImStmts.DefaultVisitor() {
+            @Override
+            public void visit(ImSet set) {
+                // Never rewrite LHS.
+                if (set.getLeft() instanceof ImMemberAccess) {
+                    ((ImMemberAccess) set.getLeft()).accept(this);
+                } else if (set.getLeft() instanceof ImVarArrayAccess) {
+                    for (ImExpr idx : ((ImVarArrayAccess) set.getLeft()).getIndexes()) {
+                        idx.accept(this);
+                    }
+                }
+                set.getRight().accept(this);
+            }
+
+            @Override
+            public void visit(ImVarAccess va) {
+                if (va.isUsedAsLValue() || va.getVar() != target) {
+                    return;
+                }
+                if (value.constantValue != null) {
+                    va.replaceBy(value.constantValue.copy());
+                    changed[0]++;
+                } else if (value.copyVar != null) {
+                    if (value.copyVar != target) {
+                        va.setVar(value.copyVar);
+                        changed[0]++;
+                    }
+                } else if (value.constantTuple != null && value.constantTuple.getExprs().size() == 1) {
+                    va.replaceBy(value.constantTuple.copy());
+                    changed[0]++;
+                }
+            }
+        });
+        return changed[0];
     }
 
     private void rewriteCode(ControlFlowGraph cfg, Map<Node, Knowledge> knowledge) {

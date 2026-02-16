@@ -1583,4 +1583,32 @@ public class OptimizerTests extends WurstScriptTest {
             "endpackage");
     }
 
+    @Test
+    public void ccp_pathAware_repeatedCondition_propagatesBranchValue() throws IOException {
+        test().lines(
+            "package test",
+            "    native coin() returns boolean",
+            "    native useInt(int i)",
+            "    function foo(boolean b)",
+            "        int y = 0",
+            "        if b",
+            "            y = 1",
+            "        if b",
+            "            useInt(y)",
+            "    init",
+            "        foo(coin())",
+            "endpackage"
+        );
+
+        String out = Files.toString(
+            new File("test-output/OptimizerTests_ccp_pathAware_repeatedCondition_propagatesBranchValue_inlopt.j"),
+            Charsets.UTF_8
+        );
+
+        assertTrue(out.contains("call useInt(1)"),
+            "Expected path-aware CCP to replace y with literal 1 in the b-true branch");
+        assertFalse(out.contains("call useInt(y)"),
+            "Expected local y read to be removed in that branch");
+    }
+
 }
