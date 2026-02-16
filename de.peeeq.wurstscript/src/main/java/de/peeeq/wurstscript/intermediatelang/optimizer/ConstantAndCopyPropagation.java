@@ -635,8 +635,13 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
             }
 
             // --- PROPAGATE CHANGES ---
-            if (!kn.varKnowledgeOut.equals(newOut)) {
+            boolean inChanged = !kn.varKnowledge.equals(newKnowledge);
+            boolean outChanged = !kn.varKnowledgeOut.equals(newOut);
+
+            if (inChanged) {
                 kn.varKnowledge = newKnowledge;
+            }
+            if (outChanged) {
                 kn.varKnowledgeOut = newOut;
 
                 for (Node succ : n.getSuccessors()) {
@@ -908,3 +913,4 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
         return null;
     }
 }
+

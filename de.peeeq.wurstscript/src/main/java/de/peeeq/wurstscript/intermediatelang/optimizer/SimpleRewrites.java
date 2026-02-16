@@ -164,6 +164,9 @@ public class SimpleRewrites implements OptimizerPass {
                 if (elem.get(i) instanceof ImSet && lookback instanceof ImSet) {
                     optimizeConsecutiveSet((ImSet) lookback, (ImSet) elem.get(i));
                 }
+                if (elem instanceof ImStmts && elem.get(i) instanceof ImFunctionCall && lookback instanceof ImSet) {
+                    optimizeSetThenSingleArgCall((ImSet) lookback, (ImFunctionCall) elem.get(i));
+                }
             }
         }
         if (elem instanceof ImOperatorCall) {
@@ -873,6 +876,35 @@ public class SimpleRewrites implements OptimizerPass {
         }
     }
 
+    private void optimizeSetThenSingleArgCall(ImSet setStmt, ImFunctionCall callStmt) {
+        if (!(setStmt.getLeft() instanceof ImVarAccess)) {
+            return;
+        }
+        ImVar targetVar = ((ImVarAccess) setStmt.getLeft()).getVar();
+        if (targetVar.isGlobal()) {
+            return;
+        }
+        if (callStmt.getArguments().size() != 1) {
+            return;
+        }
+        ImExpr arg = callStmt.getArguments().get(0);
+        if (!(arg instanceof ImVarAccess) || ((ImVarAccess) arg).getVar() != targetVar) {
+            return;
+        }
+
+        // Only fold in the value when this local is read exactly once (the call argument)
+        // and written exactly once (this set). This keeps the rewrite very conservative.
+        if (targetVar.attrReads().size() != 1 || targetVar.attrWrites().size() != 1) {
+            return;
+        }
+
+        ImExpr replacement = setStmt.getRight().copy();
+        replacement.setParent(null);
+        arg.replaceBy(replacement);
+        setStmt.replaceBy(ImHelper.nullExpr());
+        totalRewrites++;
+    }
+
     /**
      * Optimizes
      * <p>
@@ -923,3 +955,4 @@ public class SimpleRewrites implements OptimizerPass {
     }
 
 }
+

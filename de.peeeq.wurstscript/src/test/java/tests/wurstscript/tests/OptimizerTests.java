@@ -1611,4 +1611,51 @@ public class OptimizerTests extends WurstScriptTest {
             "Expected local y read to be removed in that branch");
     }
 
+    @Test
+    public void parsedJass_localSeedValue_shouldFlowIntoFirstAssignment_rhs() throws IOException {
+        CompilationResult compilation = test().compilationUnits(compilationUnit("localSeedFlow.j",
+            "native idMap takes integer id returns integer",
+            "native useInt takes integer i returns nothing",
+            "",
+            "function foo takes nothing returns nothing",
+            "    local integer i = 1337",
+            "    set i = idMap(i)",
+            "    call useInt(i)",
+            "endfunction",
+            "",
+            "function main takes nothing returns nothing",
+            "    call foo()",
+            "endfunction",
+            "",
+            "function config takes nothing returns nothing",
+            "endfunction"));
+
+        assertEquals(compilation.getGui().getErrorCount(), 0,
+            "jass snippet should compile: " + compilation.getGui().getErrorList());
+
+        String inl = Files.toString(
+            new File("test-output/OptimizerTests_parsedJass_localSeedValue_shouldFlowIntoFirstAssignment_rhs_inl.j"),
+            Charsets.UTF_8
+        ).replaceAll("\\s+", "");
+        String inlopt = Files.toString(
+            new File("test-output/OptimizerTests_parsedJass_localSeedValue_shouldFlowIntoFirstAssignment_rhs_inlopt.j"),
+            Charsets.UTF_8
+        ).replaceAll("\\s+", "");
+
+        // Baseline sanity: before local optimizations, the temp self-read form is present.
+        assertTrue(inl.contains("seti=idMap(i)"),
+            "Expected baseline inlined output to keep the self-read assignment pattern");
+
+        // Desired optimization: propagate seed into call and remove the now-redundant assignment.
+        assertTrue(inlopt.contains("calluseInt(idMap(1337))") || inlopt.contains("calluseInt(idMap($539))"),
+            "Expected local seed literal to be propagated through to call argument");
+        assertFalse(inlopt.contains("seti=idMap(i)"),
+            "Expected optimized output to remove the self-read RHS pattern");
+        assertFalse(inlopt.contains("seti=idMap(1337)") || inlopt.contains("seti=idMap($539)"),
+            "Expected set-then-call pattern to be merged into a direct call");
+    }
 }
+
+
+
+
