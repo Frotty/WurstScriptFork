@@ -892,9 +892,9 @@ public class SimpleRewrites implements OptimizerPass {
             return;
         }
 
-        // Only fold in the value when this local is read exactly once (the call argument)
-        // and written exactly once (this set). This keeps the rewrite very conservative.
-        if (targetVar.attrReads().size() != 1 || targetVar.attrWrites().size() != 1) {
+        // Only fold when this local is read exactly once (the call argument).
+        // We do not require exactly one write: initial seed writes are common.
+        if (targetVar.attrReads().size() != 1) {
             return;
         }
 
@@ -955,4 +955,5 @@ public class SimpleRewrites implements OptimizerPass {
     }
 
 }
+
 
