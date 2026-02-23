@@ -74,6 +74,7 @@ public class WurstScriptTest {
         private boolean stopOnFirstError = true;
         private boolean runCompiletimeFunctions;
         private boolean testLua = false;
+        private boolean uncheckedDispatch = false;
 
         TestConfig(String name) {
             this.name = name;
@@ -133,6 +134,15 @@ public class WurstScriptTest {
 
         public TestConfig executeProgOnlyAfterTransforms(boolean b) {
             this.executeProgOnlyAfterTransforms = b;
+            return this;
+        }
+
+        public TestConfig uncheckedDispatch() {
+            return uncheckedDispatch(true);
+        }
+
+        public TestConfig uncheckedDispatch(boolean b) {
+            this.uncheckedDispatch = b;
             return this;
         }
 
@@ -198,6 +208,9 @@ public class WurstScriptTest {
             RecycleCodeGeneratorQueue.setTestMode = true;
             if (withStdLib) {
                 runArgs = runArgs.with("-lib", StdLib.getLib());
+            }
+            if (uncheckedDispatch) {
+                runArgs = runArgs.with("-uncheckedDispatch");
             }
             if (runCompiletimeFunctions) {
                 runArgs = runArgs.with("-runcompiletimefunctions");
