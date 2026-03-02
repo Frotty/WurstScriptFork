@@ -31,7 +31,6 @@ public class ImOptimizer {
         localPasses.add(new UselessFunctionCallsRemover());
         localPasses.add(new GlobalsInliner());
         localPasses.add(new SimpleRewrites());
-//        localPasses.add(new LocalInliner());
     }
 
     private final TimeTaker timeTaker;
