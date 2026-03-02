@@ -28,7 +28,7 @@ public class ImInliner {
     private final Map<ImFunction, Integer> callCounts = Maps.newLinkedHashMap();
     private final Map<ImFunction, Integer> funcSizes = Maps.newLinkedHashMap();
     private final Set<ImFunction> done = Sets.newLinkedHashSet();
-    private final double inlineTreshold = 50;
+    private double inlineTreshold = 50;
 
     static {
         dontInline.add("SetPlayerAllianceStateAllyBJ");
@@ -39,6 +39,10 @@ public class ImInliner {
     public ImInliner(ImTranslator translator) {
         this.translator = translator;
         this.prog = translator.getImProg();
+    }
+
+    public void setInlineTreshold(double inlineTreshold) {
+        this.inlineTreshold = inlineTreshold;
     }
 
     public void doInlining() {
