@@ -36,6 +36,8 @@ public class SimpleRewrites implements OptimizerPass {
     private ImFunction convertPlayerUnitEventFunc;
     private ImFunction convertPlayerEventFunc;
     private ImFunction convertStateFunc;
+    private ImFunction convertPlayerSlotStateFunc;
+    private ImFunction convertMapControlFunc;
 
     private static boolean isNumberLiteral(ImExpr e) {
         return e instanceof ImIntVal || e instanceof ImRealVal;
@@ -56,6 +58,8 @@ public class SimpleRewrites implements OptimizerPass {
         convertPlayerUnitEventFunc = trans.getNativeFunc("ConvertPlayerUnitEvent");
         convertStateFunc = trans.getNativeFunc("ConvertPlayerState");
         convertPlayerEventFunc = trans.getNativeFunc("ConvertPlayerEvent");
+        convertPlayerSlotStateFunc = trans.getNativeFunc("ConvertPlayerSlotState");
+        convertMapControlFunc = trans.getNativeFunc("ConvertMapControl");
         this.sideEffectAnalysis = new SideEffectAnalyzer(prog);
         totalRewrites = 0;
         optimizeElement(prog);
@@ -164,8 +168,8 @@ public class SimpleRewrites implements OptimizerPass {
                 if (elem.get(i) instanceof ImSet && lookback instanceof ImSet) {
                     optimizeConsecutiveSet((ImSet) lookback, (ImSet) elem.get(i));
                 }
-                if (elem instanceof ImStmts && elem.get(i) instanceof ImFunctionCall && lookback instanceof ImSet) {
-                    optimizeSetThenSingleArgCall((ImSet) lookback, (ImFunctionCall) elem.get(i));
+                if (elem instanceof ImStmts && elem.get(i) instanceof ImFunctionCall) {
+                    optimizePrecedingSetChainForCall((ImStmts) elem, i, (ImFunctionCall) elem.get(i));
                 }
             }
         }
@@ -193,6 +197,10 @@ public class SimpleRewrites implements OptimizerPass {
                     varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerUnitEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerHeroEvents.getValForName(name))), true, CallType.NORMAL));
                 } else if (name.startsWith("EVENT_PLAYER_")) {
                     varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerEventFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerEvents.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("PLAYER_SLOT_STATE_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertPlayerSlotStateFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(PlayerSlotStates.getValForName(name))), true, CallType.NORMAL));
+                } else if (name.startsWith("MAP_CONTROL_")) {
+                    varRef.replaceBy(JassIm.ImFunctionCall(varRef.attrTrace(), convertMapControlFunc, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImIntVal(MapControls.getValForName(name))), true, CallType.NORMAL));
                 }
             }
         }
@@ -273,6 +281,13 @@ public class SimpleRewrites implements OptimizerPass {
         // Binary
         boolean wasViable = true;
         if (opc.getArguments().size() > 1) {
+            if (foldChainedIntSubtractions(opc)) {
+                totalRewrites++;
+                if (showRewrites) {
+                    WLogger.info("opcall rewrite: " + opc);
+                }
+                return;
+            }
             ImExpr left = opc.getArguments().get(0);
             ImExpr right = opc.getArguments().get(1);
             if (left instanceof ImBoolVal && right instanceof ImBoolVal) {
@@ -425,6 +440,49 @@ public class SimpleRewrites implements OptimizerPass {
             }
         }
 
+    }
+
+    private boolean foldChainedIntSubtractions(ImOperatorCall opc) {
+        if (opc.getOp() != WurstOperator.MINUS || opc.getArguments().size() != 2) {
+            return false;
+        }
+        ImExpr right = opc.getArguments().get(1);
+        if (!(right instanceof ImIntVal)) {
+            return false;
+        }
+
+        long constantTail = ((ImIntVal) right).getValI();
+        ImExpr base = opc.getArguments().get(0);
+        boolean foundNested = false;
+
+        while (base instanceof ImOperatorCall) {
+            ImOperatorCall nested = (ImOperatorCall) base;
+            if (nested.getOp() != WurstOperator.MINUS || nested.getArguments().size() != 2) {
+                break;
+            }
+            ImExpr nestedRight = nested.getArguments().get(1);
+            if (!(nestedRight instanceof ImIntVal)) {
+                break;
+            }
+            foundNested = true;
+            constantTail += ((ImIntVal) nestedRight).getValI();
+            base = nested.getArguments().get(0);
+        }
+
+        if (!foundNested) {
+            return false;
+        }
+
+        ImExpr baseCopy = base.copy();
+        ImExpr replacement;
+        int foldedConst = (int) constantTail;
+        if (foldedConst == 0) {
+            replacement = baseCopy;
+        } else {
+            replacement = JassIm.ImOperatorCall(WurstOperator.MINUS, JassIm.ImExprs(baseCopy, JassIm.ImIntVal(foldedConst)));
+        }
+        opc.replaceBy(replacement);
+        return true;
     }
 
 
@@ -876,7 +934,7 @@ public class SimpleRewrites implements OptimizerPass {
         }
     }
 
-    private void optimizeSetThenSingleArgCall(ImSet setStmt, ImFunctionCall callStmt) {
+    private void optimizeSetThenCallArg(ImSet setStmt, ImFunctionCall callStmt) {
         if (!(setStmt.getLeft() instanceof ImVarAccess)) {
             return;
         }
@@ -884,25 +942,56 @@ public class SimpleRewrites implements OptimizerPass {
         if (targetVar.isGlobal()) {
             return;
         }
-        if (callStmt.getArguments().size() != 1) {
-            return;
+        int matchIndex = -1;
+        for (int ai = 0; ai < callStmt.getArguments().size(); ai++) {
+            ImExpr arg = callStmt.getArguments().get(ai);
+            if (arg instanceof ImVarAccess && ((ImVarAccess) arg).getVar() == targetVar) {
+                if (matchIndex >= 0) {
+                    // Multiple uses in this call would duplicate RHS when inlined.
+                    return;
+                }
+                matchIndex = ai;
+            }
         }
-        ImExpr arg = callStmt.getArguments().get(0);
-        if (!(arg instanceof ImVarAccess) || ((ImVarAccess) arg).getVar() != targetVar) {
+        if (matchIndex < 0) {
             return;
         }
 
-        // Only fold when this local is read exactly once (the call argument).
-        // We do not require exactly one write: initial seed writes are common.
+        // Only fold when this local is read exactly once in total.
         if (targetVar.attrReads().size() != 1) {
+            return;
+        }
+
+        if (!isSimplePureValue(setStmt.getRight())) {
             return;
         }
 
         ImExpr replacement = setStmt.getRight().copy();
         replacement.setParent(null);
-        arg.replaceBy(replacement);
+        callStmt.getArguments().get(matchIndex).replaceBy(replacement);
         setStmt.replaceBy(ImHelper.nullExpr());
         totalRewrites++;
+    }
+
+    private void optimizePrecedingSetChainForCall(ImStmts stmts, int callIndex, ImFunctionCall callStmt) {
+        for (int j = callIndex - 1; j >= 0; j--) {
+            ImStmt prev = stmts.get(j);
+            if (prev instanceof ImSet) {
+                optimizeSetThenCallArg((ImSet) prev, callStmt);
+            } else {
+                break;
+            }
+        }
+    }
+
+    private boolean isSimplePureValue(ImExpr expr) {
+        return expr instanceof ImVarAccess
+            || expr instanceof ImIntVal
+            || expr instanceof ImRealVal
+            || expr instanceof ImBoolVal
+            || expr instanceof ImStringVal
+            || expr instanceof ImNull
+            || expr instanceof ImFuncRef;
     }
 
     /**

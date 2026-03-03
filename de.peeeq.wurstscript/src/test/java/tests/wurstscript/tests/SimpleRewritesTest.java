@@ -106,6 +106,16 @@ public class SimpleRewritesTest extends WurstScriptTest {
         return Files.toString(file, Charsets.UTF_8);
     }
 
+    private int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
+    }
+
     @Test
     public void test_complex_arithmetic_chain() throws IOException {
         ImOptimizer.localOptRounds = 10;
@@ -241,5 +251,52 @@ public class SimpleRewritesTest extends WurstScriptTest {
         assertFalse(output.contains("if true"), "trivial if should be eliminated");
         assertFalse(output.contains("return 8"), "unreachable code after constant return should be removed");
         assertFalse(output.contains("return 7"), "the entire func gets removed");
+    }
+
+    @Test
+    public void test_inline_rect_temp_vars_into_camera_bounds_call() throws IOException {
+        test().lines(
+            "type rect extends handle",
+            "package test",
+            "   @extern native GetWorldBounds() returns rect",
+            "   @extern native GetRectMinX(rect r) returns real",
+            "   @extern native GetRectMinY(rect r) returns real",
+            "   @extern native GetRectMaxX(rect r) returns real",
+            "   @extern native GetRectMaxY(rect r) returns real",
+            "   @extern native SetCameraBounds(real x1, real y1, real x2, real y2, real x3, real y3, real x4, real y4)",
+            "   function f()",
+            "           rect q = GetWorldBounds()",
+            "           real g = GetRectMinX(q)",
+            "           real h = GetRectMinY(q)",
+            "           real d = GetRectMaxX(q)",
+            "           real r = GetRectMaxY(q)",
+            "           SetCameraBounds(g, h, g, r, d, r, d, h)",
+            "   init",
+            "           f()",
+            "endpackage");
+
+        String output = readOptimized("test_inline_rect_temp_vars_into_camera_bounds_call");
+        assertEquals(countOccurrences(output, "GetRectMinX("), 1, "GetRectMinX call must not be duplicated");
+        assertEquals(countOccurrences(output, "GetRectMinY("), 1, "GetRectMinY call must not be duplicated");
+        assertEquals(countOccurrences(output, "GetRectMaxX("), 1, "GetRectMaxX call must not be duplicated");
+        assertEquals(countOccurrences(output, "GetRectMaxY("), 1, "GetRectMaxY call must not be duplicated");
+    }
+
+    @Test
+    public void test_fold_chained_int_subtractions() throws IOException {
+        test().lines(
+            "package test",
+            "   native print(int msg)",
+            "   function f(int aK)",
+            "           int x = aK",
+            "           x = x - 1 - 1 - 1 - 1 - 1",
+            "           print(x)",
+            "   init",
+            "           f(10)",
+            "endpackage");
+
+        String output = readOptimized("test_fold_chained_int_subtractions");
+        assertFalse(output.contains("- 1 - 1"), "chained integer subtractions should be folded");
+        assertTrue(output.contains("- 5"), "constant subtraction tail should be combined");
     }
 }
