@@ -59,7 +59,10 @@ public class LocalMerger implements OptimizerPass {
     private boolean canMerge(ImType a, ImType b) { return a.equalsType(b); }
 
     private void mergeLocals(Map<ImStmt, Set<ImVar>> livenessInfo, ImFunction func) {
-        Map<ImVar, Set<ImVar>> interference = calculateInferenceGraph(livenessInfo);
+        Map<ImVar, java.util.Set<ImVar>> interference = calculateInferenceGraph(livenessInfo);
+        if (interference.isEmpty()) {
+            return;
+        }
 
         PriorityQueue<ImVar> queue = new PriorityQueue<>(
             (x, y) -> interference.get(y).size() - interference.get(x).size()
@@ -139,14 +142,27 @@ public class LocalMerger implements OptimizerPass {
         return before - kept.size();
     }
 
-    private Map<ImVar, Set<ImVar>> calculateInferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
-        Map<ImVar, Set<ImVar>> g = new LinkedHashMap<>();
+    private Map<ImVar, java.util.Set<ImVar>> calculateInferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
+        Map<ImVar, java.util.Set<ImVar>> g = new LinkedHashMap<>();
         for (Map.Entry<ImStmt, Set<ImVar>> e : livenessInfo.entrySet()) {
             Set<ImVar> live = e.getValue();
-            for (ImVar v1 : live) {
-                Set<ImVar> set = g.getOrDefault(v1, HashSet.empty());
-                set = set.addAll(live.filter(v2 -> canMerge(v1.getType(), v2.getType())));
-                g.put(v1, set);
+            if (live.isEmpty()) {
+                continue;
+            }
+            java.util.List<ImVar> vars = live.toJavaList();
+            int n = vars.size();
+            for (int i = 0; i < n; i++) {
+                ImVar v1 = vars.get(i);
+                java.util.Set<ImVar> set = g.computeIfAbsent(v1, __ -> new java.util.LinkedHashSet<>());
+                for (int j = 0; j < n; j++) {
+                    if (i == j) {
+                        continue;
+                    }
+                    ImVar v2 = vars.get(j);
+                    if (canMerge(v1.getType(), v2.getType())) {
+                        set.add(v2);
+                    }
+                }
             }
         }
         return g;
@@ -260,14 +276,17 @@ public class LocalMerger implements OptimizerPass {
         idx.defaultReturnValue(-1);
         for (int i = 0; i < N; i++) idx.put(nodes.get(i), i);
 
-        // 2. Calculate USE and DEF sets for each node
-        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] use = new ObjectOpenHashSet[N];
-        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] def = new ObjectOpenHashSet[N];
+        // 2. Calculate USE and DEF bitsets for each node
+        final Object2IntOpenHashMap<ImVar> varToId = new Object2IntOpenHashMap<>();
+        varToId.defaultReturnValue(-1);
+        final ArrayList<ImVar> idToVar = new ArrayList<>();
+        final BitSet[] use = new BitSet[N];
+        final BitSet[] def = new BitSet[N];
 
         for (int i = 0; i < N; i++) {
             Node node = nodes.get(i);
-            use[i] = new ObjectOpenHashSet<>();
-            def[i] = new ObjectOpenHashSet<>();
+            use[i] = new BitSet();
+            def[i] = new BitSet();
 
             ImStmt stmt = node.getStmt();
             if (stmt == null) continue;
@@ -277,7 +296,7 @@ public class LocalMerger implements OptimizerPass {
                 @Override public void visit(ImVarAccess va) {
                     super.visit(va);
                     ImVar v = va.getVar();
-                    if (!v.isGlobal()) use[ii].add(v);
+                    if (!v.isGlobal()) use[ii].set(varId(v, varToId, idToVar));
                 }
                 @Override public void visit(ImSet set) {
                     set.getRight().accept(this);
@@ -297,10 +316,11 @@ public class LocalMerger implements OptimizerPass {
                 ImSet set = (ImSet) stmt;
                 if (set.getLeft() instanceof ImVarAccess) {
                     ImVar v = ((ImVarAccess) set.getLeft()).getVar();
-                    if (!v.isGlobal()) def[i].add(v);
+                    if (!v.isGlobal()) def[i].set(varId(v, varToId, idToVar));
                 }
             }
         }
+        final int varCount = idToVar.size();
 
         // 3. Find SCCs on the REVERSED graph for backward analysis
         GraphInterpreter<Node> reverseCfgInterpreter = new GraphInterpreter<>() {
@@ -323,20 +343,50 @@ public class LocalMerger implements OptimizerPass {
                 maxSccSize = scc.size();
             }
         }
+        boolean hasCycles = false;
+        for (List<Node> scc : sccs) {
+            if (scc.size() > 1) {
+                hasCycles = true;
+                break;
+            }
+            if (scc.size() == 1) {
+                Node n = scc.get(0);
+                if (n.getSuccessors().contains(n)) {
+                    hasCycles = true;
+                    break;
+                }
+            }
+        }
 
         // 4. Initialize IN and OUT sets for the data-flow analysis
-        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] in  = new ObjectOpenHashSet[N];
-        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] out = new ObjectOpenHashSet[N];
-        for (int i = 0; i < N; i++) { in[i] = new ObjectOpenHashSet<>(); out[i] = new ObjectOpenHashSet<>(); }
+        final BitSet[] in  = new BitSet[N];
+        final BitSet[] out = new BitSet[N];
+        for (int i = 0; i < N; i++) {
+            in[i] = new BitSet(varCount);
+            out[i] = new BitSet(varCount);
+        }
 
         // 5. Iterate over SCCs in reverse topological order
         long totalSccIterations = 0;
         long maxSccIterations = 0;
         boolean abortedSccIterations = false;
+        final BitSet tmpOut = new BitSet(varCount);
+        final BitSet tmpIn = new BitSet(varCount);
         for (List<Node> scc : sccs) {
             if (scc.isEmpty()) continue;
 
-            // Iterate within this SCC until a fixed point is reached for all its nodes.
+            if (!hasCycles) {
+                // Acyclic CFG fast-path: one reverse-topological pass is enough.
+                for (Node uNode : scc) {
+                    int u = idx.getInt(uNode);
+                    computeOutIn(uNode, u, idx, in, out, use, def, tmpOut, tmpIn);
+                }
+                totalSccIterations += 1;
+                if (maxSccIterations < 1) maxSccIterations = 1;
+                continue;
+            }
+
+            // General cyclic case: iterate within SCC to fixpoint.
             boolean changedInScc = true;
             int sccIterations = 0;
             while (changedInScc) {
@@ -348,30 +398,10 @@ public class LocalMerger implements OptimizerPass {
                     break;
                 }
                 changedInScc = false;
-                for (Node u_node : scc) {
-                    int u_idx = idx.getInt(u_node);
-
-                    // Recalculate OUT[u] from the IN sets of its successors.
-                    // Any successor not in the current SCC has already been processed and its IN set is stable.
-                    final ObjectOpenHashSet<ImVar> newOut = new ObjectOpenHashSet<>();
-                    for (Node succ : u_node.getSuccessors()) {
-                        int v_idx = idx.getInt(succ);
-                        if (v_idx != -1) {
-                            newOut.addAll(in[v_idx]);
-                        }
-                    }
-                    out[u_idx] = newOut;
-
-                    // Recalculate IN[u] using the data-flow equation: in[u] = use[u] U (out[u] - def[u])
-                    final ObjectOpenHashSet<ImVar> oldIn = in[u_idx];
-                    final ObjectOpenHashSet<ImVar> newIn = new ObjectOpenHashSet<>();
-                    newIn.addAll(newOut);
-                    newIn.removeAll(def[u_idx]);
-                    newIn.addAll(use[u_idx]);
-
-                    // If IN[u] changed, update it and flag that we need another iteration for this SCC.
-                    if (!newIn.equals(oldIn)) {
-                        in[u_idx] = newIn;
+                for (Node uNode : scc) {
+                    int u = idx.getInt(uNode);
+                    boolean changed = computeOutIn(uNode, u, idx, in, out, use, def, tmpOut, tmpIn);
+                    if (changed) {
                         changedInScc = true;
                     }
                 }
@@ -387,9 +417,62 @@ public class LocalMerger implements OptimizerPass {
         for (int i = 0; i < N; i++) {
             ImStmt stmt = nodes.get(i).getStmt();
             if (stmt != null) {
-                result.put(stmt, io.vavr.collection.HashSet.ofAll(out[i]));
+                ObjectOpenHashSet<ImVar> live = new ObjectOpenHashSet<>();
+                for (int bit = out[i].nextSetBit(0); bit >= 0; bit = out[i].nextSetBit(bit + 1)) {
+                    live.add(idToVar.get(bit));
+                }
+                result.put(stmt, HashSet.ofAll(live));
             }
         }
         return new LivenessResult(result, N, sccs.size(), maxSccSize, totalSccIterations, maxSccIterations, abortedSccIterations);
+    }
+
+    private static int varId(ImVar v, Object2IntOpenHashMap<ImVar> varToId, ArrayList<ImVar> idToVar) {
+        int id = varToId.getInt(v);
+        if (id >= 0) {
+            return id;
+        }
+        int newId = idToVar.size();
+        varToId.put(v, newId);
+        idToVar.add(v);
+        return newId;
+    }
+
+    private static boolean computeOutIn(
+        Node uNode,
+        int u,
+        Object2IntOpenHashMap<Node> idx,
+        BitSet[] in,
+        BitSet[] out,
+        BitSet[] use,
+        BitSet[] def,
+        BitSet tmpOut,
+        BitSet tmpIn
+    ) {
+        tmpOut.clear();
+        for (Node succ : uNode.getSuccessors()) {
+            int v = idx.getInt(succ);
+            if (v != -1) {
+                tmpOut.or(in[v]);
+            }
+        }
+
+        boolean changed = false;
+        if (!out[u].equals(tmpOut)) {
+            out[u].clear();
+            out[u].or(tmpOut);
+            changed = true;
+        }
+
+        tmpIn.clear();
+        tmpIn.or(tmpOut);
+        tmpIn.andNot(def[u]);
+        tmpIn.or(use[u]);
+        if (!in[u].equals(tmpIn)) {
+            in[u].clear();
+            in[u].or(tmpIn);
+            changed = true;
+        }
+        return changed;
     }
 }

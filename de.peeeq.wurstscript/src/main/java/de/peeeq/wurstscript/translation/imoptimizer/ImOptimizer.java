@@ -29,12 +29,19 @@ public class ImOptimizer {
     public static int localOptRounds = 1;
     private static final ArrayList<OptimizerPass> localPasses = new ArrayList<>();
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
-    private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 15000L);
+    private static final boolean LOCAL_OPT_TRACE = Boolean.parseBoolean(System.getProperty("wurst.localopt.trace", "false"));
+    private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 0L);
     private static final int STRICT_INLINE_MAX_SIZE = Integer.getInteger("wurst.strictInline.maxSize", 8);
-    private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "true"));
+    private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "false"));
 
     private static void logLocalOpt(String msg) {
-        // Use warning-level so diagnostics are visible in environments that hide INFO logs.
+        if (LOCAL_OPT_TRACE) {
+            // Use warning-level so diagnostics are visible in environments that hide INFO logs.
+            WLogger.warning("[LocalOpt] " + msg);
+        }
+    }
+
+    private static void logLocalOptAlways(String msg) {
         WLogger.warning("[LocalOpt] " + msg);
     }
 
@@ -122,7 +129,8 @@ public class ImOptimizer {
     private int runLocalPassWithHeartbeat(OptimizerPass pass, int round) {
         final String passName = pass.getName();
         final long started = System.nanoTime();
-        final AtomicBoolean running = new AtomicBoolean(true);
+        final boolean heartbeatEnabled = LOCAL_PASS_HEARTBEAT_MS > 0;
+        final AtomicBoolean running = new AtomicBoolean(heartbeatEnabled);
         Thread heartbeat = new Thread(() -> {
             while (running.get()) {
                 try {
@@ -140,18 +148,22 @@ public class ImOptimizer {
         heartbeat.setDaemon(true);
 
         logLocalOpt("round=" + round + " START pass='" + passName + "'");
-        heartbeat.start();
+        if (heartbeatEnabled) {
+            heartbeat.start();
+        }
         try {
             int count = timeTaker.measure(passName, () -> pass.optimize(trans));
             long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
             logLocalOpt("round=" + round + " END pass='" + passName + "' count=" + count + " elapsedMs=" + elapsedMs);
             return count;
         } catch (Throwable t) {
-            logLocalOpt("round=" + round + " FAIL pass='" + passName + "' after " + ((System.nanoTime() - started) / 1_000_000L) + " ms: " + t);
+            logLocalOptAlways("round=" + round + " FAIL pass='" + passName + "' after " + ((System.nanoTime() - started) / 1_000_000L) + " ms: " + t);
             throw t;
         } finally {
-            running.set(false);
-            heartbeat.interrupt();
+            if (heartbeatEnabled) {
+                running.set(false);
+                heartbeat.interrupt();
+            }
         }
     }
 
