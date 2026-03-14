@@ -398,6 +398,10 @@ public class AttrFuncDef {
                 return null;
             }
             if (node instanceof Annotation) {
+                // Fork policy: allow optimizer control annotations without requiring annotation functions.
+                if (funcName.equals("inline") || funcName.equals("noinline")) {
+                    return null;
+                }
                 node.addWarning("Annotation " + funcName + " is not defined.");
             } else {
                 node.addError("Reference to function " + funcName + " could not be resolved.");

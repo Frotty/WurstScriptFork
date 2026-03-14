@@ -1239,9 +1239,10 @@ public class WurstValidator {
     }
 
     private void checkIfNoEffectAssignment(StmtSet s) {
+        // Fork policy: obfuscation/transformation passes intentionally emit no-op assignments.
+        // Keep this check silent to avoid noisy warnings in production pipelines.
         if (refersToSameVar(s.getUpdatedExpr(), s.getRight())) {
-            s.addWarning("The assignment to " + Utils.printElement(s.getUpdatedExpr().attrNameDef())
-                + " probably has no effect.");
+            return;
         }
 
     }
@@ -1607,12 +1608,12 @@ public class WurstValidator {
                         // in jass this is just a warning, because
                         // the shitty code emitted by jasshelper sometimes
                         // contains unreachable code
-                        s.addWarning("Unreachable code");
+                        return;
                     } else {
                         if (mightBeAffectedBySwitchThatCoversAllCases(s)) {
                             // fow backwards compatibility just use a warning when
                             // switch statements that handle all cases are involved:
-                            s.addWarning("Unreachable code");
+                            return;
                         } else {
                             s.addError("Unreachable code");
                         }

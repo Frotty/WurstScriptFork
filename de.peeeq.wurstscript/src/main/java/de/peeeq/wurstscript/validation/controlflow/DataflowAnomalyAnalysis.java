@@ -424,10 +424,11 @@ public class DataflowAnomalyAnalysis extends ForwardMethod<VarStates, AstElement
                 String error = "Variable " + v.getName();
                 if (incoming.destroyed(v)) {
                     error += " may have been destroyed already";
+                    reportError(readingExpr, error);
                 } else {
                     error += " may not have been initialized";
+                    readingExpr.addWarning(error);
                 }
-                reportError(readingExpr, error);
             }
         }
     }
