@@ -59,39 +59,63 @@ public class LocalMerger implements OptimizerPass {
     private boolean canMerge(ImType a, ImType b) { return a.equalsType(b); }
 
     private void mergeLocals(Map<ImStmt, Set<ImVar>> livenessInfo, ImFunction func) {
-        Map<ImVar, java.util.Set<ImVar>> interference = calculateInferenceGraph(livenessInfo);
-        if (interference.isEmpty()) {
-            return;
-        }
-
-        PriorityQueue<ImVar> queue = new PriorityQueue<>(
-            (x, y) -> interference.get(y).size() - interference.get(x).size()
-        );
-        queue.addAll(interference.keySet());
-
+        Map<ImVar, BitSet> liveByVar = buildLiveByVar(livenessInfo);
         List<ImVar> params = new ArrayList<>(func.getParameters());
         if (func.hasFlag(de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG) && !params.isEmpty()) {
             params.remove(params.size() - 1);
         }
-        queue.removeAll(func.getParameters());
 
-        List<ImVar> colors = new ArrayList<>(params);
-        Map<ImVar, ImVar> merges = new LinkedHashMap<>();
+        class ColorSlot {
+            final ImVar repr;
+            final ImType type;
+            final BitSet occupied;
 
-        while (!queue.isEmpty()) {
-            ImVar v = queue.poll();
-            boolean merged = false;
-
-            for (ImVar color : colors) {
-                if (!canMerge(color.getType(), v.getType())) continue;
-
-                boolean conflict = false;
-                for (ImVar neigh : interference.get(v)) {
-                    if (merges.getOrDefault(neigh, neigh) == color) { conflict = true; break; }
-                }
-                if (!conflict) { merges.put(v, color); merged = true; break; }
+            ColorSlot(ImVar repr, BitSet occupied) {
+                this.repr = repr;
+                this.type = repr.getType();
+                this.occupied = occupied;
             }
-            if (!merged) colors.add(v);
+        }
+
+        List<ColorSlot> slots = new ArrayList<>();
+        for (ImVar p : params) {
+            BitSet occ = new BitSet();
+            BitSet lp = liveByVar.get(p);
+            if (lp != null) {
+                occ.or(lp);
+            }
+            slots.add(new ColorSlot(p, occ));
+        }
+
+        List<ImVar> locals = new ArrayList<>(func.getLocals());
+        locals.sort((a, b) -> Integer.compare(
+            liveByVar.getOrDefault(b, new BitSet()).cardinality(),
+            liveByVar.getOrDefault(a, new BitSet()).cardinality()
+        ));
+
+        Map<ImVar, ImVar> merges = new LinkedHashMap<>();
+        for (ImVar v : locals) {
+            BitSet live = liveByVar.get(v);
+            if (live == null) {
+                live = new BitSet();
+            }
+
+            ColorSlot target = null;
+            for (ColorSlot s : slots) {
+                if (!canMerge(s.type, v.getType())) {
+                    continue;
+                }
+                if (!s.occupied.intersects(live)) {
+                    target = s;
+                    break;
+                }
+            }
+            if (target != null) {
+                merges.put(v, target.repr);
+                target.occupied.or(live);
+            } else {
+                slots.add(new ColorSlot(v, (BitSet) live.clone()));
+            }
         }
 
         applyMerges(func, merges);
@@ -142,29 +166,16 @@ public class LocalMerger implements OptimizerPass {
         return before - kept.size();
     }
 
-    private Map<ImVar, java.util.Set<ImVar>> calculateInferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
-        Map<ImVar, java.util.Set<ImVar>> g = new LinkedHashMap<>();
-        Map<ImType, Map<ImType, Boolean>> typeCompatCache = new HashMap<>();
+    private Map<ImVar, BitSet> buildLiveByVar(Map<ImStmt, Set<ImVar>> livenessInfo) {
+        Map<ImVar, BitSet> liveByVar = new LinkedHashMap<>();
+        int stmtIdx = 0;
         for (Map.Entry<ImStmt, Set<ImVar>> e : livenessInfo.entrySet()) {
-            Set<ImVar> live = e.getValue();
-            if (live.isEmpty()) {
-                continue;
+            for (ImVar v : e.getValue()) {
+                liveByVar.computeIfAbsent(v, __ -> new BitSet()).set(stmtIdx);
             }
-            java.util.List<ImVar> vars = live.toJavaList();
-            int n = vars.size();
-            for (int i = 0; i < n; i++) {
-                ImVar v1 = vars.get(i);
-                g.computeIfAbsent(v1, __ -> new java.util.LinkedHashSet<>());
-                for (int j = i + 1; j < n; j++) {
-                    ImVar v2 = vars.get(j);
-                    if (typeCompatible(v1.getType(), v2.getType(), typeCompatCache)) {
-                        g.get(v1).add(v2);
-                        g.computeIfAbsent(v2, __ -> new java.util.LinkedHashSet<>()).add(v1);
-                    }
-                }
-            }
+            stmtIdx++;
         }
-        return g;
+        return liveByVar;
     }
 
     private void eliminateDeadCode(Map<ImStmt, Set<ImVar>> livenessInfo) {
@@ -480,15 +491,4 @@ public class LocalMerger implements OptimizerPass {
         return changed;
     }
 
-    private boolean typeCompatible(ImType a, ImType b, Map<ImType, Map<ImType, Boolean>> cache) {
-        Map<ImType, Boolean> row = cache.computeIfAbsent(a, __ -> new HashMap<>());
-        Boolean c = row.get(b);
-        if (c != null) {
-            return c;
-        }
-        boolean r = canMerge(a, b);
-        row.put(b, r);
-        cache.computeIfAbsent(b, __ -> new HashMap<>()).put(a, r);
-        return r;
-    }
 }

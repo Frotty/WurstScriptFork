@@ -28,7 +28,12 @@ public class ImOptimizer {
 
     public static int localOptRounds = 1;
     private static final ArrayList<OptimizerPass> localPasses = new ArrayList<>();
+    private static final ArrayList<OptimizerPass> preInlinePasses = new ArrayList<>();
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
+    private static final boolean RUN_LOCALMERGER_AFTER_INLINING =
+        Boolean.parseBoolean(System.getProperty("wurst.localmerger.afterInlining", "true"));
+    private static final boolean RUN_PREINLINE_LOCAL_OPTS =
+        Boolean.parseBoolean(System.getProperty("wurst.preInlineLocalOpts", "true"));
     private static final boolean LOCAL_OPT_TRACE = Boolean.parseBoolean(System.getProperty("wurst.localopt.trace", "false"));
     private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 0L);
     private static final int STRICT_INLINE_MAX_SIZE = Integer.getInteger("wurst.strictInline.maxSize", 8);
@@ -46,8 +51,14 @@ public class ImOptimizer {
     }
 
     static {
+        preInlinePasses.add(new SimpleRewrites());
+        preInlinePasses.add(new ConstantAndCopyPropagation());
+        preInlinePasses.add(new BranchMerger());
+
         localPasses.add(new SimpleRewrites());
-        localPasses.add(new LocalMerger());
+        if (RUN_LOCALMERGER_AFTER_INLINING) {
+            localPasses.add(new LocalMerger());
+        }
         localPasses.add(new BranchMerger());
         localPasses.add(new ConstantAndCopyPropagation());
         localPasses.add(new UselessFunctionCallsRemover());
@@ -72,6 +83,18 @@ public class ImOptimizer {
 
     public void doInlining() {
         // remove garbage to reduce work for the inliner
+        removeGarbage();
+        trans.getImProg().flatten(trans);
+        if (RUN_PREINLINE_LOCAL_OPTS) {
+            for (OptimizerPass pass : preInlinePasses) {
+                timeTaker.measure(pass.getName() + " (pre-inline)", () -> pass.optimize(trans));
+            }
+            trans.getImProg().flatten(trans);
+            removeGarbage();
+        }
+        // Run LocalMerger before inlining while functions are still smaller.
+        timeTaker.measure("Local variables merged (pre-inline)", () -> new LocalMerger().optimize(trans));
+        trans.getImProg().flatten(trans);
         removeGarbage();
         GlobalsInliner globalsInliner = new GlobalsInliner();
         globalsInliner.optimize(trans);
