@@ -144,6 +144,7 @@ public class LocalMerger implements OptimizerPass {
 
     private Map<ImVar, java.util.Set<ImVar>> calculateInferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
         Map<ImVar, java.util.Set<ImVar>> g = new LinkedHashMap<>();
+        Map<ImType, Map<ImType, Boolean>> typeCompatCache = new HashMap<>();
         for (Map.Entry<ImStmt, Set<ImVar>> e : livenessInfo.entrySet()) {
             Set<ImVar> live = e.getValue();
             if (live.isEmpty()) {
@@ -153,14 +154,12 @@ public class LocalMerger implements OptimizerPass {
             int n = vars.size();
             for (int i = 0; i < n; i++) {
                 ImVar v1 = vars.get(i);
-                java.util.Set<ImVar> set = g.computeIfAbsent(v1, __ -> new java.util.LinkedHashSet<>());
-                for (int j = 0; j < n; j++) {
-                    if (i == j) {
-                        continue;
-                    }
+                g.computeIfAbsent(v1, __ -> new java.util.LinkedHashSet<>());
+                for (int j = i + 1; j < n; j++) {
                     ImVar v2 = vars.get(j);
-                    if (canMerge(v1.getType(), v2.getType())) {
-                        set.add(v2);
+                    if (typeCompatible(v1.getType(), v2.getType(), typeCompatCache)) {
+                        g.get(v1).add(v2);
+                        g.computeIfAbsent(v2, __ -> new java.util.LinkedHashSet<>()).add(v1);
                     }
                 }
             }
@@ -386,23 +385,28 @@ public class LocalMerger implements OptimizerPass {
                 continue;
             }
 
-            // General cyclic case: iterate within SCC to fixpoint.
-            boolean changedInScc = true;
+            // Cyclic case: SCC-local worklist fixpoint to avoid scanning all nodes every round.
             int sccIterations = 0;
-            while (changedInScc) {
+            java.util.Set<Node> sccSet = new java.util.HashSet<>(scc);
+            java.util.ArrayDeque<Node> worklist = new java.util.ArrayDeque<>(scc);
+            java.util.HashSet<Node> enqueued = new java.util.HashSet<>(scc);
+            while (!worklist.isEmpty()) {
+                Node uNode = worklist.pollFirst();
+                enqueued.remove(uNode);
                 sccIterations++;
                 if (sccIterations > MAX_SCC_ITER) {
                     abortedSccIterations = true;
-                    de.peeeq.wurstscript.WLogger.warning("[LocalMerger] aborting SCC fixpoint for function '" + func.getName()
+                    de.peeeq.wurstscript.WLogger.warning("[LocalMerger] aborting SCC worklist for function '" + func.getName()
                         + "' after iterations=" + sccIterations + " sccSize=" + scc.size() + " nodes=" + N);
                     break;
                 }
-                changedInScc = false;
-                for (Node uNode : scc) {
-                    int u = idx.getInt(uNode);
-                    boolean changed = computeOutIn(uNode, u, idx, in, out, use, def, tmpOut, tmpIn);
-                    if (changed) {
-                        changedInScc = true;
+                int u = idx.getInt(uNode);
+                boolean changed = computeOutIn(uNode, u, idx, in, out, use, def, tmpOut, tmpIn);
+                if (changed) {
+                    for (Node pred : uNode.getPredecessors()) {
+                        if (sccSet.contains(pred) && enqueued.add(pred)) {
+                            worklist.addLast(pred);
+                        }
                     }
                 }
             }
@@ -474,5 +478,17 @@ public class LocalMerger implements OptimizerPass {
             changed = true;
         }
         return changed;
+    }
+
+    private boolean typeCompatible(ImType a, ImType b, Map<ImType, Map<ImType, Boolean>> cache) {
+        Map<ImType, Boolean> row = cache.computeIfAbsent(a, __ -> new HashMap<>());
+        Boolean c = row.get(b);
+        if (c != null) {
+            return c;
+        }
+        boolean r = canMerge(a, b);
+        row.put(b, r);
+        cache.computeIfAbsent(b, __ -> new HashMap<>()).put(a, r);
+        return r;
     }
 }

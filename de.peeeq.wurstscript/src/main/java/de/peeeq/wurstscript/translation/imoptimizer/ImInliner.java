@@ -29,7 +29,6 @@ public class ImInliner {
     private final Map<ImFunction, Integer> funcSizes = Maps.newLinkedHashMap();
     private final Set<ImFunction> done = Sets.newLinkedHashSet();
     private final Map<ImFunction, Boolean> containsFuncRefCache = Maps.newLinkedHashMap();
-    private final Map<ImFunction, Boolean> recursiveCache = Maps.newLinkedHashMap();
     private double inlineTreshold = 50;
     private int maxInlineFunctionSize = Integer.MAX_VALUE;
     private boolean allowMultiReturnInlining = true;
@@ -402,13 +401,7 @@ public class ImInliner {
     }
 
     private boolean isRecursive(ImFunction f) {
-        Boolean cached = recursiveCache.get(f);
-        if (cached != null) {
-            return cached;
-        }
-        boolean result = containsCallTo(f, f.getBody());
-        recursiveCache.put(f, result);
-        return result;
+        return containsCallTo(f, f.getBody());
     }
 
     private boolean containsCallTo(ImFunction f, Element e) {
