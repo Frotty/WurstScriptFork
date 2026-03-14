@@ -29,7 +29,10 @@ public class ImInliner {
     private final Map<ImFunction, Integer> funcSizes = Maps.newLinkedHashMap();
     private final Set<ImFunction> done = Sets.newLinkedHashSet();
     private final Map<ImFunction, Boolean> containsFuncRefCache = Maps.newLinkedHashMap();
+    private final Map<ImFunction, Boolean> recursiveCache = Maps.newLinkedHashMap();
     private double inlineTreshold = 50;
+    private int maxInlineFunctionSize = Integer.MAX_VALUE;
+    private boolean allowMultiReturnInlining = true;
 
     static {
         dontInline.add("SetPlayerAllianceStateAllyBJ");
@@ -44,6 +47,18 @@ public class ImInliner {
 
     public void setInlineTreshold(double inlineTreshold) {
         this.inlineTreshold = inlineTreshold;
+    }
+
+    public void setMaxInlineFunctionSize(int maxInlineFunctionSize) {
+        if (maxInlineFunctionSize <= 0) {
+            this.maxInlineFunctionSize = Integer.MAX_VALUE;
+        } else {
+            this.maxInlineFunctionSize = maxInlineFunctionSize;
+        }
+    }
+
+    public void setAllowMultiReturnInlining(boolean allowMultiReturnInlining) {
+        this.allowMultiReturnInlining = allowMultiReturnInlining;
     }
 
     public void doInlining() {
@@ -123,8 +138,15 @@ public class ImInliner {
         if (translator.isLuaTarget() && !maxOneReturn(f)) {
             return "lua_multi_return_inline_disabled";
         }
+        if (!allowMultiReturnInlining && !maxOneReturn(f)) {
+            return "multi_return_inline_disabled";
+        }
         if (translator.isLuaTarget() && containsFuncRef(f)) {
             return "lua_callback_funcref_barrier";
+        }
+        int funcSize = getFuncSize(f);
+        if (funcSize > maxInlineFunctionSize) {
+            return "function_too_large(" + funcSize + ">" + maxInlineFunctionSize + ")";
         }
         if (!inlinableFunctions.contains(f)) {
             return "not_in_inlinable_set";
@@ -347,6 +369,9 @@ public class ImInliner {
             // across all lowered patterns. Keep call semantics intact for now.
             return false;
         }
+        if (!allowMultiReturnInlining && !maxOneReturn(f)) {
+            return false;
+        }
         if (translator.isLuaTarget() && containsFuncRef(f)) {
             // Functions that build callback refs are lowered with Lua-specific wrappers/xpcall.
             // Keeping them as standalone calls avoids callback context/vararg scope breakage.
@@ -365,6 +390,9 @@ public class ImInliner {
                 break;
             }
         }
+        if (getFuncSize(f) > maxInlineFunctionSize) {
+            return false;
+        }
 //		WLogger.info("Should I inline function " + f.getName() + "?");
 //		WLogger.info("	ininable: " + inlinableFunctions.contains(f));
 //		WLogger.info("	rating: " + getRating(f));
@@ -374,7 +402,13 @@ public class ImInliner {
     }
 
     private boolean isRecursive(ImFunction f) {
-        return containsCallTo(f, f.getBody());
+        Boolean cached = recursiveCache.get(f);
+        if (cached != null) {
+            return cached;
+        }
+        boolean result = containsCallTo(f, f.getBody());
+        recursiveCache.put(f, result);
+        return result;
     }
 
     private boolean containsCallTo(ImFunction f, Element e) {

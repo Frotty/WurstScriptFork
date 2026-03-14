@@ -18,6 +18,7 @@ import de.peeeq.wurstscript.utils.Pair;
 import de.peeeq.wurstscript.validation.TRVEHelper;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static de.peeeq.wurstscript.validation.TRVEHelper.TO_KEEP;
 
@@ -28,6 +29,14 @@ public class ImOptimizer {
     public static int localOptRounds = 1;
     private static final ArrayList<OptimizerPass> localPasses = new ArrayList<>();
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
+    private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 15000L);
+    private static final int STRICT_INLINE_MAX_SIZE = Integer.getInteger("wurst.strictInline.maxSize", 8);
+    private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "true"));
+
+    private static void logLocalOpt(String msg) {
+        // Use warning-level so diagnostics are visible in environments that hide INFO logs.
+        WLogger.warning("[LocalOpt] " + msg);
+    }
 
     static {
         localPasses.add(new SimpleRewrites());
@@ -71,37 +80,79 @@ public class ImOptimizer {
     public void localOptimizations() {
         totalCount.clear();
 
+        logLocalOpt("initial cleanup start");
         removeGarbage();
         trans.getImProg().flatten(trans);
+        logLocalOpt("initial cleanup done");
 
         int finalItr = 0;
         for (int i = 1; i <= localOptRounds && optCount > 0; i++) {
             optCount = 0;
             StringBuilder sb = new StringBuilder();
+            logLocalOpt("round " + i + " start");
             for (OptimizerPass pass : localPasses) {
-                int count = timeTaker.measure(pass.getName(), () -> pass.optimize(trans));
+                int count = runLocalPassWithHeartbeat(pass, i);
                 sb.append("<").append(pass.getName()).append(": ").append(count).append("> ");
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
             }
 
             if (optCount > 0) {
+                logLocalOpt("round " + i + ": cleanup after pass changes");
                 removeGarbage();
                 trans.getImProg().flatten(trans);
             }
 
             finalItr = i;
-            WLogger.info("=== Optimization pass: " + i + " opts: " + optCount + " ===");
+            logLocalOpt("round " + i + " done, opts=" + optCount);
 
             // Run a strict inliner to get rid of one-liners
+            logLocalOpt("round " + i + ": strict inline start");
             doStrictInline();
+            logLocalOpt("round " + i + ": strict inline done");
         }
-        WLogger.info("=== Local optimizations done! Ran " + finalItr + " passes. ===");
+        logLocalOpt("done, rounds=" + finalItr);
         StringBuilder sb = new StringBuilder("Total: ");
         totalCount.forEach((k, v) -> sb.append("<").append(k).append(": ").append(v).append("> "));
-        WLogger.info(sb.toString());
+        logLocalOpt(sb.toString());
 
         InitFunctionCleaner.clean(trans.getImProg());
+    }
+
+    private int runLocalPassWithHeartbeat(OptimizerPass pass, int round) {
+        final String passName = pass.getName();
+        final long started = System.nanoTime();
+        final AtomicBoolean running = new AtomicBoolean(true);
+        Thread heartbeat = new Thread(() -> {
+            while (running.get()) {
+                try {
+                    Thread.sleep(LOCAL_PASS_HEARTBEAT_MS);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                if (!running.get()) {
+                    return;
+                }
+                long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+                logLocalOpt("round=" + round + " pass='" + passName + "' still running after " + elapsedMs + " ms");
+            }
+        }, "wurst-localopt-heartbeat-" + passName.replace(' ', '_'));
+        heartbeat.setDaemon(true);
+
+        logLocalOpt("round=" + round + " START pass='" + passName + "'");
+        heartbeat.start();
+        try {
+            int count = timeTaker.measure(passName, () -> pass.optimize(trans));
+            long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+            logLocalOpt("round=" + round + " END pass='" + passName + "' count=" + count + " elapsedMs=" + elapsedMs);
+            return count;
+        } catch (Throwable t) {
+            logLocalOpt("round=" + round + " FAIL pass='" + passName + "' after " + ((System.nanoTime() - started) / 1_000_000L) + " ms: " + t);
+            throw t;
+        } finally {
+            running.set(false);
+            heartbeat.interrupt();
+        }
     }
 
     public void doNullsetting() {
@@ -299,13 +350,22 @@ public class ImOptimizer {
 
 
     public void doStrictInline() {
-        WLogger.info("execute strict inline");
+        logLocalOpt("execute strict inline");
+        if (STRICT_INLINE_PROFILE) {
+            logImSizeSummary("strict inline BEFORE");
+        }
         ImInliner inliner = new ImInliner(trans);
         inliner.setInlineTreshold(1);
+        inliner.setAllowMultiReturnInlining(false);
+        inliner.setMaxInlineFunctionSize(STRICT_INLINE_MAX_SIZE);
+        logLocalOpt("strict inline config: threshold=1, maxSize=" + STRICT_INLINE_MAX_SIZE + ", multiReturn=false");
         inliner.doInlining();
         trans.assertProperties();
         removeGarbage();
         trans.getImProg().flatten(trans);
+        if (STRICT_INLINE_PROFILE) {
+            logImSizeSummary("strict inline AFTER");
+        }
     }
 
     public void encryptStrings() {
@@ -313,6 +373,36 @@ public class ImOptimizer {
         StringCryptor.encrypt(trans);
         removeGarbage();
         trans.getImProg().flatten(trans);
+    }
+
+    private void logImSizeSummary(String label) {
+        List<ImFunction> functions = new ArrayList<>(ImHelper.calculateFunctionsOfProg(trans.getImProg()));
+        int totalNodes = 0;
+        List<Pair<ImFunction, Integer>> bySize = new ArrayList<>(functions.size());
+        for (ImFunction f : functions) {
+            int size = estimateSize(f.getBody());
+            totalNodes += size;
+            bySize.add(Pair.create(f, size));
+        }
+        bySize.sort((a, b) -> Integer.compare(b.getB(), a.getB()));
+        StringBuilder top = new StringBuilder();
+        int limit = Math.min(5, bySize.size());
+        for (int i = 0; i < limit; i++) {
+            Pair<ImFunction, Integer> p = bySize.get(i);
+            if (i > 0) {
+                top.append(", ");
+            }
+            top.append(p.getA().getName()).append("=").append(p.getB());
+        }
+        logLocalOpt(label + " functions=" + functions.size() + " totalNodes=" + totalNodes + " top=[" + top + "]");
+    }
+
+    private int estimateSize(Element e) {
+        int size = 0;
+        for (int i = 0; i < e.size(); i++) {
+            size += 1 + estimateSize(e.get(i));
+        }
+        return size;
     }
 
 }
