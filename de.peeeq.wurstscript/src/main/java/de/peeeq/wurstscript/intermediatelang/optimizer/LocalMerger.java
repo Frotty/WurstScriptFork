@@ -16,6 +16,9 @@ import java.util.*;
 
 public class LocalMerger implements OptimizerPass {
     private int totalLocalsMerged = 0;
+    private static final boolean PROFILE = Boolean.parseBoolean(System.getProperty("wurst.localmerger.profile", "true"));
+    private static final long SLOW_FUNC_MS = Long.getLong("wurst.localmerger.slowFuncMs", 1000L);
+    private static final int MAX_SCC_ITER = Integer.getInteger("wurst.localmerger.maxSccIter", 1_000_000);
 
     @Override
     public int optimize(ImTranslator trans) {
@@ -33,9 +36,24 @@ public class LocalMerger implements OptimizerPass {
     public String getName() { return "Local variables merged"; }
 
     void optimizeFunc(ImFunction func) {
-        Map<ImStmt, Set<ImVar>> livenessInfo = calculateLiveness(func);
+        long t0 = System.nanoTime();
+        LivenessResult livenessResult = calculateLivenessDetailed(func);
+        Map<ImStmt, Set<ImVar>> livenessInfo = livenessResult.livenessInfo;
         eliminateDeadCode(livenessInfo);
         mergeLocals(livenessInfo, func);
+        if (PROFILE) {
+            long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
+            if (elapsedMs >= SLOW_FUNC_MS) {
+                de.peeeq.wurstscript.WLogger.warning("[LocalMerger] slow function '" + func.getName()
+                    + "' elapsedMs=" + elapsedMs
+                    + " nodes=" + livenessResult.nodeCount
+                    + " sccCount=" + livenessResult.sccCount
+                    + " maxSccSize=" + livenessResult.maxSccSize
+                    + " sccIterations=" + livenessResult.totalSccIterations
+                    + " maxSccIterations=" + livenessResult.maxSccIterations
+                    + " abortedScc=" + livenessResult.abortedSccIterations);
+            }
+        }
     }
 
     private boolean canMerge(ImType a, ImType b) { return a.equalsType(b); }
@@ -200,6 +218,38 @@ public class LocalMerger implements OptimizerPass {
      * over the strongly connected components of the control flow graph.
      */
     public Map<ImStmt, Set<ImVar>> calculateLiveness(ImFunction func) {
+        return calculateLivenessDetailed(func).livenessInfo;
+    }
+
+    private static final class LivenessResult {
+        final Map<ImStmt, Set<ImVar>> livenessInfo;
+        final int nodeCount;
+        final int sccCount;
+        final int maxSccSize;
+        final long totalSccIterations;
+        final long maxSccIterations;
+        final boolean abortedSccIterations;
+
+        private LivenessResult(
+            Map<ImStmt, Set<ImVar>> livenessInfo,
+            int nodeCount,
+            int sccCount,
+            int maxSccSize,
+            long totalSccIterations,
+            long maxSccIterations,
+            boolean abortedSccIterations
+        ) {
+            this.livenessInfo = livenessInfo;
+            this.nodeCount = nodeCount;
+            this.sccCount = sccCount;
+            this.maxSccSize = maxSccSize;
+            this.totalSccIterations = totalSccIterations;
+            this.maxSccIterations = maxSccIterations;
+            this.abortedSccIterations = abortedSccIterations;
+        }
+    }
+
+    private LivenessResult calculateLivenessDetailed(ImFunction func) {
         // 1. Build Control Flow Graph
         ControlFlowGraph cfg = new ControlFlowGraph(func.getBody());
         final List<Node> nodes = cfg.getNodes();
@@ -267,6 +317,12 @@ public class LocalMerger implements OptimizerPass {
         // The algorithm on the reversed graph gives a topological sort of the original graph's SCCs.
         // Therefore, we reverse the list to get the required processing order.
         Collections.reverse(sccs);
+        int maxSccSize = 0;
+        for (List<Node> scc : sccs) {
+            if (scc.size() > maxSccSize) {
+                maxSccSize = scc.size();
+            }
+        }
 
         // 4. Initialize IN and OUT sets for the data-flow analysis
         @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] in  = new ObjectOpenHashSet[N];
@@ -274,12 +330,23 @@ public class LocalMerger implements OptimizerPass {
         for (int i = 0; i < N; i++) { in[i] = new ObjectOpenHashSet<>(); out[i] = new ObjectOpenHashSet<>(); }
 
         // 5. Iterate over SCCs in reverse topological order
+        long totalSccIterations = 0;
+        long maxSccIterations = 0;
+        boolean abortedSccIterations = false;
         for (List<Node> scc : sccs) {
             if (scc.isEmpty()) continue;
 
             // Iterate within this SCC until a fixed point is reached for all its nodes.
             boolean changedInScc = true;
+            int sccIterations = 0;
             while (changedInScc) {
+                sccIterations++;
+                if (sccIterations > MAX_SCC_ITER) {
+                    abortedSccIterations = true;
+                    de.peeeq.wurstscript.WLogger.warning("[LocalMerger] aborting SCC fixpoint for function '" + func.getName()
+                        + "' after iterations=" + sccIterations + " sccSize=" + scc.size() + " nodes=" + N);
+                    break;
+                }
                 changedInScc = false;
                 for (Node u_node : scc) {
                     int u_idx = idx.getInt(u_node);
@@ -309,6 +376,10 @@ public class LocalMerger implements OptimizerPass {
                     }
                 }
             }
+            totalSccIterations += sccIterations;
+            if (sccIterations > maxSccIterations) {
+                maxSccIterations = sccIterations;
+            }
         }
 
         // 6. Collect results into the final map format
@@ -319,6 +390,6 @@ public class LocalMerger implements OptimizerPass {
                 result.put(stmt, io.vavr.collection.HashSet.ofAll(out[i]));
             }
         }
-        return result;
+        return new LivenessResult(result, N, sccs.size(), maxSccSize, totalSccIterations, maxSccIterations, abortedSccIterations);
     }
 }
