@@ -98,6 +98,7 @@ public class ImTranslator {
 
     private final Map<ClassDef, Map<TypeParamDef, ImTypeVar>> capturedOwnerTypeVarsByStaticClass = new IdentityHashMap<>();
     private final Deque<Map<TypeParamDef, ImTypeVar>> typeVarOverrideStack = new ArrayDeque<>();
+    private final Deque<ImVar> continueFlagStack = new ArrayDeque<>();
 
     private static boolean hasTypeVarNamed(ImTypeVars vars, String name) {
         for (ImTypeVar v : vars) {
@@ -117,6 +118,18 @@ public class ImTranslator {
 
     public void popTypeVarOverrides(Map<TypeParamDef, ImTypeVar> m) {
         if (m != null && !m.isEmpty()) typeVarOverrideStack.pop();
+    }
+
+    public void pushContinueFlag(ImVar continueFlag) {
+        continueFlagStack.push(continueFlag);
+    }
+
+    public void popContinueFlag() {
+        continueFlagStack.pop();
+    }
+
+    public @Nullable ImVar currentContinueFlag() {
+        return continueFlagStack.peek();
     }
 
 
@@ -1435,8 +1448,12 @@ public class ImTranslator {
             for (WParameter p : constr.getParameters()) {
                 params.add(getVarFor(p));
             }
-
-            f = ImFunction(constr, name, ImTypeVars(), params, ImVoid(), ImVars(), ImStmts(), flags());
+            List<FunctionFlag> constructorFlags = flags();
+            if (!constr.getParameters().isEmpty()
+                && constr.getParameters().get(constr.getParameters().size() - 1).attrIsVararg()) {
+                constructorFlags.add(IS_VARARG);
+            }
+            f = ImFunction(constr, name, ImTypeVars(), params, ImVoid(), ImVars(), ImStmts(), constructorFlags);
             addFunction(f, constr);
             constructorFuncs.put(constr, f);
         }
@@ -1468,8 +1485,12 @@ public class ImTranslator {
         ImFunction f = constrNewFuncs.get(constr);
         if (f == null) {
             String name = "new_" + constr.attrNearestClassDef().getName();
-
-            f = ImFunction(constr, name, ImTypeVars(), ImVars(), selfType(constr.attrNearestClassOrInterface()), ImVars(), ImStmts(), flags());
+            List<FunctionFlag> constructorFlags = flags();
+            if (!constr.getParameters().isEmpty()
+                && constr.getParameters().get(constr.getParameters().size() - 1).attrIsVararg()) {
+                constructorFlags.add(IS_VARARG);
+            }
+            f = ImFunction(constr, name, ImTypeVars(), ImVars(), selfType(constr.attrNearestClassOrInterface()), ImVars(), ImStmts(), constructorFlags);
             addFunction(f, constr);
             constrNewFuncs.put(constr, f);
         }
@@ -2038,7 +2059,40 @@ public class ImTranslator {
     }
 
     public ClassManagementVars getClassManagementVarsFor(ImClass c) {
-        return getClassManagementVars().get(c);
+        Map<ImClass, ClassManagementVars> vars = getClassManagementVars();
+        ClassManagementVars res = vars.get(c);
+        if (res != null) {
+            return res;
+        }
+        // Try to recover by aliasing to an already existing entry without rebuilding.
+        ClassManagementVars alias = findClassManagementAlias(c, vars);
+        if (alias != null) {
+            vars.put(c, alias);
+            return alias;
+        }
+        // Extend mapping for current class graph only; do not clear and rebuild map,
+        // as rebuilding creates duplicate globals/initializers.
+        Partitions<ImClass> p = buildClassPartitions();
+        p.add(c);
+        for (ImClassType sc : c.getSuperClasses()) {
+            p.union(c, sc.getClassDef());
+        }
+        ImClass rep = p.getRep(c);
+        ClassManagementVars repVars = vars.get(rep);
+        if (repVars == null) {
+            repVars = findClassManagementAlias(rep, vars);
+            if (repVars == null) {
+                repVars = new ClassManagementVars(rep, this);
+            }
+            vars.put(rep, repVars);
+        }
+        for (ImClass cls : imProg.getClasses()) {
+            if (p.getRep(cls) == rep) {
+                vars.putIfAbsent(cls, repVars);
+            }
+        }
+        vars.put(c, repVars);
+        return repVars;
     }
 
 
@@ -2050,8 +2104,18 @@ public class ImTranslator {
         if (classManagementVars != null) {
             return classManagementVars;
         }
-        // create partitions, such that each sub-class and super-class are in
-        // the same partition
+        Partitions<ImClass> p = buildClassPartitions();
+        // generate typeId variables
+        classManagementVars = new IdentityHashMap<>();
+        for (ImClass c : imProg.getClasses()) {
+            ImClass rep = p.getRep(c);
+            ClassManagementVars v = classManagementVars.computeIfAbsent(rep, r -> new ClassManagementVars(r, this));
+            classManagementVars.put(c, v);
+        }
+        return classManagementVars;
+    }
+
+    private Partitions<ImClass> buildClassPartitions() {
         Partitions<ImClass> p = new Partitions<>();
         for (ImClass c : imProg.getClasses()) {
             p.add(c);
@@ -2059,14 +2123,17 @@ public class ImTranslator {
                 p.union(c, sc.getClassDef());
             }
         }
-        // generate typeId variables
-        classManagementVars = Maps.newLinkedHashMap();
-        for (ImClass c : imProg.getClasses()) {
-            ImClass rep = p.getRep(c);
-            ClassManagementVars v = classManagementVars.computeIfAbsent(rep, r -> new ClassManagementVars(r, this));
-            classManagementVars.put(c, v);
+        return p;
+    }
+
+    private @Nullable ClassManagementVars findClassManagementAlias(ImClass target, Map<ImClass, ClassManagementVars> vars) {
+        for (Map.Entry<ImClass, ClassManagementVars> e : vars.entrySet()) {
+            ImClass k = e.getKey();
+            if (k == target || k.attrTrace() == target.attrTrace()) {
+                return e.getValue();
+            }
         }
-        return classManagementVars;
+        return null;
     }
 
 

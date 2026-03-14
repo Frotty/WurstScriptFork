@@ -5,6 +5,7 @@ import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
+import de.peeeq.wurstscript.attributes.names.OtherLink;
 import de.peeeq.wurstscript.types.*;
 import de.peeeq.wurstscript.utils.Utils;
 import org.eclipse.jdt.annotation.Nullable;
@@ -68,13 +69,13 @@ public class AttrExprType {
 
             return WurstTypeUnknown.instance();
         }
-        if (varDef.getDef() instanceof VarDef) {
+        if (!(varDef instanceof OtherLink) && varDef.getDef() instanceof VarDef) {
             if (Utils.getParentVarDef(Optional.of(term)) == Optional.of((VarDef) varDef.getDef())) {
                 term.addError("Recursive variable definition is not allowed.");
                 return WurstTypeUnknown.instance();
             }
         }
-        if (varDef.getDef() instanceof FunctionDefinition) {
+        if (!(varDef instanceof OtherLink) && varDef.getDef() instanceof FunctionDefinition) {
             term.addError("Missing parantheses for function call");
         }
         return varDef.getTyp();
@@ -100,9 +101,23 @@ public class AttrExprType {
         WurstType varDefType = varDef.getTyp();
         if (varDefType instanceof WurstTypeArray) {
             return ((WurstTypeArray) varDefType).getBaseType();
-        } else {
-            term.addError("Variable " + varDef.getName() + " is of type " + varDefType + ", should be an array variable.");
         }
+        if (term.getIndexes().size() == 1) {
+            WurstType indexType = term.getIndexes().get(0).attrTyp();
+            FuncLink getOverload = AttrFuncDef.getIndexGetOperator(term, varDefType, indexType);
+            if (getOverload != null) {
+                return getOverload.getReturnType();
+            }
+            if (isWriteAccess(term)) {
+                FuncLink setOverload = AttrFuncDef.getIndexSetOperatorByIndex(term, varDefType, indexType);
+                if (setOverload != null) {
+                    return setOverload.getParameterType(1);
+                }
+                return WurstTypeUnknown.instance();
+            }
+        }
+        term.addError("Variable " + varDef.getName() + " is of type " + varDefType +
+                ", should be an array variable or define operator overloading function " + AttrFuncDef.overloadingIndexGet + ".");
         return WurstTypeUnknown.instance();
     }
 
@@ -388,10 +403,10 @@ public class AttrExprType {
         if (varDef == null) {
             return WurstTypeUnknown.instance();
         }
-        if (varDef.getDef() instanceof FunctionDefinition) {
+        if (!(varDef instanceof OtherLink) && varDef.getDef() instanceof FunctionDefinition) {
             term.addError("Missing parantheses for function call");
         }
-        if (varDef.getDef().attrIsStatic() && !term.getLeft().attrTyp().isStaticRef()) {
+        if (!(varDef instanceof OtherLink) && varDef.getDef().attrIsStatic() && !term.getLeft().attrTyp().isStaticRef()) {
             term.addError("Cannot access static variable " + term.getVarName() + " via a dynamic reference.");
         }
         return varDef.getTyp(); // TODO .setTypeArgs(term.getLeft().attrTyp().getTypeArgBinding());
@@ -403,7 +418,7 @@ public class AttrExprType {
         if (varDef == null) {
             return WurstTypeUnknown.instance();
         }
-        if (varDef.getDef().attrIsStatic() && !term.getLeft().attrTyp().isStaticRef()) {
+        if (!(varDef instanceof OtherLink) && varDef.getDef().attrIsStatic() && !term.getLeft().attrTyp().isStaticRef()) {
             term.addError("Cannot access static array variable " + term.getVarName() + " via a dynamic reference.");
         }
         WurstType typ = varDef.getTyp();
@@ -411,7 +426,21 @@ public class AttrExprType {
             WurstTypeArray ar = (WurstTypeArray) typ;
             return ar.getBaseType();
         }
-        term.addError("Variable " + term.getVarName() + " is not an array.");
+        if (term.getIndexes().size() == 1) {
+            WurstType indexType = term.getIndexes().get(0).attrTyp();
+            FuncLink getOverload = AttrFuncDef.getIndexGetOperator(term, typ, indexType);
+            if (getOverload != null) {
+                return getOverload.getReturnType();
+            }
+            if (isWriteAccess(term)) {
+                FuncLink setOverload = AttrFuncDef.getIndexSetOperatorByIndex(term, typ, indexType);
+                if (setOverload != null) {
+                    return setOverload.getParameterType(1);
+                }
+                return WurstTypeUnknown.instance();
+            }
+        }
+        term.addError("Variable " + term.getVarName() + " is not an array and has no " + AttrFuncDef.overloadingIndexGet + " overload.");
         return typ;
     }
 
@@ -590,5 +619,13 @@ public class AttrExprType {
         }
         exprArrayLength.addError(".length is only valid on arrays.");
         return de.peeeq.wurstscript.types.WurstTypeUnknown.instance();
+    }
+
+    private static boolean isWriteAccess(NameRef node) {
+        if (node.getParent() instanceof StmtSet) {
+            StmtSet stmtSet = (StmtSet) node.getParent();
+            return stmtSet.getUpdatedExpr() == node;
+        }
+        return false;
     }
 }

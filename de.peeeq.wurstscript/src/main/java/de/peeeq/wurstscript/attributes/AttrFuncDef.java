@@ -34,6 +34,8 @@ public class AttrFuncDef {
     public final static String overloadingMinus = "op_minus";
     public final static String overloadingMult = "op_mult";
     public final static String overloadingDiv = "op_divReal";
+    public final static String overloadingIndexGet = "op_index";
+    public final static String overloadingIndexSet = "op_indexAssign";
 
     public static FuncLink calculate(final ExprFuncRef node) {
 
@@ -166,6 +168,9 @@ public class AttrFuncDef {
 
 
     public static @Nullable FuncLink calculate(final ExprFunctionCall node) {
+        if (isConstructorThisCall(node)) {
+            return null;
+        }
         FuncLink result = searchFunction(node.getFuncName(), node, argumentTypes(node));
 
         if (result == null) {
@@ -181,12 +186,96 @@ public class AttrFuncDef {
         return result;
     }
 
+    private static boolean isConstructorThisCall(ExprFunctionCall node) {
+        if (!node.getFuncName().equals("this")) {
+            return false;
+        }
+        Element current = node;
+        while (current != null) {
+            if (current instanceof ConstructorDef) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
     private static @Nullable FuncLink getExtensionFunction(Expr left, Expr right, WurstOperator op) {
         String funcName = op.getOverloadingFuncName();
         if (funcName == null || nativeOperator(op, left.attrTyp(), right.attrTyp(), left)) {
             return null;
         }
         return searchMemberFunc(left, left.attrTyp(), funcName, Collections.singletonList(right.attrTyp()));
+    }
+
+    public static @Nullable FuncLink getIndexGetOperator(Expr node, WurstType receiverType, WurstType indexType) {
+        List<WurstType> argTypes = Collections.singletonList(indexType);
+        FuncLink candidate = searchMemberFunc(node, receiverType, overloadingIndexGet, argTypes);
+        if (candidate == null || !matchesArguments(node, candidate, argTypes)) {
+            return null;
+        }
+        return candidate;
+    }
+
+    public static @Nullable FuncLink getIndexSetOperator(Expr node, WurstType receiverType, WurstType indexType, WurstType valueType) {
+        List<WurstType> argTypes = Lists.newArrayList(indexType, valueType);
+        FuncLink candidate = searchMemberFunc(node, receiverType, overloadingIndexSet, argTypes);
+        if (candidate == null || !matchesArguments(node, candidate, argTypes)) {
+            return null;
+        }
+        return candidate;
+    }
+
+    public static @Nullable FuncLink getIndexSetOperatorByIndex(Expr node, WurstType receiverType, WurstType indexType) {
+        Collection<FuncLink> funcs1 = node.lookupMemberFuncs(receiverType, overloadingIndexSet);
+        if (funcs1.isEmpty()) {
+            return null;
+        }
+        List<FuncLink> funcs = filterInvisible(overloadingIndexSet, node, funcs1);
+        funcs = filterByReceiverType(node, overloadingIndexSet, funcs);
+        List<FuncLink> byParamCount = Lists.newArrayList();
+        for (FuncLink f : funcs) {
+            if (f.getParameterTypes().size() == 2) {
+                byParamCount.add(f);
+            }
+        }
+        if (byParamCount.isEmpty()) {
+            return null;
+        }
+        List<FuncLink> byIndexType = Lists.newArrayList();
+        for (FuncLink f : byParamCount) {
+            VariableBinding mapping = f.getVariableBinding();
+            WurstType expectedIndexType = f.getParameterType(0);
+            VariableBinding m2 = indexType.matchAgainstSupertype(expectedIndexType, node, mapping, VariablePosition.RIGHT);
+            if (m2 != null) {
+                byIndexType.add(f);
+            }
+        }
+        if (byIndexType.isEmpty()) {
+            return null;
+        }
+        if (byIndexType.size() == 1) {
+            return byIndexType.get(0);
+        }
+        // ambiguous write-only expected type context: pick deterministic first
+        return byIndexType.get(0);
+    }
+
+    private static boolean matchesArguments(Element node, FuncLink f, List<WurstType> argumentTypes) {
+        if (f.getParameterTypes().size() != argumentTypes.size()) {
+            return false;
+        }
+        VariableBinding mapping = f.getVariableBinding();
+        for (int i = 0; i < argumentTypes.size(); i++) {
+            WurstType at = argumentTypes.get(i);
+            WurstType pt = f.getParameterType(i);
+            VariableBinding m2 = at.matchAgainstSupertype(pt, node, mapping, VariablePosition.RIGHT);
+            if (m2 == null) {
+                return false;
+            }
+            mapping = m2;
+        }
+        return true;
     }
 
 

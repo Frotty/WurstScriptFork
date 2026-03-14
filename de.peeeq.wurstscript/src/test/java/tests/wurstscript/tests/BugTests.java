@@ -162,6 +162,53 @@ public class BugTests extends WurstScriptTest {
                 "endpackage");
     }
 
+    @Test
+    public void classVarInitOrderShouldError_770() {
+        testAssertErrorsLines(false, "used before it is initialized",
+                "package test",
+                "class B",
+                "    var i = 0",
+                "    function get() returns int",
+                "        return i",
+                "class A",
+                "    private var foo = b.get()",
+                "    private var b = new B()",
+                "endpackage");
+    }
+
+    @Test
+    public void dependencyDiagnosticsAreMuted() {
+        CompilationResult res = test()
+            .setStopOnFirstError(false)
+            .withCu(compilationUnit("_build/dependencies/dep/Dep.wurst",
+                "package dep",
+                "init",
+                "    if true",
+                "endpackage"))
+            .run();
+
+        Assert.assertTrue(res.getGui().getErrorList().isEmpty(), "Expected no errors.");
+        Assert.assertTrue(res.getGui().getWarningList().isEmpty(),
+            "Expected no warnings from _build/dependencies sources.");
+    }
+
+    @Test
+    public void projectDiagnosticsStayVisible() {
+        CompilationResult res = test()
+            .setStopOnFirstError(false)
+            .withCu(compilationUnit("wurst/Local.wurst",
+                "package local",
+                "init",
+                "    if true",
+                "endpackage"))
+            .run();
+
+        Assert.assertTrue(res.getGui().getErrorList().isEmpty(), "Expected no errors.");
+        Assert.assertTrue(res.getGui().getWarningList().stream()
+                .anyMatch(w -> w.getMessage().contains("empty then-block")),
+            "Expected warning for project sources.");
+    }
+
 
     @Test
     public void test_for_from() {
@@ -849,6 +896,37 @@ public class BugTests extends WurstScriptTest {
             "	if i == 5",
             "		testSuccess()"
         );
+    }
+
+    @Test
+    public void forRangeStartReadsParameter() {
+        CompilationResult result = test()
+            .setStopOnFirstError(false)
+            .executeProg(false)
+            .lines(
+                "package test",
+                "function foo(int bar)",
+                "    for i = bar to 10",
+                "        skip",
+                "endpackage"
+            );
+
+        Assert.assertTrue(
+            result.getGui().getWarningList().stream()
+                .noneMatch(w -> w.getMessage().contains("The parameter bar is never read")),
+            "Unexpected unused warning for parameter bar: " + result.getGui().getWarningList()
+        );
+    }
+
+    @Test
+    public void forRangeLoopVarIsImmutable() {
+        testAssertErrorsLines(false, "Cannot assign a new value to constant",
+            "package test",
+            "init",
+            "    int stackPointer = 3",
+            "    for i = 0 to stackPointer",
+            "        i--",
+            "endpackage");
     }
 
 

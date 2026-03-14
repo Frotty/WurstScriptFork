@@ -34,6 +34,7 @@ public class EliminateClasses {
     private final ImProg prog;
     private final Map<ImVar, ImVar> fieldToArray = Maps.newLinkedHashMap();
     private final Map<ImMethod, ImFunction> dispatchFuncs = Maps.newLinkedHashMap();
+    private final Map<DispatchKey, ImFunction> narrowedDispatchFuncs = Maps.newLinkedHashMap();
     private final RecycleCodeGenerator recycleCodeGen = new RecycleCodeGeneratorQueue();
     private final boolean checkedDispatch;
     private final Set<String> specialNatives = ImmutableSet.of(
@@ -42,6 +43,7 @@ public class EliminateClasses {
         INSTANCE_COUNT,
         MAX_INSTANCE_COUNT
     );
+    private final Map<ImClass, Integer> classIds;
     private ImFunction typeIdToTypeNameFunc;
     private ImFunction maxTypeIdFunc;
     private ImFunction instanceCountFunc;
@@ -51,6 +53,7 @@ public class EliminateClasses {
         translator = tr;
         this.prog = prog;
         this.checkedDispatch = checkedDispatch;
+        this.classIds = TypeId.calculate(prog);
     }
 
     public void eliminateClasses() {
@@ -67,7 +70,7 @@ public class EliminateClasses {
             createDispatchFunc(c, m);
         }
 
-        for (ImFunction f : prog.getFunctions()) {
+        for (ImFunction f : new ArrayList<>(prog.getFunctions())) {
             eliminateClassRelatedExprs(f.getBody());
         }
 
@@ -87,32 +90,47 @@ public class EliminateClasses {
             "instanceCount",
             TypesHelper.imInt(),
             JassIm.ImIntVal(0),
-            c ->
-                JassIm.ImOperatorCall(WurstOperator.MINUS,
+            c -> {
+                ClassManagementVars m = translator.getClassManagementVarsFor(c);
+                if (m == null) {
+                    return JassIm.ImIntVal(0);
+                }
+                return JassIm.ImOperatorCall(WurstOperator.MINUS,
                     JassIm.ImExprs(
-                        JassIm.ImVarAccess(translator.getClassManagementVarsFor(c).maxIndex),
-                        JassIm.ImVarAccess(translator.getClassManagementVarsFor(c).freeCount))));
+                        JassIm.ImVarAccess(m.maxIndex),
+                        JassIm.ImVarAccess(m.freeCount)));
+            });
         maxInstanceCountFunc = accessClassManagementVar(
             "maxInstanceCount",
             TypesHelper.imInt(),
             JassIm.ImIntVal(0),
-            c -> JassIm.ImVarAccess(translator.getClassManagementVarsFor(c).maxIndex));
+            c -> {
+                ClassManagementVars m = translator.getClassManagementVarsFor(c);
+                if (m == null) {
+                    return JassIm.ImIntVal(0);
+                }
+                return JassIm.ImVarAccess(m.maxIndex);
+            });
         maxTypeIdFunc = maxTypeIdFunc();
     }
 
     @NotNull
     private ImFunction maxTypeIdFunc() {
         ImVars parameters = JassIm.ImVars();
-        int maxTypeId = calculateMaxTypeId(prog);
+        int maxTypeId = calculateMaxTypeId(classIds);
         ImFunction f = JassIm.ImFunction(prog.getTrace(), "maxTypeId", JassIm.ImTypeVars(), parameters, imInt(), JassIm.ImVars(), JassIm.ImStmts(JassIm.ImReturn(prog.getTrace(), JassIm.ImIntVal(maxTypeId))), Collections.emptyList());
         prog.getFunctions().add(f);
         return f;
     }
 
     public static int calculateMaxTypeId(ImProg prog) {
+        return calculateMaxTypeId(TypeId.calculate(prog));
+    }
+
+    private static int calculateMaxTypeId(Map<ImClass, Integer> classId) {
         boolean seen = false;
         int best = 0;
-        for (Integer x : prog.attrTypeId().values()) {
+        for (Integer x : classId.values()) {
             int i = x;
             if (!seen || i > best) {
                 seen = true;
@@ -128,10 +146,9 @@ public class EliminateClasses {
         ImVar typeId = JassIm.ImVar(trace, TypesHelper.imInt(), "typeId", false);
         ImVars parameters = JassIm.ImVars(typeId);
         ImVars locals = JassIm.ImVars();
-        Map<ImClass, Integer> classId = prog.attrTypeId();
-        int maxTypeId = calculateMaxTypeId(prog);
+        int maxTypeId = calculateMaxTypeId(classIds);
         ImClass[] typeIdToClass = new ImClass[maxTypeId + 1];
-        for (Map.Entry<ImClass, Integer> e : classId.entrySet()) {
+        for (Map.Entry<ImClass, Integer> e : classIds.entrySet()) {
             typeIdToClass[e.getValue()] = e.getKey();
         }
         ImStmts body = generateBinarySearch(1, maxTypeId, typeId, typeIdToClass, makeAccess);
@@ -148,7 +165,11 @@ public class EliminateClasses {
         if (lower > upper) {
             return JassIm.ImStmts();
         } else if (lower == upper) {
-            return JassIm.ImStmts(JassIm.ImReturn(prog.getTrace(), makeAccess.apply(typeIdToClass[lower])));
+            ImClass c = typeIdToClass[lower];
+            if (c == null) {
+                return JassIm.ImStmts();
+            }
+            return JassIm.ImStmts(JassIm.ImReturn(prog.getTrace(), makeAccess.apply(c)));
         } else {
             int mid = lower + (upper - lower) / 2;
             return
@@ -358,6 +379,29 @@ public class EliminateClasses {
         }
     }
 
+    private static final class DispatchKey {
+        private final ImMethod method;
+        private final ImClass receiverClass;
+
+        private DispatchKey(ImMethod method, ImClass receiverClass) {
+            this.method = method;
+            this.receiverClass = receiverClass;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof DispatchKey)) return false;
+            DispatchKey that = (DispatchKey) o;
+            return method == that.method && receiverClass == that.receiverClass;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(method) * 31 + System.identityHashCode(receiverClass);
+        }
+    }
+
     private void addSubMethods(ImMethod m, List<ImMethod> methods) {
         if (!m.getIsAbstract()) {
             methods.add(m);
@@ -376,8 +420,14 @@ public class EliminateClasses {
      */
     private List<Pair<IntRange, ImMethod>> calculateTypeIdRanges(ImClass c,
                                                                  List<ImMethod> methods) {
+        return calculateTypeIdRanges(c, methods, null);
+    }
+
+    private List<Pair<IntRange, ImMethod>> calculateTypeIdRanges(ImClass c,
+                                                                 List<ImMethod> methods,
+                                                                 ImMethod initialCurrent) {
         Map<Integer, ImMethod> typeIdToMethod = Maps.newLinkedHashMap();
-        calculateTypeIdToMethodHelper(c, methods, null, typeIdToMethod);
+        calculateTypeIdToMethodHelper(c, methods, initialCurrent, typeIdToMethod);
 
         int min = Integer.MAX_VALUE;
         int max = 0;
@@ -403,6 +453,104 @@ public class EliminateClasses {
         return result;
     }
 
+    private ImMethod resolveCurrentMethodForClass(ImClass receiverClass, List<ImMethod> methods) {
+        ImMethod best = null;
+        for (ImMethod m : methods) {
+            ImClass mc = m.attrClass();
+            if (mc == null) {
+                continue;
+            }
+            if (!receiverClass.isSubclassOf(mc)) {
+                continue;
+            }
+            if (best == null || mc.isSubclassOf(best.attrClass())) {
+                best = m;
+            }
+        }
+        return best;
+    }
+
+    private ImFunction getOrCreateNarrowedDispatch(ImMethod baseMethod, ImClass receiverClass) {
+        DispatchKey key = new DispatchKey(baseMethod, receiverClass);
+        ImFunction existing = narrowedDispatchFuncs.get(key);
+        if (existing != null) {
+            return existing;
+        }
+
+        List<ImMethod> methods = Lists.newArrayList();
+        addSubMethods(baseMethod, methods);
+        ImMethod initialCurrent = resolveCurrentMethodForClass(receiverClass, methods);
+        List<Pair<IntRange, ImMethod>> ranges = calculateTypeIdRanges(receiverClass, methods, initialCurrent);
+
+        ImFunction impl = baseMethod.getImplementation();
+        List<FunctionFlag> flags = new ArrayList<>();
+        if (impl.hasFlag(FunctionFlagEnum.IS_VARARG)) {
+            flags.add(FunctionFlagEnum.IS_VARARG);
+        }
+
+        ImFunction df = JassIm.ImFunction(
+            baseMethod.getTrace(),
+            "dispatch_narrow_" + receiverClass.getName() + "_" + baseMethod.getMethodClass().getClassDef().getName() + "_" + baseMethod.getName(),
+            JassIm.ImTypeVars(),
+            impl.getParameters().copy(),
+            impl.getReturnType(),
+            JassIm.ImVars(),
+            JassIm.ImStmts(),
+            flags
+        );
+        prog.getFunctions().add(df);
+        narrowedDispatchFuncs.put(key, df);
+
+        ImType returnType = df.getReturnType();
+        if (ranges.isEmpty()) {
+            if (!(returnType instanceof ImVoid)) {
+                ImExpr rv = ImHelper.defaultValueForComplexType(returnType);
+                df.getBody().add(JassIm.ImReturn(df.getTrace(), rv));
+            }
+            return df;
+        }
+
+        ImVar resultVar;
+        if (returnType instanceof ImVoid) {
+            resultVar = null;
+        } else {
+            resultVar = JassIm.ImVar(df.getTrace(), returnType, baseMethod.getName() + "_result", false);
+            df.getLocals().add(resultVar);
+        }
+
+        ImClass dispatchRoot = baseMethod.getMethodClass().getClassDef();
+        ClassManagementVars mVars = translator.getClassManagementVarsFor(dispatchRoot);
+        ImVar thisVar = df.getParameters().get(0);
+        ImExpr typeId = JassIm.ImVarArrayAccess(baseMethod.getTrace(), mVars.typeId, JassIm.ImExprs(JassIm.ImVarAccess(thisVar)));
+
+        if (checkedDispatch) {
+            Element trace = baseMethod.attrTrace();
+            String methodName = getMethodName(baseMethod);
+            df.getBody().add(
+                JassIm.ImIf(
+                    df.getTrace(), JassIm.ImOperatorCall(WurstOperator.EQ, JassIm.ImExprs(
+                        typeId.copy(), JassIm.ImIntVal(0)
+                    )),
+                    JassIm.ImStmts(JassIm.ImIf(df.getTrace(), JassIm.ImOperatorCall(WurstOperator.EQ, JassIm.ImExprs(
+                            JassIm.ImVarAccess(thisVar), JassIm.ImIntVal(0)
+                        )),
+                        JassIm.ImStmts(translator.imError(trace, JassIm.ImStringVal("Nullpointer exception when calling " + dispatchRoot.getName() + "." + methodName))),
+                        JassIm.ImStmts(translator.imError(trace, JassIm.ImStringVal("Called " + dispatchRoot.getName() + "." + methodName + " on invalid object.")))
+                    )),
+                    JassIm.ImStmts()
+                )
+            );
+        }
+
+        createDispatch(df, df.getBody(), resultVar, typeId, ranges, 0, ranges.size() - 1);
+        if (resultVar != null) {
+            df.getBody().add(
+                JassIm.ImReturn(df.getTrace(),
+                    JassIm.ImVarAccess(resultVar)));
+        }
+        return df;
+    }
+
     private void calculateTypeIdToMethodHelper(ImClass c,
                                                List<ImMethod> methods, ImMethod current,
                                                Map<Integer, ImMethod> typeIdToMethod) {
@@ -413,7 +561,7 @@ public class EliminateClasses {
             }
         }
         if (current != null) {
-            typeIdToMethod.put(c.attrTypeId(), current);
+            typeIdToMethod.put(typeIdOf(c), current);
         }
         // process subclasses:
         for (ImClass sc : c.attrSubclasses()) {
@@ -539,7 +687,7 @@ public class EliminateClasses {
     }
 
     private void replaceTypeIdOfClass(ImTypeIdOfClass e) {
-        e.replaceBy(JassIm.ImIntVal(e.getClazz().getClassDef().attrTypeId()));
+        e.replaceBy(JassIm.ImIntVal(typeIdOf(e.getClazz().getClassDef())));
     }
 
     private void replaceInstanceof(ImInstanceof e) {
@@ -547,8 +695,7 @@ public class EliminateClasses {
         List<ImClass> allSubClasses = getAllSubclasses(e.getClazz().getClassDef());
         List<Integer> subClassIds = new ArrayList<>();
         for (ImClass allSubClass : allSubClasses) {
-            Integer attrTypeId = allSubClass.attrTypeId();
-            subClassIds.add(attrTypeId);
+            subClassIds.add(typeIdOf(allSubClass));
         }
         List<IntRange> idRanges = IntRange.createFromIntList(subClassIds);
         ImExpr obj = e.getObj();
@@ -608,6 +755,18 @@ public class EliminateClasses {
         }
     }
 
+    private int typeIdOf(ImClass c) {
+        Integer id = classIds.get(c);
+        if (id != null) {
+            return id;
+        }
+        Integer fallback = TypeId.calculate(prog).get(c);
+        if (fallback != null) {
+            return fallback;
+        }
+        throw new CompileError(c, "Could not resolve type id for class " + c.getName() + ".");
+    }
+
     private void replaceDealloc(ImDealloc e) {
         ImFunction deallocFunc = translator.deallocFunc.getFor(e.getClazz().getClassDef());
         ImExpr obj = e.getObj();
@@ -623,6 +782,7 @@ public class EliminateClasses {
 
     private void replaceMethodCall(ImMethodCall mc) {
         ImExpr receiver = mc.getReceiver();
+        ImType receiverType = receiver.attrTyp();
         receiver.setParent(null);
 
         ImExprs arguments = JassIm.ImExprs(receiver);
@@ -644,7 +804,17 @@ public class EliminateClasses {
             return;
         }
 
-        ImFunction dispatch = dispatchFuncs.get(method);
+        ImFunction dispatch = null;
+        if (receiverType instanceof ImClassType) {
+            ImClass receiverClass = ((ImClassType) receiverType).getClassDef();
+            ImClass methodClass = method.getMethodClass().getClassDef();
+            if (receiverClass != methodClass && receiverClass.isSubclassOf(methodClass)) {
+                dispatch = getOrCreateNarrowedDispatch(method, receiverClass);
+            }
+        }
+        if (dispatch == null) {
+            dispatch = dispatchFuncs.get(method);
+        }
         if (dispatch == null) {
             throw new CompileError(mc.attrTrace().attrSource(), "Could not find dispatch for " + method.getName());
         }

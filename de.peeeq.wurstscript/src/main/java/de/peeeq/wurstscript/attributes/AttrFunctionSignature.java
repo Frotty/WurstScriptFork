@@ -5,6 +5,7 @@ import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.types.FunctionSignature;
 import de.peeeq.wurstscript.types.VariableBinding;
 import de.peeeq.wurstscript.types.WurstType;
+import de.peeeq.wurstscript.types.WurstTypeCode;
 import de.peeeq.wurstscript.types.WurstTypeUnknown;
 import de.peeeq.wurstscript.utils.Utils;
 import org.jetbrains.annotations.NotNull;
@@ -57,13 +58,48 @@ public class AttrFunctionSignature {
             fc.addError("Cannot infer type for type parameter " + mapping.printUnboundTypeVars());
         }
 
+        checkCodeClosureCaptures(fc, sig);
+
         return sig;
+    }
+
+    private static void checkCodeClosureCaptures(StmtCall fc, FunctionSignature sig) {
+        if (!sig.isValidParameterNumber(fc.getArgs().size())) {
+            return;
+        }
+        for (int i = 0; i < fc.getArgs().size(); i++) {
+            Expr arg = fc.getArgs().get(i);
+            if (!(arg instanceof ExprClosure)) {
+                continue;
+            }
+            if (!(sig.getParamType(i) instanceof WurstTypeCode)) {
+                continue;
+            }
+            ExprClosure closure = (ExprClosure) arg;
+            if (!closure.attrCapturedVariables().isEmpty()) {
+                String codeLambdaContext = codeLambdaContext(fc);
+                closure.attrCapturedVariables().entries().forEach(entry ->
+                    entry.getKey().addError("Cannot capture local variable '" + entry.getValue().getName()
+                        + "' in anonymous function" + codeLambdaContext + ". This is only possible with closures."));
+            }
+        }
+    }
+
+    private static String codeLambdaContext(StmtCall stmtCall) {
+        String funcName = stmtCall instanceof FunctionCall fc ? fc.getFuncName() : "<unknown>";
+        if (stmtCall instanceof ExprMemberMethod) {
+            return " passed as code to ." + funcName + "() ->";
+        }
+        return " passed as code to " + funcName + "() ->";
     }
 
     private static FunctionSignature filterSigs(
             Collection<FunctionSignature> sigs,
             List<WurstType> argTypes, StmtCall location) {
         if (sigs.isEmpty()) {
+            if (location instanceof ExprFunctionCall && isConstructorThisCall((ExprFunctionCall) location)) {
+                return FunctionSignature.empty;
+            }
             if (!isInitTrigFunc(location)) {
                 if (location instanceof ExprMemberMethodDot) {
                     ExprMemberMethodDot emmd = (ExprMemberMethodDot) location;
@@ -115,6 +151,20 @@ public class AttrFunctionSignature {
             location.addError("Call to " + name(location) + " is ambiguous, alternatives are: " + alternatives);
         }
         return candidates.get(0);
+    }
+
+    private static boolean isConstructorThisCall(ExprFunctionCall call) {
+        if (!call.getFuncName().equals("this")) {
+            return false;
+        }
+        Element current = call;
+        while (current != null) {
+            if (current instanceof ConstructorDef) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
     }
 
     private static List<FunctionSignature> filterByIfNotDefinedAnnotation(List<FunctionSignature> candidates) {

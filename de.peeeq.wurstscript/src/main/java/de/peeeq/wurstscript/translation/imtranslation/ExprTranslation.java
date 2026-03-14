@@ -6,6 +6,7 @@ import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.ast.*;
 import de.peeeq.wurstscript.ast.Element;
+import de.peeeq.wurstscript.attributes.AttrFuncDef;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.attributes.names.FuncLink;
 import de.peeeq.wurstscript.attributes.names.NameLink;
@@ -249,6 +250,9 @@ public class ExprTranslation {
 
     private static ImExpr translateNameDef(NameRef e, ImTranslator t, ImFunction f) throws CompileError {
         NameLink link = e.attrNameLink();
+        if (link instanceof OtherLink) {
+            return ((OtherLink) link).translate(e, t, f);
+        }
         NameDef decl = link == null ? null : link.getDef();
         if (decl == null) {
             // should only happen with gg_ variables
@@ -261,6 +265,7 @@ public class ExprTranslation {
             VarDef varDef = (VarDef) decl;
 
             ImVar v = t.getVarFor(varDef);
+            @Nullable FuncLink indexGetOverload = getIndexGetOverload(e, link);
 
             if (e.attrImplicitParameter() instanceof Expr) {
                 // we have implicit parameter
@@ -278,6 +283,13 @@ public class ExprTranslation {
                 }
 
                 if (e instanceof AstElementWithIndexes) {
+                    if (indexGetOverload != null) {
+                        AstElementWithIndexes withIndexes = (AstElementWithIndexes) e;
+                        ImExpr receiver = JassIm.ImMemberAccess(e, implicitParam.imTranslateExpr(t, f), JassIm.ImTypeArguments(), v, JassIm.ImExprs());
+                        ImExpr index = withIndexes.getIndexes().get(0).imTranslateExpr(t, f);
+                        ImFunction calledFunc = t.getFuncFor(indexGetOverload.getDef());
+                        return ImFunctionCall(e, calledFunc, ImTypeArguments(), ImExprs(receiver, index), false, CallType.NORMAL);
+                    }
                     ImExpr index1 = implicitParam.imTranslateExpr(t, f);
                     ImExpr index2 = ((AstElementWithIndexes) e).getIndexes().get(0).imTranslateExpr(t, f);
                     return JassIm.ImMemberAccess(e, index1, JassIm.ImTypeArguments(), v, JassIm.ImExprs(index2));
@@ -288,6 +300,13 @@ public class ExprTranslation {
             } else {
                 // direct var access
                 if (e instanceof AstElementWithIndexes) {
+                    if (indexGetOverload != null) {
+                        AstElementWithIndexes withIndexes = (AstElementWithIndexes) e;
+                        ImExpr receiver = ImVarAccess(v);
+                        ImExpr index = withIndexes.getIndexes().get(0).imTranslateExpr(t, f);
+                        ImFunction calledFunc = t.getFuncFor(indexGetOverload.getDef());
+                        return ImFunctionCall(e, calledFunc, ImTypeArguments(), ImExprs(receiver, index), false, CallType.NORMAL);
+                    }
                     // direct access array var
                     AstElementWithIndexes withIndexes = (AstElementWithIndexes) e;
                     if (withIndexes.getIndexes().size() > 1) {
@@ -305,9 +324,6 @@ public class ExprTranslation {
             EnumMember enumMember = (EnumMember) decl;
             int id = t.getEnumMemberId(enumMember);
             return ImIntVal(id);
-        } else if (link instanceof OtherLink) {
-            OtherLink otherLink = (OtherLink) link;
-            return otherLink.translate(e, t, f);
         } else {
             throw new CompileError(e.getSource(), "Cannot translate reference to " + Utils.printElement(decl));
         }
@@ -759,6 +775,10 @@ public class ExprTranslation {
             VarDef varDef = (VarDef) decl;
 
             ImVar v = t.getVarFor(varDef);
+            NameLink link = e.attrNameLink();
+            @Nullable FuncLink indexGetOverload = (link == null || !(e instanceof NameRef))
+                    ? null
+                    : getIndexGetOverload((NameRef) e, link);
 
             if (e.attrImplicitParameter() instanceof Expr) {
                 // we have implicit parameter
@@ -778,6 +798,9 @@ public class ExprTranslation {
                 }
 
                 if (e instanceof AstElementWithIndexes) {
+                    if (indexGetOverload != null) {
+                        throw new CompileError(e.getSource(), "Cannot assign to overloaded [] access without " + AttrFuncDef.overloadingIndexSet + ".");
+                    }
                     ImExpr index1 = implicitParam.imTranslateExpr(t, f);
                     ImExpr index2 = ((AstElementWithIndexes) e).getIndexes().get(0).imTranslateExpr(t, f);
                     return JassIm.ImMemberAccess(e, index1, JassIm.ImTypeArguments(), v, JassIm.ImExprs(index2));
@@ -789,6 +812,9 @@ public class ExprTranslation {
             } else {
                 // direct var access
                 if (e instanceof AstElementWithIndexes) {
+                    if (indexGetOverload != null) {
+                        throw new CompileError(e.getSource(), "Cannot assign to overloaded [] access without " + AttrFuncDef.overloadingIndexSet + ".");
+                    }
                     // direct access array var
                     AstElementWithIndexes withIndexes = (AstElementWithIndexes) e;
                     if (withIndexes.getIndexes().size() > 1) {
@@ -815,6 +841,21 @@ public class ExprTranslation {
         // if you ever support dynamic length, translate accordingly (otherwise error)
         exprArrayLength.addError("length is only available for arrays with known size.");
         return JassIm.ImIntVal(0);
+    }
+
+    private static @Nullable FuncLink getIndexGetOverload(NameRef e, NameLink link) {
+        if (!(e instanceof AstElementWithIndexes)) {
+            return null;
+        }
+        AstElementWithIndexes withIndexes = (AstElementWithIndexes) e;
+        if (withIndexes.getIndexes().size() != 1) {
+            return null;
+        }
+        WurstType receiverType = link.getTyp();
+        if (receiverType instanceof WurstTypeArray) {
+            return null;
+        }
+        return AttrFuncDef.getIndexGetOperator(e, receiverType, withIndexes.getIndexes().get(0).attrTyp());
     }
 
 }

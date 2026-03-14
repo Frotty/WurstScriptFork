@@ -6,8 +6,6 @@ import de.peeeq.wurstio.gui.WurstGuiImpl;
 import de.peeeq.wurstio.languageserver.ModelManager;
 import de.peeeq.wurstio.languageserver.WFile;
 import de.peeeq.wurstio.languageserver.WurstLanguageServer;
-import de.peeeq.wurstio.mpq.MpqEditor;
-import de.peeeq.wurstio.mpq.MpqEditorFactory;
 import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.attributes.CompileError;
 import de.peeeq.wurstscript.gui.WurstGui;
@@ -15,7 +13,6 @@ import org.eclipse.lsp4j.MessageType;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,49 +43,7 @@ public class BuildMap extends MapRequest {
         WLogger.info("buildMap " + map + " " + compileArgs);
         WurstGui gui = new WurstGuiImpl(workspaceRoot.getFile().getAbsolutePath());
         try {
-            if (!map.isPresent()) {
-                throw new RequestFailedException(MessageType.Error, "Map is null");
-            }
-            if (!map.get().exists()) {
-                throw new RequestFailedException(MessageType.Error, map.get().getAbsolutePath() + " does not exist.");
-            }
-
-            MapRequest.mapLastModified = map.get().lastModified();
-            MapRequest.mapPath = map.get().getAbsolutePath();
-
-            gui.sendProgress("Copying map");
-
-            // first we copy in same location to ensure validity
-            File buildDir = getBuildDir();
-            String fileName = projectConfig.getBuildMapData().getFileName();
-            File targetMapFile = new File(buildDir, fileName.isEmpty() ? projectConfig.getProjectName() + ".w3x" : fileName + ".w3x");
-            targetMapFile = ensureWritableTargetFile(
-                targetMapFile,
-                "Build Map",
-                "The output map file is in use and cannot be replaced.\nClose Warcraft III and click Retry, choose Rename to use a temporary file name, or Cancel.",
-                "Build canceled because output map target is in use."
-            );
-            CompilationResult result = compileScript(modelManager, gui, Optional.of(targetMapFile), projectConfig, buildDir, true);
-
-            injectMapData(gui, Optional.of(targetMapFile), result);
-
-            targetMapFile = ensureWritableTargetFile(
-                targetMapFile,
-                "Build Map",
-                "The output map file is still in use and cannot be replaced.\nClick Retry, choose Rename to use a temporary file name, or Cancel.",
-                "Build canceled because output map target is in use."
-            );
-            Files.copy(getCachedMapFile().toPath(), targetMapFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-
-            gui.sendProgress("Finalizing map");
-
-            try (MpqEditor mpq = MpqEditorFactory.getEditor(Optional.of(targetMapFile))) {
-                if (mpq != null) {
-                    mpq.closeWithCompression();
-                }
-            }
-
-            gui.sendProgress("Done.");
+            executeBuildMapPipeline(modelManager, gui, projectConfig);
         } catch (CompileError e) {
             WLogger.info(e);
             throw new RequestFailedException(MessageType.Error, "A compilation error occurred when building the map:\n" + e);
