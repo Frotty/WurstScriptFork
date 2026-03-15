@@ -746,8 +746,11 @@ public class LuaTranslator {
             return;
         }
         LuaFunction lf = luaFunc.getFor(f);
+        boolean emitUnknownNativeFallback = false;
         if (f.isNative()) {
             LuaNatives.get(lf);
+            emitUnknownNativeFallback = LuaNatives.hasImplementation(lf.getName())
+                || LuaNatives.isStrictNativeFallbackEnabled();
         } else {
             if (rewriteTypeCastingCompatFunction(f, lf)) {
                 luaModel.add(lf);
@@ -776,6 +779,11 @@ public class LuaTranslator {
         }
 
         if (f.isExtern() || f.isNative()) {
+            if (f.isNative() && !emitUnknownNativeFallback) {
+                // Keep unknown runtime natives as direct global calls.
+                // Do not emit a no-op fallback declaration.
+                return;
+            }
             // only add the function if it is not yet defined:
             String name = lf.getName();
             luaModel.add(LuaAst.LuaIf(

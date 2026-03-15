@@ -481,7 +481,11 @@ public class LuaNatives {
         }).accept(f);
     }
 
-    private static boolean isStrictNativeFallbackEnabled() {
+    static boolean hasImplementation(String name) {
+        return nativeCodes.containsKey(name);
+    }
+
+    static boolean isStrictNativeFallbackEnabled() {
         return Boolean.getBoolean("wurst.lua.strictNativeFallback")
             || "1".equals(System.getenv("WURST_LUA_STRICT_NATIVE_FALLBACK"));
     }

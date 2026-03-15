@@ -1280,7 +1280,8 @@ public class LuaTranslationTests extends WurstScriptTest {
             "    let x = GetUnitGoldCost(0)"
         );
         String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_commonAiNativeCallDoesNotEmitNotImplementedStubInLua.lua"), Charsets.UTF_8);
-        assertContainsRegex(compiled, "\\bGetUnitGoldCost\\(");
+        assertFunctionBodyContains(compiled, "init_Test", "GetUnitGoldCost(0)", true);
+        assertDoesNotContainRegex(compiled, "\\bif\\s+GetUnitGoldCost\\s+then\\b");
         assertFalse(compiled.contains("The native 'GetUnitGoldCost' is not implemented."));
     }
 
