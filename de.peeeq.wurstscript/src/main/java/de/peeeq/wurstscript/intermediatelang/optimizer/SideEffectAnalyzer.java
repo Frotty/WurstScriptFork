@@ -213,7 +213,7 @@ public class SideEffectAnalyzer {
         usedGlobals = LinkedHashMultimap.create();
         for (ImFunction function : ImHelper.calculateFunctionsOfProg(prog)) {
             for (ImVar v : directlyUsedVariables(function)) {
-                if (v.isGlobal()) {
+                if (isAttachedGlobal(v)) {
                     usedGlobals.put(function, v);
                 }
             }
@@ -441,7 +441,11 @@ public class SideEffectAnalyzer {
      * Checks if the given statement cannot use the variable v
      */
     public boolean cannotUseVar(ImStmt s, ImVar v) {
-        if (v.isGlobal()) {
+        if (v == null || !isAttachedToProg(v)) {
+            // Conservatively block rewrites for detached vars.
+            return false;
+        }
+        if (isAttachedGlobal(v)) {
             Set<ImVar> imVars = usedVariables(s);
             Set<ImFunction> imFunctions = calledNatives(s);
             return !imVars.contains(v) && imFunctions.isEmpty();
@@ -576,8 +580,23 @@ public class SideEffectAnalyzer {
         }
 
         private boolean isAttachedGlobal(ImVar var) {
-            Element parent = var.getParent();
-            return parent != null && parent.getParent() instanceof ImProg;
+            return SideEffectAnalyzer.isAttachedGlobal(var);
         }
+    }
+
+    private static boolean isAttachedGlobal(ImVar var) {
+        Element parent = var.getParent();
+        return parent != null && parent.getParent() instanceof ImProg;
+    }
+
+    private static boolean isAttachedToProg(Element e) {
+        Element cur = e;
+        while (cur != null) {
+            if (cur instanceof ImProg) {
+                return true;
+            }
+            cur = cur.getParent();
+        }
+        return false;
     }
 }

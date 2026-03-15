@@ -39,8 +39,7 @@ public class ImOptimizer {
     private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "false"));
 
     private static void logLocalOpt(String msg) {
-        // Keep pass-level local-opt logs always visible.
-        WLogger.warning("[LocalOpt] " + msg);
+        // Keep detailed pass-level logging disabled by default.
     }
 
     private static void logLocalOptAlways(String msg) {
@@ -66,6 +65,7 @@ public class ImOptimizer {
 
     private final TimeTaker timeTaker;
     ImTranslator trans;
+    private boolean localOptsAfterRegularInlining = false;
 
     public ImOptimizer(TimeTaker timeTaker, ImTranslator trans) {
         this.timeTaker = timeTaker;
@@ -79,6 +79,7 @@ public class ImOptimizer {
     }
 
     public void doInlining() {
+        localOptsAfterRegularInlining = true;
         // remove garbage to reduce work for the inliner
         removeGarbage();
         trans.getImProg().flatten(trans);
@@ -118,12 +119,29 @@ public class ImOptimizer {
             optCount = 0;
             StringBuilder sb = new StringBuilder();
             logLocalOpt("round " + i + " start");
+            Set<ImFunction> strictInlineChangedFunctions = Collections.newSetFromMap(new IdentityHashMap<>());
+            boolean skipStrictInlineThisRound = i == 1 && localOptsAfterRegularInlining && localOptRounds > 1;
+            if (!skipStrictInlineThisRound) {
+                logLocalOpt("round " + i + ": strict inline start");
+                strictInlineChangedFunctions = doStrictInlineAndCollectChangedFunctions();
+                int strictInlineChangedCount = strictInlineChangedFunctions.size();
+                optCount += strictInlineChangedCount;
+                logLocalOpt("round " + i + ": strict inline done, changedFuncs=" + strictInlineChangedCount);
+                if (!strictInlineChangedFunctions.isEmpty()) {
+                    activeLocalFunctions.addAll(strictInlineChangedFunctions);
+                }
+            } else {
+                logLocalOpt("round " + i + ": strict inline skipped (first post-inlining round)");
+            }
             Set<ImFunction> roundChangedLocalFunctions = Collections.newSetFromMap(new IdentityHashMap<>());
+            roundChangedLocalFunctions.addAll(strictInlineChangedFunctions);
             boolean nonLocalPassChanged = false;
             for (OptimizerPass pass : localPasses) {
                 PassRunResult result = runLocalPassWithHeartbeat(pass, i, activeLocalFunctions);
                 int count = result.count;
-                sb.append("<").append(pass.getName()).append(": ").append(count).append("> ");
+                if (count != 0) {
+                    sb.append("<").append(pass.getName()).append(": ").append(count).append("> ");
+                }
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
                 if (result.allLocalFunctionsMayHaveChanged) {
@@ -146,19 +164,23 @@ public class ImOptimizer {
             }
 
             finalItr = i;
-            logLocalOpt("round " + i + " done, opts=" + optCount);
-
-            // Run a strict inliner to get rid of one-liners
-            logLocalOpt("round " + i + ": strict inline start");
-            doStrictInline();
-            logLocalOpt("round " + i + ": strict inline done");
+            String roundDetails = sb.length() == 0 ? "<no-pass-delta>" : sb.toString().trim();
+            logLocalOptAlways("round " + i + " done, opts=" + optCount + " " + roundDetails);
         }
-        logLocalOpt("done, rounds=" + finalItr);
+        logLocalOptAlways("done, rounds=" + finalItr);
         StringBuilder sb = new StringBuilder("Total: ");
-        totalCount.forEach((k, v) -> sb.append("<").append(k).append(": ").append(v).append("> "));
-        logLocalOpt(sb.toString());
+        totalCount.forEach((k, v) -> {
+            if (v != 0) {
+                sb.append("<").append(k).append(": ").append(v).append("> ");
+            }
+        });
+        if (sb.toString().equals("Total: ")) {
+            sb.append("<no-pass-delta>");
+        }
+        logLocalOptAlways(sb.toString());
 
         InitFunctionCleaner.clean(trans.getImProg());
+        localOptsAfterRegularInlining = false;
     }
 
     private PassRunResult runLocalPassWithHeartbeat(OptimizerPass pass, int round, Set<ImFunction> activeLocalFunctions) {
@@ -523,6 +545,31 @@ public class ImOptimizer {
         if (STRICT_INLINE_PROFILE) {
             logImSizeSummary("strict inline AFTER");
         }
+    }
+
+    private Set<ImFunction> doStrictInlineAndCollectChangedFunctions() {
+        Set<ImFunction> beforeFunctions = collectLocalFunctions();
+        Map<ImFunction, Long> beforeFingerprints = new IdentityHashMap<>();
+        for (ImFunction f : beforeFunctions) {
+            beforeFingerprints.put(f, functionFingerprint(f));
+        }
+
+        doStrictInline();
+
+        Set<ImFunction> afterFunctions = collectLocalFunctions();
+        Set<ImFunction> changed = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (ImFunction f : afterFunctions) {
+            Long before = beforeFingerprints.get(f);
+            if (before == null) {
+                changed.add(f);
+                continue;
+            }
+            long after = functionFingerprint(f);
+            if (after != before) {
+                changed.add(f);
+            }
+        }
+        return changed;
     }
 
     public void encryptStrings() {

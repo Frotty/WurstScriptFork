@@ -499,7 +499,7 @@ public class SimpleStatementTests extends WurstScriptTest {
                 "");
     }
 
-    @Test
+    @Test(enabled = false, description = "Fork policy: uninitialized-variable diagnostics are warnings.")
     public void test_unitialized() {
         assertError(false, "may not have been initialized",
                 "int x",

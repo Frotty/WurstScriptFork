@@ -33,6 +33,16 @@ public class UselessFunctionCallsRemover implements OptimizerPass, LocalOptimize
         return "Useless function calls removed";
     }
 
+    @Override
+    public void beginRound(ImTranslator trans) {
+        totalCallsRemoved = 0;
+    }
+
+    @Override
+    public boolean shouldOptimize(ImFunction func) {
+        return !func.isNative() && !func.isBj();
+    }
+
     public int optimizeFunction(ImFunction func, ImTranslator trans) {
         int before = totalCallsRemoved;
         optimizeFunc(func, trans);

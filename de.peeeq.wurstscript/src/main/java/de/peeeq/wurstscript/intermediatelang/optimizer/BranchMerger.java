@@ -19,14 +19,24 @@ public class BranchMerger  implements OptimizerPass, LocalOptimizerPass {
 
     @Override
     public int optimize(ImTranslator trans) {
-        branchesMerged = 0;
-        ImProg prog = trans.getImProg();
-        this.sideEffectAnalyzer = new SideEffectAnalyzer(prog);
-
-        for (ImFunction func : prog.getFunctions()) {
-            optimizeFunc(func);
+        beginRound(trans);
+        for (ImFunction func : trans.getImProg().getFunctions()) {
+            if (shouldOptimize(func)) {
+                optimizeFunction(func, trans);
+            }
         }
         return branchesMerged;
+    }
+
+    @Override
+    public void beginRound(ImTranslator trans) {
+        branchesMerged = 0;
+        sideEffectAnalyzer = new SideEffectAnalyzer(trans.getImProg());
+    }
+
+    @Override
+    public boolean shouldOptimize(ImFunction func) {
+        return !func.isNative() && !func.isBj();
     }
 
     void optimizeFunc(ImFunction func) {

@@ -72,7 +72,7 @@ sourceSets {
 repositories {
     mavenLocal()
     mavenCentral()
-    maven { url 'https://jitpack.io' }
+    maven { url = 'https://jitpack.io' }
 }
 
 configurations {
@@ -182,7 +182,7 @@ tasks.register("genAst") {
 /** -------- Version info file generation -------- */
 
 tasks.register('versionInfoFile') {
-    description "Generates a file CompileTimeInfo.java with version number etc."
+    description = "Generates a file CompileTimeInfo.java with version number etc."
 
     def repoDir = new File(rootProject.projectDir, '..')
 
@@ -230,7 +230,7 @@ public class CompileTimeInfo {
 /** -------- Aggregate generation + wiring into compile -------- */
 
 tasks.register('gen') {
-    description "Generates code from various input files"
+    description = "Generates code from various input files"
     dependsOn 'genAst', 'versionInfoFile', 'generateGrammarSource'
 }
 tasks.named('compileJava') { it.dependsOn('gen') }

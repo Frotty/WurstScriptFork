@@ -371,6 +371,13 @@ public class ImInliner {
         if (!allowMultiReturnInlining && !maxOneReturn(f)) {
             return false;
         }
+        for (ImExpr arg : call.getArguments()) {
+            if (containsFuncRef(arg)) {
+                // Keep closure/code-argument callsites stable. Inlining here can erase
+                // callback-reference construction paths and break closure-heavy code.
+                return false;
+            }
+        }
         if (translator.isLuaTarget() && containsFuncRef(f)) {
             // Functions that build callback refs are lowered with Lua-specific wrappers/xpcall.
             // Keeping them as standalone calls avoids callback context/vararg scope breakage.

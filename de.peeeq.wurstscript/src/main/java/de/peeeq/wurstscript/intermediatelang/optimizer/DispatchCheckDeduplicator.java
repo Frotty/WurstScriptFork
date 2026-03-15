@@ -126,7 +126,18 @@ public class DispatchCheckDeduplicator implements OptimizerPass, LocalOptimizerP
             ImLExpr left = set.getLeft();
             if (left instanceof ImVarAccess) {
                 ImVar v = ((ImVarAccess) left).getVar();
-                return v == guard.failedCond.receiverVar || v == guard.failedCond.typeIdVar;
+                if (v == guard.failedCond.typeIdVar) {
+                    return true;
+                }
+                if (v == guard.failedCond.receiverVar) {
+                    // Self-assignments like `set a = a` are no-ops and must not block guard dedup.
+                    if (set.getRight() instanceof ImVarAccess
+                        && ((ImVarAccess) set.getRight()).getVar() == guard.failedCond.receiverVar) {
+                        return false;
+                    }
+                    return true;
+                }
+                return false;
             }
             if (left instanceof ImVarArrayAccess) {
                 ImVar v = ((ImVarArrayAccess) left).getVar();

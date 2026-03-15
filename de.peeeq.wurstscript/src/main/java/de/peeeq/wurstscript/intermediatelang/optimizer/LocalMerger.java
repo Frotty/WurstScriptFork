@@ -207,7 +207,7 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
                 v = TypesHelper.getSimpleAndPureTupleVar((ImTupleSelection) lhs);
             }
 
-            if (v == null || v.isGlobal()) continue;
+            if (!isTrackableLocal(v)) continue;
 
             if (!livenessInfo.get(s).contains(v)) {
                 final List<ImExpr> raw = new ArrayList<>();
@@ -244,6 +244,25 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private static boolean hasSideEffects(Element e) {
         if (e instanceof ImFunctionCall || e instanceof ImMethodCall) return true;
         for (int i = 0; i < e.size(); i++) if (hasSideEffects(e.get(i))) return true;
+        return false;
+    }
+
+    /**
+     * Some temporary vars can be referenced before being attached to the IM tree.
+     * isGlobal() throws for those, so we skip them in local liveness/merge tracking.
+     */
+    private static boolean isTrackableLocal(ImVar v) {
+        return v != null && isAttachedToProg(v) && !v.isGlobal();
+    }
+
+    private static boolean isAttachedToProg(Element e) {
+        Element cur = e;
+        while (cur != null) {
+            if (cur instanceof ImProg) {
+                return true;
+            }
+            cur = cur.getParent();
+        }
         return false;
     }
 
@@ -314,7 +333,7 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
                 @Override public void visit(ImVarAccess va) {
                     super.visit(va);
                     ImVar v = va.getVar();
-                    if (!v.isGlobal()) use[ii].set(varId(v, varToId, idToVar));
+                    if (isTrackableLocal(v)) use[ii].set(varId(v, varToId, idToVar));
                 }
                 @Override public void visit(ImSet set) {
                     set.getRight().accept(this);
@@ -334,7 +353,7 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
                 ImSet set = (ImSet) stmt;
                 if (set.getLeft() instanceof ImVarAccess) {
                     ImVar v = ((ImVarAccess) set.getLeft()).getVar();
-                    if (!v.isGlobal()) def[i].set(varId(v, varToId, idToVar));
+                    if (isTrackableLocal(v)) def[i].set(varId(v, varToId, idToVar));
                 }
             }
         }

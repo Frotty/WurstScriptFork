@@ -16,8 +16,10 @@ import net.moonlightflower.wc3libs.txt.app.jass.expr.VarRef;
 import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.LinkedHashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 
 import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation.floatToStringWithDecimalDigits;
@@ -226,6 +228,9 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
                         }
                         if (stmts.get(i) instanceof ImSet && lookback instanceof ImSet) {
                             optimizeConsecutiveSet((ImSet) lookback, (ImSet) stmts.get(i));
+                        }
+                        if (stmts.get(i) instanceof ImIf && lookback instanceof ImIf) {
+                            optimizeConsecutiveIf((ImIf) lookback, (ImIf) stmts.get(i));
                         }
                     }
                 }
@@ -1000,7 +1005,7 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
             return;
         }
         ImVar targetVar = ((ImVarAccess) setStmt.getLeft()).getVar();
-        if (targetVar.isGlobal()) {
+        if (!isAttachedToProg(targetVar) || targetVar.isGlobal()) {
             return;
         }
         int matchIndex = -1;
@@ -1032,6 +1037,17 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
         callStmt.getArguments().get(matchIndex).replaceBy(replacement);
         setStmt.replaceBy(ImHelper.nullExpr());
         totalRewrites++;
+    }
+
+    private static boolean isAttachedToProg(Element e) {
+        Element cur = e;
+        while (cur != null) {
+            if (cur instanceof ImProg) {
+                return true;
+            }
+            cur = cur.getParent();
+        }
+        return false;
     }
 
     private void optimizePrecedingSetChainForCall(ImStmts stmts, int callIndex, ImFunctionCall callStmt) {
@@ -1112,6 +1128,67 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
                 }
             }
         }
+    }
+
+    /**
+     * Merges adjacent if-statements with structurally equal conditions:
+     *
+     * if C then A else B
+     * if C then X else Y
+     *
+     * =>
+     *
+     * if C then A; X else B; Y
+     *
+     * This is only safe when re-evaluating C is not observable and the first if-body
+     * cannot affect C.
+     */
+    private void optimizeConsecutiveIf(ImIf first, ImIf second) {
+        if (!first.getCondition().structuralEquals(second.getCondition())) {
+            return;
+        }
+
+        // If evaluating the condition itself has observable effects, don't remove one evaluation.
+        if (sideEffectAnalysis.hasObservableSideEffects(first.getCondition(), f -> false)) {
+            return;
+        }
+
+        // Condition must only depend on attached locals; globals could be changed indirectly.
+        Set<ImVar> conditionVars = new LinkedHashSet<>(sideEffectAnalysis.directlyUsedVariables(first.getCondition()));
+        if (conditionVars.isEmpty()) {
+            // keep going
+        } else {
+            for (ImVar v : conditionVars) {
+                if (!isAttachedToProg(v) || v.isGlobal()) {
+                    return;
+                }
+            }
+        }
+
+        // First if must not write any var that the condition depends on.
+        for (ImStmt s : first.getThenBlock()) {
+            for (ImVar written : sideEffectAnalysis.directlySetVariables(s)) {
+                if (conditionVars.contains(written)) {
+                    return;
+                }
+            }
+        }
+        for (ImStmt s : first.getElseBlock()) {
+            for (ImVar written : sideEffectAnalysis.directlySetVariables(s)) {
+                if (conditionVars.contains(written)) {
+                    return;
+                }
+            }
+        }
+
+        while (!second.getThenBlock().isEmpty()) {
+            first.getThenBlock().add(second.getThenBlock().remove(0));
+        }
+        while (!second.getElseBlock().isEmpty()) {
+            first.getElseBlock().add(second.getElseBlock().remove(0));
+        }
+        second.replaceBy(ImHelper.nullExpr());
+        totalRewrites++;
     }
 
 }

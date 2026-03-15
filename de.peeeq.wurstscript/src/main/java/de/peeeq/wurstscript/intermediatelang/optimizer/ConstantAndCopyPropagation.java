@@ -118,8 +118,8 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
             this.copyVar = copyVar;
             this.constantValue = null;
             this.constantTuple = null;
-            if(copyVar.isGlobal()) {
-                throw new IllegalArgumentException("copyVar must not be a Global.");
+            if (!isTrackableLocal(copyVar)) {
+                throw new IllegalArgumentException("copyVar must be an attached local variable.");
             }
         }
 
@@ -289,7 +289,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
             return null;
         }
         ImVar v = ((ImVarAccess) cond).getVar();
-        if (v.isGlobal()) {
+        if (!isTrackableLocal(v)) {
             return null;
         }
         return v.getType() instanceof ImSimpleType && ((ImSimpleType) v.getType()).getTypename().equals("boolean") ? v : null;
@@ -306,7 +306,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
                 continue;
             }
             ImVar target = ((ImVarAccess) set.getLeft()).getVar();
-            if (target.isGlobal()) {
+            if (!isTrackableLocal(target)) {
                 continue;
             }
             Value v = Value.tryValue(set.getRight());
@@ -533,7 +533,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
                 ImSet imSet = (ImSet) stmt;
                 if (imSet.getLeft() instanceof ImVarAccess) {
                     ImVar var = ((ImVarAccess) imSet.getLeft()).getVar();
-                    if (var != null && !var.isGlobal()) {
+                    if (isTrackableLocal(var)) {
                         ImExpr right = imSet.getRight();
 
                         // Check if this is a no-op like 'set x = x'
@@ -600,7 +600,7 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
                     }
                 } else if(imSet.getLeft() instanceof ImTupleSelection) {
                     ImVar var = TypesHelper.getSimpleAndPureTupleVar((ImTupleSelection) imSet.getLeft());
-                    if(var != null) {
+                    if (isTrackableLocal(var)) {
                         Value rightVal = Value.tryValue(imSet.getRight());
                         Value existingValue = newOut.get(var).getOrNull();
                         if (rightVal != null && existingValue != null && existingValue.constantTuple != null) {
@@ -710,6 +710,21 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
             }
         }
         return null;
+    }
+
+    private static boolean isTrackableLocal(@Nullable ImVar v) {
+        return v != null && isAttachedToProg(v) && !v.isGlobal();
+    }
+
+    private static boolean isAttachedToProg(Element e) {
+        Element cur = e;
+        while (cur != null) {
+            if (cur instanceof ImProg) {
+                return true;
+            }
+            cur = cur.getParent();
+        }
+        return false;
     }
 
     private @Nullable ImExpr foldBinaryOp(WurstOperator op, ImConst left, ImConst right) {
