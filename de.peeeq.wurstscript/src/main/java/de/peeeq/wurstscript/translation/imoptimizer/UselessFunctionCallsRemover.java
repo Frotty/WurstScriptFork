@@ -16,7 +16,7 @@ import java.util.ListIterator;
  * <p>
  * when the result is not used
  */
-public class UselessFunctionCallsRemover implements OptimizerPass {
+public class UselessFunctionCallsRemover implements OptimizerPass, LocalOptimizerPass {
     public int totalCallsRemoved = 0;
 
     public int optimize(ImTranslator trans) {
@@ -31,6 +31,12 @@ public class UselessFunctionCallsRemover implements OptimizerPass {
     @Override
     public String getName() {
         return "Useless function calls removed";
+    }
+
+    public int optimizeFunction(ImFunction func, ImTranslator trans) {
+        int before = totalCallsRemoved;
+        optimizeFunc(func, trans);
+        return totalCallsRemoved - before;
     }
 
     private void optimizeFunc(ImFunction func, ImTranslator trans) {

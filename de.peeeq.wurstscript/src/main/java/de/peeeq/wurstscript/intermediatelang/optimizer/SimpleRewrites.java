@@ -4,6 +4,7 @@ import de.peeeq.wurstscript.WLogger;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.intermediatelang.ILconstString;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imoptimizer.LocalOptimizerPass;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.CallType;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
@@ -23,7 +24,7 @@ import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPro
 import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation.isIntegerLikeConstant;
 import static de.peeeq.wurstscript.intermediatelang.optimizer.ConstantAndCopyPropagation.isNearInteger;
 
-public class SimpleRewrites implements OptimizerPass {
+public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
     private SideEffectAnalyzer sideEffectAnalysis;
     public static boolean doHashing = false;
 
@@ -53,6 +54,19 @@ public class SimpleRewrites implements OptimizerPass {
 
     @Override
     public int optimize(ImTranslator trans) {
+        beginRound(trans);
+        for (ImFunction func : de.peeeq.wurstscript.translation.imtranslation.ImHelper.calculateFunctionsOfProg(prog)) {
+            if (func.isNative() || func.isBj()) {
+                continue;
+            }
+            optimizeFunction(func, trans);
+        }
+        endRound(trans);
+        return totalRewrites;
+    }
+
+    @Override
+    public void beginRound(ImTranslator trans) {
         prog = trans.getImProg();
         stringHashFunc = trans.getNativeFunc("StringHash");
         convertPlayerUnitEventFunc = trans.getNativeFunc("ConvertPlayerUnitEvent");
@@ -62,12 +76,20 @@ public class SimpleRewrites implements OptimizerPass {
         convertMapControlFunc = trans.getNativeFunc("ConvertMapControl");
         this.sideEffectAnalysis = new SideEffectAnalyzer(prog);
         totalRewrites = 0;
-        optimizeElement(prog);
-        // we need to flatten the program, because we introduced new
-        // StatementExprs
+    }
+
+    @Override
+    public int optimizeFunction(ImFunction func, ImTranslator trans) {
+        int before = totalRewrites;
+        optimizeElement(func);
+        func.flatten(trans);
+        removeUnreachableCode(func);
+        return totalRewrites - before;
+    }
+
+    @Override
+    public void endRound(ImTranslator trans) {
         prog.flatten(trans);
-        removeUnreachableCode(prog);
-        return totalRewrites;
     }
 
     @Override
@@ -87,6 +109,40 @@ public class SimpleRewrites implements OptimizerPass {
         });
 
         prog.accept(new ImProg.DefaultVisitor() {
+            @Override
+            public void visit(ImFunctionCall funcCall) {
+                super.visit(funcCall);
+                ImExprs arguments = funcCall.getArguments();
+                if (arguments.size() == 1 && arguments.get(0) instanceof ImStringVal) {
+                    String message = ((ImStringVal) arguments.get(0)).getValS();
+                    if (message.startsWith("Double free") ||
+                        message.startsWith("Nullpointer exception") ||
+                        message.startsWith("Out of memory") ||
+                        message.endsWith("on invalid object.") ||
+                        message.startsWith("Could not initialize package ")||
+                        message.startsWith("Index out of bounds")) {
+                        if (funcCall.attrTrace().attrSource().getFile().contains("Crypto.wurst") || removeWurstErrors) {
+                            funcCall.replaceBy(ImHelper.nullExpr());
+                        }
+                    }
+
+                }
+            }
+        });
+    }
+
+    private void removeUnreachableCode(ImFunction func) {
+        func.accept(new ImFunction.DefaultVisitor() {
+            @Override
+            public void visit(ImStmts stmts) {
+                super.visit(stmts);
+                if (stmts.size() > 1) {
+                    removeUnreachableCode(stmts);
+                }
+            }
+        });
+
+        func.accept(new ImFunction.DefaultVisitor() {
             @Override
             public void visit(ImFunctionCall funcCall) {
                 super.visit(funcCall);
@@ -159,17 +215,22 @@ public class SimpleRewrites implements OptimizerPass {
         // optimize children:
         for (int i = 0; i < elem.size(); i++) {
             optimizeElement(elem.get(i));
-            if (i > 0) {
-                Element lookback = elem.get(i - 1);
-                if (elem.get(i) instanceof ImExitwhen && lookback instanceof ImExitwhen) {
-                    optimizeConsecutiveExitWhen((ImExitwhen) lookback, (ImExitwhen) elem.get(i));
+            if (elem instanceof ImStmts) {
+                ImStmts stmts = (ImStmts) elem;
+                if (i > 0) {
+                    int prevIdx = previousNonNullStmtIndex(stmts, i - 1);
+                    if (prevIdx >= 0) {
+                        ImStmt lookback = stmts.get(prevIdx);
+                        if (stmts.get(i) instanceof ImExitwhen && lookback instanceof ImExitwhen) {
+                            optimizeConsecutiveExitWhen((ImExitwhen) lookback, (ImExitwhen) stmts.get(i));
+                        }
+                        if (stmts.get(i) instanceof ImSet && lookback instanceof ImSet) {
+                            optimizeConsecutiveSet((ImSet) lookback, (ImSet) stmts.get(i));
+                        }
+                    }
                 }
-
-                if (elem.get(i) instanceof ImSet && lookback instanceof ImSet) {
-                    optimizeConsecutiveSet((ImSet) lookback, (ImSet) elem.get(i));
-                }
-                if (elem instanceof ImStmts && elem.get(i) instanceof ImFunctionCall) {
-                    optimizePrecedingSetChainForCall((ImStmts) elem, i, (ImFunctionCall) elem.get(i));
+                if (stmts.get(i) instanceof ImFunctionCall) {
+                    optimizePrecedingSetChainForCall(stmts, i, (ImFunctionCall) stmts.get(i));
                 }
             }
         }
@@ -978,10 +1039,20 @@ public class SimpleRewrites implements OptimizerPass {
             ImStmt prev = stmts.get(j);
             if (prev instanceof ImSet) {
                 optimizeSetThenCallArg((ImSet) prev, callStmt);
+            } else if (prev instanceof ImNull) {
+                continue;
             } else {
                 break;
             }
         }
+    }
+
+    private int previousNonNullStmtIndex(ImStmts stmts, int from) {
+        int j = from;
+        while (j >= 0 && stmts.get(j) instanceof ImNull) {
+            j--;
+        }
+        return j;
     }
 
     private boolean isSimplePureValue(ImExpr expr) {

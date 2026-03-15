@@ -3,6 +3,7 @@ package de.peeeq.wurstscript.intermediatelang.optimizer;
 import de.peeeq.datastructures.GraphInterpreter;
 import de.peeeq.wurstscript.intermediatelang.optimizer.ControlFlowGraph.Node;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imoptimizer.LocalOptimizerPass;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -14,7 +15,7 @@ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
 import java.util.*;
 
-public class LocalMerger implements OptimizerPass {
+public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private int totalLocalsMerged = 0;
     private static final boolean PROFILE = Boolean.parseBoolean(System.getProperty("wurst.localmerger.profile", "true"));
     private static final long SLOW_FUNC_MS = Long.getLong("wurst.localmerger.slowFuncMs", 1000L);
@@ -34,6 +35,13 @@ public class LocalMerger implements OptimizerPass {
 
     @Override
     public String getName() { return "Local variables merged"; }
+
+    @Override
+    public int optimizeFunction(ImFunction func, ImTranslator trans) {
+        int before = totalLocalsMerged;
+        optimizeFunc(func);
+        return totalLocalsMerged - before;
+    }
 
     void optimizeFunc(ImFunction func) {
         long t0 = System.nanoTime();

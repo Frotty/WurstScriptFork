@@ -2,6 +2,7 @@ package de.peeeq.wurstscript.intermediatelang.optimizer;
 
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imoptimizer.LocalOptimizerPass;
 import de.peeeq.wurstscript.translation.imoptimizer.UselessFunctionCallsRemover;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -19,7 +20,7 @@ import java.util.Set;
  * inlining, where several method calls on the same receiver produce adjacent
  * copies of the same guard.
  */
-public class DispatchCheckDeduplicator implements OptimizerPass {
+public class DispatchCheckDeduplicator implements OptimizerPass, LocalOptimizerPass {
 
     private int rewrites;
     private final IdentityHashMap<ImFunction, IdentityHashMap<ImVar, Boolean>> mayWriteTypeIdMemo = new IdentityHashMap<>();
@@ -27,15 +28,40 @@ public class DispatchCheckDeduplicator implements OptimizerPass {
 
     @Override
     public int optimize(ImTranslator trans) {
+        beginRound(trans);
+        for (ImFunction f : trans.getImProg().getFunctions()) {
+            optimizeFunction(f, trans);
+        }
+        endRound(trans);
+        return rewrites;
+    }
+
+    @Override
+    public void beginRound(ImTranslator trans) {
         rewrites = 0;
         mayWriteTypeIdMemo.clear();
         ImProg prog = trans.getImProg();
         sideEffectAnalyzer = new SideEffectAnalyzer(prog);
-        for (ImFunction f : prog.getFunctions()) {
-            optimizeStmts(f.getBody());
+    }
+
+    @Override
+    public void endRound(ImTranslator trans) {
+        trans.getImProg().flatten(trans);
+    }
+
+    @Override
+    public boolean shouldOptimize(ImFunction func) {
+        return !func.isNative() && !func.isBj();
+    }
+
+    @Override
+    public int optimizeFunction(ImFunction func, ImTranslator trans) {
+        if (sideEffectAnalyzer == null) {
+            sideEffectAnalyzer = new SideEffectAnalyzer(trans.getImProg());
         }
-        prog.flatten(trans);
-        return rewrites;
+        int before = rewrites;
+        optimizeStmts(func.getBody());
+        return rewrites - before;
     }
 
     @Override

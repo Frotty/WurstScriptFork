@@ -5,6 +5,7 @@ import de.peeeq.datastructures.NodeWorklist;
 import de.peeeq.wurstscript.WurstOperator;
 import de.peeeq.wurstscript.intermediatelang.optimizer.ControlFlowGraph.Node;
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imoptimizer.LocalOptimizerPass;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.ImHelper;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -19,7 +20,7 @@ import java.util.*;
 
 import static de.peeeq.wurstscript.WurstOperator.*;
 
-public class ConstantAndCopyPropagation implements OptimizerPass {
+public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizerPass {
     private int totalPropagated = 0;
 
     // Format reals like SimpleRewrites: single-precision float + fixed number of fraction digits
@@ -99,6 +100,13 @@ public class ConstantAndCopyPropagation implements OptimizerPass {
     @Override
     public String getName() {
         return "Constant and Copy Propagated";
+    }
+
+    @Override
+    public int optimizeFunction(ImFunction func, ImTranslator trans) {
+        int before = totalPropagated;
+        optimizeFunc(func);
+        return totalPropagated - before;
     }
 
     static class Value {

@@ -1,6 +1,7 @@
 package de.peeeq.wurstscript.intermediatelang.optimizer;
 
 import de.peeeq.wurstscript.jassIm.*;
+import de.peeeq.wurstscript.translation.imoptimizer.LocalOptimizerPass;
 import de.peeeq.wurstscript.translation.imoptimizer.OptimizerPass;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
 
@@ -12,7 +13,7 @@ import java.util.ListIterator;
  * <p>
  * the input must be a flattened program
  */
-public class BranchMerger  implements OptimizerPass {
+public class BranchMerger  implements OptimizerPass, LocalOptimizerPass {
     private SideEffectAnalyzer sideEffectAnalyzer;
     public int branchesMerged = 0;
 
@@ -28,8 +29,15 @@ public class BranchMerger  implements OptimizerPass {
         return branchesMerged;
     }
 
-    private void optimizeFunc(ImFunction func) {
+    void optimizeFunc(ImFunction func) {
         mergeBranches(func);
+    }
+
+    @Override
+    public int optimizeFunction(ImFunction func, ImTranslator trans) {
+        int before = branchesMerged;
+        optimizeFunc(func);
+        return branchesMerged - before;
     }
 
 

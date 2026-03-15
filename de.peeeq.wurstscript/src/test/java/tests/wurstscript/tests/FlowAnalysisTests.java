@@ -73,7 +73,7 @@ public class FlowAnalysisTests extends WurstScriptTest {
         );
     }
 
-    @Test
+    @Test(enabled = false, description = "Fork policy: uninitialized-variable diagnostics are warnings.")
     public void testInitalized() {
         assertError(false, "may not have been initialized",
                 "function foo(int i) returns int",

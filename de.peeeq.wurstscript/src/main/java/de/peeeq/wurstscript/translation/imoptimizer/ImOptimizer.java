@@ -34,16 +34,13 @@ public class ImOptimizer {
         Boolean.parseBoolean(System.getProperty("wurst.localmerger.afterInlining", "true"));
     private static final boolean RUN_PREINLINE_LOCAL_OPTS =
         Boolean.parseBoolean(System.getProperty("wurst.preInlineLocalOpts", "true"));
-    private static final boolean LOCAL_OPT_TRACE = Boolean.parseBoolean(System.getProperty("wurst.localopt.trace", "false"));
     private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 0L);
     private static final int STRICT_INLINE_MAX_SIZE = Integer.getInteger("wurst.strictInline.maxSize", 8);
     private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "false"));
 
     private static void logLocalOpt(String msg) {
-        if (LOCAL_OPT_TRACE) {
-            // Use warning-level so diagnostics are visible in environments that hide INFO logs.
-            WLogger.warning("[LocalOpt] " + msg);
-        }
+        // Keep pass-level local-opt logs always visible.
+        WLogger.warning("[LocalOpt] " + msg);
     }
 
     private static void logLocalOptAlways(String msg) {
@@ -116,21 +113,36 @@ public class ImOptimizer {
         logLocalOpt("initial cleanup done");
 
         int finalItr = 0;
+        Set<ImFunction> activeLocalFunctions = collectLocalFunctions();
         for (int i = 1; i <= localOptRounds && optCount > 0; i++) {
             optCount = 0;
             StringBuilder sb = new StringBuilder();
             logLocalOpt("round " + i + " start");
+            Set<ImFunction> roundChangedLocalFunctions = Collections.newSetFromMap(new IdentityHashMap<>());
+            boolean nonLocalPassChanged = false;
             for (OptimizerPass pass : localPasses) {
-                int count = runLocalPassWithHeartbeat(pass, i);
+                PassRunResult result = runLocalPassWithHeartbeat(pass, i, activeLocalFunctions);
+                int count = result.count;
                 sb.append("<").append(pass.getName()).append(": ").append(count).append("> ");
                 optCount += count;
                 totalCount.put(pass.getName(), totalCount.getOrDefault(pass.getName(), 0) + count);
+                if (result.allLocalFunctionsMayHaveChanged) {
+                    nonLocalPassChanged = true;
+                } else {
+                    roundChangedLocalFunctions.addAll(result.changedFunctions);
+                }
             }
 
             if (optCount > 0) {
                 logLocalOpt("round " + i + ": cleanup after pass changes");
                 removeGarbage();
                 trans.getImProg().flatten(trans);
+                if (nonLocalPassChanged) {
+                    activeLocalFunctions = collectLocalFunctions();
+                } else {
+                    roundChangedLocalFunctions.removeIf(f -> f.getParent() == null);
+                    activeLocalFunctions = roundChangedLocalFunctions;
+                }
             }
 
             finalItr = i;
@@ -149,7 +161,7 @@ public class ImOptimizer {
         InitFunctionCleaner.clean(trans.getImProg());
     }
 
-    private int runLocalPassWithHeartbeat(OptimizerPass pass, int round) {
+    private PassRunResult runLocalPassWithHeartbeat(OptimizerPass pass, int round, Set<ImFunction> activeLocalFunctions) {
         final String passName = pass.getName();
         final long started = System.nanoTime();
         final boolean heartbeatEnabled = LOCAL_PASS_HEARTBEAT_MS > 0;
@@ -175,10 +187,16 @@ public class ImOptimizer {
             heartbeat.start();
         }
         try {
-            int count = timeTaker.measure(passName, () -> pass.optimize(trans));
+            PassRunResult result = timeTaker.measure(passName, () -> runLocalPass(pass, activeLocalFunctions));
             long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
-            logLocalOpt("round=" + round + " END pass='" + passName + "' count=" + count + " elapsedMs=" + elapsedMs);
-            return count;
+            if (pass instanceof LocalOptimizerPass) {
+                logLocalOpt("round=" + round + " END pass='" + passName + "' count=" + result.count
+                    + " touched=" + result.touchedFunctions + " changedFuncs=" + result.changedFunctions.size()
+                    + " elapsedMs=" + elapsedMs);
+            } else {
+                logLocalOpt("round=" + round + " END pass='" + passName + "' count=" + result.count + " elapsedMs=" + elapsedMs);
+            }
+            return result;
         } catch (Throwable t) {
             logLocalOptAlways("round=" + round + " FAIL pass='" + passName + "' after " + ((System.nanoTime() - started) / 1_000_000L) + " ms: " + t);
             throw t;
@@ -188,6 +206,110 @@ public class ImOptimizer {
                 heartbeat.interrupt();
             }
         }
+    }
+
+    private PassRunResult runLocalPass(OptimizerPass pass, Set<ImFunction> activeLocalFunctions) {
+        if (!(pass instanceof LocalOptimizerPass)) {
+            int count = pass.optimize(trans);
+            return new PassRunResult(count, Collections.emptySet(), 0, count > 0);
+        }
+        LocalOptimizerPass localPass = (LocalOptimizerPass) pass;
+        Set<ImFunction> changedFunctions = Collections.newSetFromMap(new IdentityHashMap<>());
+        int count = 0;
+        int touched = 0;
+        localPass.beginRound(trans);
+        try {
+            for (ImFunction f : activeLocalFunctions) {
+                if (!localPass.shouldOptimize(f)) {
+                    continue;
+                }
+                touched++;
+                long before = functionFingerprint(f);
+                count += localPass.optimizeFunction(f, trans);
+                long after = functionFingerprint(f);
+                if (before != after) {
+                    changedFunctions.add(f);
+                }
+            }
+        } finally {
+            localPass.endRound(trans);
+        }
+        return new PassRunResult(count, changedFunctions, touched, false);
+    }
+
+    private Set<ImFunction> collectLocalFunctions() {
+        Set<ImFunction> result = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (ImFunction func : ImHelper.calculateFunctionsOfProg(trans.getImProg())) {
+            if (!func.isNative() && !func.isBj()) {
+                result.add(func);
+            }
+        }
+        return result;
+    }
+
+    private static final class PassRunResult {
+        final int count;
+        final Set<ImFunction> changedFunctions;
+        final int touchedFunctions;
+        final boolean allLocalFunctionsMayHaveChanged;
+
+        private PassRunResult(int count, Set<ImFunction> changedFunctions, int touchedFunctions, boolean allLocalFunctionsMayHaveChanged) {
+            this.count = count;
+            this.changedFunctions = changedFunctions;
+            this.touchedFunctions = touchedFunctions;
+            this.allLocalFunctionsMayHaveChanged = allLocalFunctionsMayHaveChanged;
+        }
+    }
+
+    private static long functionFingerprint(ImFunction func) {
+        long h = 0xcbf29ce484222325L;
+        h = mix(h, func.getName().hashCode());
+        h = mix(h, func.getParameters().size());
+        h = mix(h, func.getLocals().size());
+        for (ImVar p : func.getParameters()) {
+            h = mix(h, p.getName().hashCode());
+            h = mix(h, p.getType().hashCode());
+        }
+        for (ImVar l : func.getLocals()) {
+            h = mix(h, l.getName().hashCode());
+            h = mix(h, l.getType().hashCode());
+        }
+        ArrayDeque<Element> stack = new ArrayDeque<>();
+        stack.push(func.getBody());
+        while (!stack.isEmpty()) {
+            Element e = stack.pop();
+            h = mix(h, e.getClass().hashCode());
+            h = mix(h, e.size());
+            if (e instanceof ImVarAccess) {
+                h = mix(h, System.identityHashCode(((ImVarAccess) e).getVar()));
+            } else if (e instanceof ImVarArrayAccess) {
+                h = mix(h, System.identityHashCode(((ImVarArrayAccess) e).getVar()));
+            } else if (e instanceof ImMemberAccess) {
+                h = mix(h, System.identityHashCode(((ImMemberAccess) e).getVar()));
+            } else if (e instanceof ImFunctionCall) {
+                h = mix(h, System.identityHashCode(((ImFunctionCall) e).getFunc()));
+            } else if (e instanceof ImMethodCall) {
+                h = mix(h, System.identityHashCode(((ImMethodCall) e).getMethod()));
+            } else if (e instanceof ImIntVal) {
+                h = mix(h, ((ImIntVal) e).getValI());
+            } else if (e instanceof ImBoolVal) {
+                h = mix(h, ((ImBoolVal) e).getValB() ? 1 : 0);
+            } else if (e instanceof ImRealVal) {
+                h = mix(h, ((ImRealVal) e).getValR().hashCode());
+            } else if (e instanceof ImStringVal) {
+                h = mix(h, ((ImStringVal) e).getValS().hashCode());
+            }
+            for (int i = e.size() - 1; i >= 0; i--) {
+                stack.push(e.get(i));
+            }
+        }
+        return h;
+    }
+
+    private static long mix(long h, int v) {
+        h ^= (v & 0xffffffffL);
+        h *= 0x100000001b3L;
+        return h;
     }
 
     public void doNullsetting() {

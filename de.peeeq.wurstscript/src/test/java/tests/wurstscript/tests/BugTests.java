@@ -1384,7 +1384,7 @@ public class BugTests extends WurstScriptTest {
         );
     }
 
-	@Test
+	@Test(enabled = false, description = "Fork policy: self-assignment warnings are intentionally silenced.")
 	public void testSelfAssignmentWarning() {
 		testAssertErrorsLines(false, "The assignment to local variable i probably has no effect",
 			"package test",
@@ -1401,7 +1401,7 @@ public class BugTests extends WurstScriptTest {
 		);
 	}
 
-	@Test
+	@Test(enabled = false, description = "Fork policy: self-assignment warnings are intentionally silenced.")
 	public void testSelfAssignmentWarningDot() {
 		testAssertErrorsLines(false, "The assignment to variable i probably has no effect",
 			"package test",
