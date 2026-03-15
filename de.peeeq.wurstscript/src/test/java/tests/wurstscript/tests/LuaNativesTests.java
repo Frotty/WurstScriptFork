@@ -5,6 +5,7 @@ import de.peeeq.wurstscript.luaAst.LuaFunction;
 import de.peeeq.wurstscript.translation.lua.translation.LuaNatives;
 import org.testng.annotations.Test;
 
+import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertTrue;
 
 public class LuaNativesTests {
@@ -71,5 +72,29 @@ public class LuaNativesTests {
         assertTrue(loadInt.contains("h.__wurst_ht_int"));
         assertTrue(loadStr.contains("h.__wurst_ht_str"));
         assertTrue(loadHandle.contains("h.__wurst_ht_handle"));
+    }
+
+    @Test
+    public void unknownNativeDoesNotEmitNotImplementedErrorStub() {
+        String rendered = renderNative("GetUnitGoldCost");
+        assertFalse(rendered.contains("is not implemented"));
+        assertFalse(rendered.contains("error(\"The native"));
+    }
+
+    @Test
+    public void unknownNativeEmitsErrorStubInStrictMode() {
+        String old = System.getProperty("wurst.lua.strictNativeFallback");
+        try {
+            System.setProperty("wurst.lua.strictNativeFallback", "true");
+            String rendered = renderNative("GetUnitGoldCost");
+            assertTrue(rendered.contains("is not implemented"));
+            assertTrue(rendered.contains("error(\"The native"));
+        } finally {
+            if (old == null) {
+                System.clearProperty("wurst.lua.strictNativeFallback");
+            } else {
+                System.setProperty("wurst.lua.strictNativeFallback", old);
+            }
+        }
     }
 }

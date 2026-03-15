@@ -472,9 +472,18 @@ public class LuaNatives {
 
     public static void get(LuaFunction f) {
         nativeCodes.getOrDefault(f.getName(), ff -> {
-            // generate a runtime exception
-            f.getBody().add(LuaAst.LuaLiteral("error(\"The native '" + ff.getName() + "' is not implemented.\")"));
+            if (isStrictNativeFallbackEnabled()) {
+                // Optional strict mode for non-WC3 Lua runtimes/tests.
+                f.getBody().add(LuaAst.LuaLiteral("error(\"The native '" + ff.getName() + "' is not implemented.\")"));
+            }
+            // Default mode: leave unknown natives untouched so Lua runtime-provided
+            // globals (e.g. common.ai natives) can be used directly.
         }).accept(f);
+    }
+
+    private static boolean isStrictNativeFallbackEnabled() {
+        return Boolean.getBoolean("wurst.lua.strictNativeFallback")
+            || "1".equals(System.getenv("WURST_LUA_STRICT_NATIVE_FALLBACK"));
     }
 
 }

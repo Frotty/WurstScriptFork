@@ -1272,6 +1272,19 @@ public class LuaTranslationTests extends WurstScriptTest {
     }
 
     @Test
+    public void commonAiNativeCallDoesNotEmitNotImplementedStubInLua() throws IOException {
+        test().testLua(true).withStdLib().lines(
+            "package Test",
+            "native GetUnitGoldCost(int unitid) returns int",
+            "init",
+            "    let x = GetUnitGoldCost(0)"
+        );
+        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_commonAiNativeCallDoesNotEmitNotImplementedStubInLua.lua"), Charsets.UTF_8);
+        assertContainsRegex(compiled, "\\bGetUnitGoldCost\\(");
+        assertFalse(compiled.contains("The native 'GetUnitGoldCost' is not implemented."));
+    }
+
+    @Test
     public void removesUnusedClassesFromLuaOutput() throws IOException {
         test().testLua(true).lines(
             "package Test",
