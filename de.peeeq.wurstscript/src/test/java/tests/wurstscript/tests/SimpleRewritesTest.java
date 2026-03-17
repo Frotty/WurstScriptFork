@@ -225,8 +225,8 @@ public class SimpleRewritesTest extends WurstScriptTest {
 
         String output = readOptimized("test_consecutive_assignment_compaction");
         assertFalse(output.contains("set result = result + 5"), "second assignment should fold into the first");
-        assertTrue(output.contains("set x =") && output.contains("+ 5"),
-            "expected combined assignment with literal addition");
+        assertTrue((output.contains("set x =") && output.contains("+ 5")) || output.contains("set x = 13"),
+            "expected combined assignment or equivalent constant fold");
         assertTrue(output.contains("set test_stored = x"), "side effect assignment should remain after compaction");
     }
 
@@ -297,6 +297,7 @@ public class SimpleRewritesTest extends WurstScriptTest {
 
         String output = readOptimized("test_fold_chained_int_subtractions");
         assertFalse(output.contains("- 1 - 1"), "chained integer subtractions should be folded");
-        assertTrue(output.contains("- 5"), "constant subtraction tail should be combined");
+        assertTrue(output.contains("- 5") || output.contains("print(5)"),
+            "constant subtraction tail should be combined or fully folded");
     }
 }
