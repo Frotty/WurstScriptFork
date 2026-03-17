@@ -2,6 +2,13 @@ package tests.wurstscript.tests;
 
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
+import config.WurstProjectConfigData;
+import de.peeeq.wurstio.WurstCompilerJassImpl;
+import de.peeeq.wurstscript.RunArgs;
+import de.peeeq.wurstscript.ast.WurstModel;
+import de.peeeq.wurstscript.gui.WurstGui;
+import de.peeeq.wurstscript.gui.WurstGuiCliImpl;
+import de.peeeq.wurstscript.luaAst.LuaCompilationUnit;
 import de.peeeq.wurstscript.validation.GlobalCaches;
 import org.testng.annotations.Ignore;
 import org.testng.annotations.Test;
@@ -9,6 +16,7 @@ import org.testng.annotations.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,6 +79,35 @@ public class LuaTranslationTests extends WurstScriptTest {
         assertTrue("Pattern must occur: " + regex, matcher.find());
     }
 
+    private void assertOccursBefore(String output, String first, String second) {
+        int firstPos = output.indexOf(first);
+        int secondPos = output.indexOf(second);
+        assertTrue("Expected to find: " + first, firstPos >= 0);
+        assertTrue("Expected to find: " + second, secondPos >= 0);
+        assertTrue("Expected '" + first + "' before '" + second + "'.", firstPos < secondPos);
+    }
+
+    private String compileLuaWithRunArgs(String testName, boolean withStdLib, String... lines) {
+        RunArgs runArgs = new RunArgs().with("-lua", "-inline", "-localOptimizations", "-stacktraces");
+        WurstGui gui = new WurstGuiCliImpl();
+        WurstCompilerJassImpl compiler = new WurstCompilerJassImpl(null, gui, null, runArgs);
+        List<CU> inputs = Collections.singletonList(new CU(testName + ".wurst", String.join("\n", lines)));
+
+        WurstModel model = parseFiles(Collections.emptyList(), inputs, withStdLib, compiler);
+        assertNotNull("parse returned null model, errors = " + gui.getErrorList(), model);
+        assertTrue("unexpected parse/type errors: " + gui.getErrorList(), gui.getErrorList().isEmpty());
+        compiler.checkProg(model);
+        assertTrue("unexpected compile errors: " + gui.getErrorList(), gui.getErrorList().isEmpty());
+
+        compiler.translateProgToIm(model);
+        compiler.runCompiletime(new WurstProjectConfigData(), false, false);
+        LuaCompilationUnit luaCode = compiler.transformProgToLua();
+
+        StringBuilder sb = new StringBuilder();
+        luaCode.print(sb, 0);
+        return sb.toString();
+    }
+
     @Test
     public void testStdLib() throws IOException {
         test().testLua(true).withStdLib().lines(
@@ -85,6 +122,55 @@ public class LuaTranslationTests extends WurstScriptTest {
         assertTrue(compiled.contains("function __wurst_SaveInteger("));
         assertTrue(compiled.contains("function __wurst_LoadInteger("));
         assertFunctionBodyContains(compiled, "__wurst_LoadInteger", "return 0", true);
+    }
+
+    @Test
+    public void stacktraceStringsNotInjectedIntoNumericComparisons() {
+        String compiled = compileLuaWithRunArgs(
+            "LuaTranslationTests_stacktraceStringsNotInjectedIntoNumericComparisons",
+            false,
+            "package Test",
+            "public tuple Vec2(real x, real y)",
+            "public tuple scanResult(boolean found, Vec2 pos)",
+            "class MyRect",
+            "    real minX",
+            "    real minY",
+            "    real maxX",
+            "    real maxY",
+            "    construct(real minX, real minY, real maxX, real maxY)",
+            "        this.minX = minX",
+            "        this.minY = minY",
+            "        this.maxX = maxX",
+            "        this.maxY = maxY",
+            "    function contains(Vec2 p) returns boolean",
+            "        return p.x > minX and p.x < maxX and p.y > minY and p.y < maxY",
+            "function gridAnchor(MyRect r, int dirX, int dirY, boolean isBehind) returns Vec2",
+            "    let ax = dirX >= 0 ? r.minX + (isBehind ? 0 : 64) : r.maxX + (isBehind ? 0 : 64)",
+            "    let ay = dirY >= 0 ? r.minY : r.maxY",
+            "    return Vec2(ax, ay)",
+            "function stepsAlongY(MyRect r, real startY, int dirY, real stepSize) returns int",
+            "    if dirY >= 0 and stepSize > 0 and r.maxY > startY",
+            "        return 1",
+            "    return 0",
+            "class BuildScanIterator",
+            "    private var scanWidth = 128.",
+            "    function tryRect(MyRect r, int dirX, int dirY) returns scanResult",
+            "        if r == null",
+            "            return scanResult(false, Vec2(0., 0.))",
+            "        let start = gridAnchor(r, dirX, dirY, true)",
+            "        if not r.contains(start)",
+            "            return scanResult(false, Vec2(0., 0.))",
+            "        let maxY = stepsAlongY(r, start.y, dirY, scanWidth)",
+            "        if maxY >= 0",
+            "            return scanResult(true, start)",
+            "        return scanResult(false, Vec2(0., 0.))",
+            "init",
+            "    let b = new BuildScanIterator",
+            "    b.tryRect(new MyRect(0., 0., 256., 256.), 1, 1)"
+        );
+        assertContainsRegex(compiled, "\"when calling contains");
+        assertDoesNotContainRegex(compiled, "\"when calling contains[^\"]*\"\\s*[<>]=?");
+        assertDoesNotContainRegex(compiled, "(?s)if not\\((\\w+)\\) then.*?stepsAlongY\\([^\\n]*,\\s*\\1\\s*,");
     }
 
     @Test
@@ -369,6 +455,97 @@ public class LuaTranslationTests extends WurstScriptTest {
         assertTrue(compiled.contains("function config("));
         assertFalse(compiled.contains("function main2("));
         assertFalse(compiled.contains("function config2("));
+    }
+
+    @Test
+    public void luaHeavyBootstrapStateIsSeededFromMain() throws IOException {
+        test().testLua(true).lines(
+            "package Test",
+            "class C",
+            "function id(int x) returns int",
+            "    return x",
+            "init",
+            "    let c = new C()",
+            "    if c == null",
+            "        skip"
+        );
+        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_luaHeavyBootstrapStateIsSeededFromMain.lua"), Charsets.UTF_8);
+        int mainPos = compiled.indexOf("function main(");
+        assertTrue(mainPos >= 0);
+        int configPos = compiled.indexOf("function config(", mainPos);
+        String mainSection = compiled.substring(mainPos, configPos > mainPos ? configPos : compiled.length());
+        String beforeMain = compiled.substring(0, mainPos);
+        assertFalse(beforeMain.contains("__wurst_objectIndexMap = ({"));
+        assertFalse(beforeMain.contains("__wurst_string_index_map = ({"));
+        assertFalse(beforeMain.contains("Wurst experimental Lua assertion guards"));
+        assertTrue(mainSection.contains("__wurst_objectIndexMap = ({"));
+        assertTrue(mainSection.contains("__wurst_string_index_map = ({"));
+        assertTrue(mainSection.contains("Wurst experimental Lua assertion guards"));
+    }
+
+    @Test
+    public void luaClassDispatchTablesAreInitializedInsideMain() throws IOException {
+        test().testLua(true).lines(
+            "package Test",
+            "class A",
+            "    function f() returns int",
+            "        return 1",
+            "init",
+            "    let a = new A()",
+            "    if a.f() > 0",
+            "        skip"
+        );
+        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_luaClassDispatchTablesAreInitializedInsideMain.lua"), Charsets.UTF_8);
+        int mainPos = compiled.indexOf("function main(");
+        assertTrue(mainPos >= 0);
+        int configPos = compiled.indexOf("function config(", mainPos);
+        String mainSection = compiled.substring(mainPos, configPos > mainPos ? configPos : compiled.length());
+        String beforeMain = compiled.substring(0, mainPos);
+        assertFalse(beforeMain.contains("A.__wurst_supertypes ="));
+        assertFalse(beforeMain.contains("A.__typeId__ ="));
+        assertTrue(mainSection.contains("A.__wurst_supertypes ="));
+        assertTrue(mainSection.contains("A.__typeId__ ="));
+        assertTrue(mainSection.contains("A.A_f ="));
+    }
+
+    @Test
+    public void luaDeferredBootstrapRunsBeforeInitGlobalsInMain() throws IOException {
+        test().testLua(true).lines(
+            "package Test",
+            "class C",
+            "    function f() returns int",
+            "        return 1",
+            "init",
+            "    let c = new C()",
+            "    if c.f() > 0",
+            "        skip"
+        );
+        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_luaDeferredBootstrapRunsBeforeInitGlobalsInMain.lua"), Charsets.UTF_8);
+        int mainPos = compiled.indexOf("function main(");
+        assertTrue(mainPos >= 0);
+        int configPos = compiled.indexOf("function config(", mainPos);
+        String mainSection = compiled.substring(mainPos, configPos > mainPos ? configPos : compiled.length());
+
+        assertOccursBefore(mainSection, "__wurst_objectIndexMap = ({", "initGlobals()");
+        assertOccursBefore(mainSection, "__wurst_string_index_map = ({", "initGlobals()");
+        assertOccursBefore(mainSection, "C.__wurst_supertypes =", "initGlobals()");
+        assertOccursBefore(mainSection, "C.__typeId__ =", "initGlobals()");
+        assertOccursBefore(mainSection, "C.C_f =", "initGlobals()");
+        assertOccursBefore(mainSection, "Wurst experimental Lua assertion guards", "initGlobals()");
+    }
+
+    @Test
+    public void luaClassTablesExistBeforeCreateMethodDefinitions() throws IOException {
+        test().testLua(true).lines(
+            "package Test",
+            "class A",
+            "init",
+            "    let a = new A()",
+            "    if a == null",
+            "        skip"
+        );
+        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_luaClassTablesExistBeforeCreateMethodDefinitions.lua"), Charsets.UTF_8);
+        assertOccursBefore(compiled, "A = ({})", "function A:create(");
     }
 
 
@@ -901,31 +1078,51 @@ public class LuaTranslationTests extends WurstScriptTest {
     }
 
     @Test
-    public void luaInlinerDoesNotInlineFunctionsWithMultipleReturns() throws IOException {
-        test().testLua(true).lines(
+    public void luaInlinerInlinesFunctionsWithMultipleReturns() {
+        String compiled = compileLuaWithRunArgs(
+            "LuaTranslationTests_luaInlinerInlinesFunctionsWithMultipleReturns",
+            false,
             "package Test",
             "native takesInt(int i)",
+            "native randomBool() returns boolean",
             "function choose(boolean b, int x) returns int",
             "    if b",
-            "        return x + 1",
+                "        return x + 1",
             "    return x + 2",
             "function caller()",
-            "    let v = choose(true, 40)",
+            "    let v = choose(randomBool(), 40)",
             "    takesInt(v)",
             "init",
             "    caller()"
         );
 
-        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_luaInlinerDoesNotInlineFunctionsWithMultipleReturns.lua"), Charsets.UTF_8);
-        int start = compiled.indexOf("function caller(");
-        assertTrue("caller function not found in generated lua output", start >= 0);
-        int end = compiled.indexOf("\nend", start);
-        assertTrue("caller function end not found in generated lua output", end > start);
-        String callerBody = compiled.substring(start, end);
+        assertDoesNotContainRegex(compiled, "\\bchoose\\s*\\(\\s*randomBool\\s*\\(\\s*\\)\\s*,\\s*40\\s*\\)");
+        assertContainsRegex(compiled, "inlineDone");
+        assertContainsRegex(compiled, "inlineRet");
+    }
 
-        assertTrue("caller should keep a direct call to choose for Lua target", callerBody.contains("choose(true, 40)"));
-        assertFalse("caller should not contain multi-return inline control vars", callerBody.contains("inlineDone"));
-        assertFalse("caller should not contain multi-return inline return temp vars", callerBody.contains("inlineRet"));
+    @Test
+    public void luaInlinerMultiReturnRewriteIsExplicitWithInlAndLocalOpts() {
+        String compiled = compileLuaWithRunArgs(
+            "LuaTranslationTests_luaInlinerMultiReturnRewriteIsExplicitWithInlAndLocalOpts",
+            false,
+            "package Test",
+            "native takesInt(int i)",
+            "native randomBool() returns boolean",
+            "function choose(boolean b, int x) returns int",
+            "    if b",
+            "        return x + 1",
+            "    return x + 2",
+            "function caller()",
+            "    let v = choose(randomBool(), 40)",
+            "    takesInt(v)",
+            "init",
+            "    caller()"
+        );
+
+        assertDoesNotContainRegex(compiled, "\\bchoose\\s*\\(\\s*randomBool\\s*\\(\\s*\\)\\s*,\\s*40\\s*\\)");
+        assertContainsRegex(compiled, "inlineDone");
+        assertContainsRegex(compiled, "inlineRet");
     }
 
     @Test
@@ -1065,6 +1262,21 @@ public class LuaTranslationTests extends WurstScriptTest {
         assertDoesNotContainRegex(compiled, "\\bHaveSavedHandle\\(");
         assertContainsRegex(compiled, "\\b__wurst_HaveSavedHandle\\(");
         assertTrue(compiled.contains("Wurst experimental Lua assertion guards"));
+    }
+
+    @Test
+    public void hashtableNativeOverrideGuardsAreRuntimeSafe() throws IOException {
+        test().testLua(true).withStdLib().lines(
+            "package Test",
+            "init",
+            "    let h = InitHashtable()",
+            "    h.saveInt(1, 2, 7)"
+        );
+        String compiled = Files.toString(new File("test-output/lua/LuaTranslationTests_hashtableNativeOverrideGuardsAreRuntimeSafe.lua"), Charsets.UTF_8);
+        assertTrue(compiled.contains("Wurst experimental Lua assertion guards"));
+        assertContainsRegex(compiled, "\\blocal\\s+__wurst_guard_ok\\s*=\\s*pcall\\s*\\(\\s*function\\s*\\(");
+        assertContainsRegex(compiled, "\\bInitHashtable\\s*=\\s*function\\s*\\(");
+        assertContainsRegex(compiled, "\\bSaveInteger\\s*=\\s*function\\s*\\(");
     }
 
     @Test
