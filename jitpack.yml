@@ -1,10 +1,7 @@
-jdk:
-  - openjdk17
-
 before_install:
-  - curl -s "https://get.sdkman.io" | bash
   - source "$HOME/.sdkman/bin/sdkman-init.sh"
   - sdk install java 25-tem
   - sdk use java 25-tem
+  - rm -rf "$HOME/.sdkman/archives/"* "$HOME/.sdkman/tmp/"* || true
   - echo "JAVA_HOME=$JAVA_HOME"
   - java -version
