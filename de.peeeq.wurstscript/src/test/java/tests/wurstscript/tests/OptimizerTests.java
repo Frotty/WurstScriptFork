@@ -2200,6 +2200,150 @@ public class OptimizerTests extends WurstScriptTest {
         );
     }
 
+    /**
+     * LocalMerger fix: ImVarArrayAccess on the RHS must count as a USE in liveness.
+     * Without the fix, arr had zero occupancy and could be merged with any same-type
+     * variable regardless of overlapping live ranges.
+     */
+    @Test
+    public void localMergerArrayLivenessTracked() {
+        WurstModel model = Ast.WurstModel();
+        ImTranslator tr = new ImTranslator(model, false, new RunArgs());
+        ImProg prog = tr.getImProg();
+        Element trace = Ast.NoExpr();
+
+        ImVar arr = JassIm.ImVar(trace, JassIm.ImArrayType(TypesHelper.imInt()), "arr", false);
+        ImVar x   = JassIm.ImVar(trace, TypesHelper.imInt(), "x", false);
+
+        // stmt1: arr[0] = 5
+        ImSet stmt1 = JassIm.ImSet(trace,
+            JassIm.ImVarArrayAccess(trace, arr, JassIm.ImExprs(JassIm.ImIntVal(0))),
+            JassIm.ImIntVal(5));
+        // stmt2: x = arr[0]   — last use of arr
+        ImSet stmt2 = JassIm.ImSet(trace,
+            JassIm.ImVarAccess(x),
+            JassIm.ImVarArrayAccess(trace, arr, JassIm.ImExprs(JassIm.ImIntVal(0))));
+
+        ImFunction func = JassIm.ImFunction(trace, "f", JassIm.ImTypeVars(), JassIm.ImVars(),
+            JassIm.ImVoid(), JassIm.ImVars(arr, x), JassIm.ImStmts(stmt1, stmt2),
+            Collections.emptyList());
+        prog.getFunctions().add(func);
+
+        Map<ImStmt, Set<ImVar>> liveness = new LocalMerger().calculateLiveness(func);
+
+        // arr is read by stmt2, so it must be live-out of stmt1
+        assertTrue(liveness.get(stmt1).contains(arr),
+            "arr should be live-out of arr[0]=5 because it is read in the next statement");
+        // arr has no use after stmt2
+        assertFalse(liveness.get(stmt2).contains(arr),
+            "arr should not be live-out of x=arr[0]");
+    }
+
+    /**
+     * Two local arrays whose live ranges overlap must not be merged.
+     * Before the fix, missing USE tracking gave both arrays zero occupancy,
+     * causing them to be incorrectly merged.
+     */
+    @Test
+    public void localMergerOverlappingArraysNotMerged() {
+        WurstModel model = Ast.WurstModel();
+        ImTranslator tr = new ImTranslator(model, false, new RunArgs());
+        ImProg prog = tr.getImProg();
+        Element trace = Ast.NoExpr();
+
+        ImVar arr1 = JassIm.ImVar(trace, JassIm.ImArrayType(TypesHelper.imInt()), "arr1", false);
+        ImVar arr2 = JassIm.ImVar(trace, JassIm.ImArrayType(TypesHelper.imInt()), "arr2", false);
+        ImVar x    = JassIm.ImVar(trace, TypesHelper.imInt(), "x", false);
+        ImVar y    = JassIm.ImVar(trace, TypesHelper.imInt(), "y", false);
+
+        // arr1 and arr2 are both live across stmts 2–3, so their ranges overlap:
+        // stmt1: arr1[0] = 1
+        // stmt2: arr2[0] = 2        <- arr1 still live (read at stmt3)
+        // stmt3: x = arr1[0]        <- last use of arr1
+        // stmt4: y = arr2[0]        <- last use of arr2
+        ImFunction func = JassIm.ImFunction(trace, "f", JassIm.ImTypeVars(), JassIm.ImVars(),
+            JassIm.ImVoid(), JassIm.ImVars(arr1, arr2, x, y),
+            JassIm.ImStmts(
+                JassIm.ImSet(trace,
+                    JassIm.ImVarArrayAccess(trace, arr1, JassIm.ImExprs(JassIm.ImIntVal(0))),
+                    JassIm.ImIntVal(1)),
+                JassIm.ImSet(trace,
+                    JassIm.ImVarArrayAccess(trace, arr2, JassIm.ImExprs(JassIm.ImIntVal(0))),
+                    JassIm.ImIntVal(2)),
+                JassIm.ImSet(trace,
+                    JassIm.ImVarAccess(x),
+                    JassIm.ImVarArrayAccess(trace, arr1, JassIm.ImExprs(JassIm.ImIntVal(0)))),
+                JassIm.ImSet(trace,
+                    JassIm.ImVarAccess(y),
+                    JassIm.ImVarArrayAccess(trace, arr2, JassIm.ImExprs(JassIm.ImIntVal(0))))),
+            Collections.emptyList());
+        prog.getFunctions().add(func);
+
+        new LocalMerger().optimizeFunction(func, tr);
+
+        // both arrays must still be present — they interfere
+        assertTrue(func.getLocals().contains(arr1), "arr1 must survive (live ranges overlap)");
+        assertTrue(func.getLocals().contains(arr2), "arr2 must survive (live ranges overlap)");
+    }
+
+    /**
+     * Two local arrays whose live ranges do NOT overlap must be merged, and every
+     * ImVarArrayAccess that referenced the eliminated variable must be rewritten to
+     * the representative.
+     * Before the fix, applyMerges lacked a visitor for ImVarArrayAccess, so the
+     * access nodes kept pointing at the stale variable.
+     */
+    @Test
+    public void localMergerNonOverlappingArraysMergedAndRewritten() {
+        WurstModel model = Ast.WurstModel();
+        ImTranslator tr = new ImTranslator(model, false, new RunArgs());
+        ImProg prog = tr.getImProg();
+        Element trace = Ast.NoExpr();
+
+        ImVar arr1 = JassIm.ImVar(trace, JassIm.ImArrayType(TypesHelper.imInt()), "arr1", false);
+        ImVar arr2 = JassIm.ImVar(trace, JassIm.ImArrayType(TypesHelper.imInt()), "arr2", false);
+        ImVar x    = JassIm.ImVar(trace, TypesHelper.imInt(), "x", false);
+        ImVar y    = JassIm.ImVar(trace, TypesHelper.imInt(), "y", false);
+
+        // arr1 and arr2 live ranges are disjoint:
+        // stmt1: arr1[0] = 1
+        // stmt2: x = arr1[0]        <- last use of arr1
+        // stmt3: arr2[0] = 2
+        // stmt4: y = arr2[0]        <- last use of arr2
+        ImSet stmt3 = JassIm.ImSet(trace,
+            JassIm.ImVarArrayAccess(trace, arr2, JassIm.ImExprs(JassIm.ImIntVal(0))),
+            JassIm.ImIntVal(2));
+        ImSet stmt4 = JassIm.ImSet(trace,
+            JassIm.ImVarAccess(y),
+            JassIm.ImVarArrayAccess(trace, arr2, JassIm.ImExprs(JassIm.ImIntVal(0))));
+
+        ImFunction func = JassIm.ImFunction(trace, "f", JassIm.ImTypeVars(), JassIm.ImVars(),
+            JassIm.ImVoid(), JassIm.ImVars(arr1, arr2, x, y),
+            JassIm.ImStmts(
+                JassIm.ImSet(trace,
+                    JassIm.ImVarArrayAccess(trace, arr1, JassIm.ImExprs(JassIm.ImIntVal(0))),
+                    JassIm.ImIntVal(1)),
+                JassIm.ImSet(trace,
+                    JassIm.ImVarAccess(x),
+                    JassIm.ImVarArrayAccess(trace, arr1, JassIm.ImExprs(JassIm.ImIntVal(0)))),
+                stmt3,
+                stmt4),
+            Collections.emptyList());
+        prog.getFunctions().add(func);
+
+        new LocalMerger().optimizeFunction(func, tr);
+
+        // arr2 must have been eliminated
+        assertFalse(func.getLocals().contains(arr2), "arr2 should be merged away");
+        assertTrue(func.getLocals().contains(arr1),  "arr1 should remain as the representative");
+
+        // every ImVarArrayAccess that was arr2 must now reference arr1
+        ImVar lhsVar = ((ImVarArrayAccess) stmt3.getLeft()).getVar();
+        ImVar rhsVar = ((ImVarArrayAccess) stmt4.getRight()).getVar();
+        assertEquals(lhsVar, arr1, "stmt3 LHS must be rewritten to arr1");
+        assertEquals(rhsVar, arr1, "stmt4 RHS must be rewritten to arr1");
+    }
+
     private static int countOccurrences(String text, String needle) {
         int count = 0;
         int index = 0;

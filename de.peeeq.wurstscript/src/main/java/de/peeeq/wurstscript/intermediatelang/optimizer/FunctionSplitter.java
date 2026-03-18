@@ -40,7 +40,6 @@ public class FunctionSplitter {
         // run some basic optimizations first:
         func.flatten(tr);
         new ConstantAndCopyPropagation().optimizeFunc(func);
-//        new TempMerger().optimizeFunc(func);
         new LocalMerger().optimizeFunc(func);
         Set<ImVar> usedVars = UsedVariables.calculate(func);
         func.getLocals().removeIf(v -> !usedVars.contains(v));
