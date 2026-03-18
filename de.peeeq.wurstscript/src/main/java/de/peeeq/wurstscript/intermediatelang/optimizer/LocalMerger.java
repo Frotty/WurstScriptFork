@@ -17,27 +17,6 @@ import java.util.*;
 
 public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private int totalLocalsMerged = 0;
-    private static final boolean PROFILE = Boolean
-            .parseBoolean(System.getProperty("wurst.localmerger.profile", "true"));
-    private static final long SLOW_FUNC_MS = Long.getLong("wurst.localmerger.slowFuncMs", 1000L);
-    private static final int MAX_SCC_ITER = Integer.getInteger("wurst.localmerger.maxSccIter", 1_000_000);
-    /**
-     * Set to true to use upstream interference-graph coloring instead of BitSet
-     * point coloring.
-     */
-    public static boolean USE_INTERFERENCE_GRAPH = false;
-
-    /**
-     * When false, locals are never merged into parameter slots.
-     * Parameters are visible to callers — reusing them as scratch variables
-     * corrupts the function's observable behaviour for any non-inlined call.
-     */
-    private boolean allowMergeIntoParams = false;
-
-    public LocalMerger setAllowMergeIntoParams(boolean allow) {
-        this.allowMergeIntoParams = allow;
-        return this;
-    }
 
     @Override
     public int optimize(ImTranslator trans) {
@@ -52,9 +31,7 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     }
 
     @Override
-    public String getName() {
-        return "Local variables merged";
-    }
+    public String getName() { return "Local variables merged"; }
 
     @Override
     public int optimizeFunction(ImFunction func, ImTranslator trans) {
@@ -64,160 +41,44 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     }
 
     void optimizeFunc(ImFunction func) {
-        long t0 = System.nanoTime();
-        LivenessResult livenessResult = calculateLivenessDetailed(func);
-        Map<ImStmt, Set<ImVar>> livenessInfo = livenessResult.livenessInfo;
+        Map<ImStmt, Set<ImVar>> livenessInfo = calculateLiveness(func);
         eliminateDeadCode(livenessInfo);
-        mergeLocals(livenessResult, func);
-        if (PROFILE) {
-            long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
-            if (elapsedMs >= SLOW_FUNC_MS) {
-                de.peeeq.wurstscript.WLogger.warning("[LocalMerger] slow function '" + func.getName()
-                        + "' elapsedMs=" + elapsedMs
-                        + " nodes=" + livenessResult.nodeCount
-                        + " sccCount=" + livenessResult.sccCount
-                        + " maxSccSize=" + livenessResult.maxSccSize
-                        + " sccIterations=" + livenessResult.totalSccIterations
-                        + " maxSccIterations=" + livenessResult.maxSccIterations
-                        + " abortedScc=" + livenessResult.abortedSccIterations);
-            }
-        }
+        mergeLocals(livenessInfo, func);
     }
 
-    private boolean canMerge(ImType a, ImType b) {
-        return a.equalsType(b);
-    }
+    private boolean canMerge(ImType a, ImType b) { return a.equalsType(b); }
 
-    /**
-     * Bitset coloring using explicit live points:
-     * point 2*i = live IN to statement i
-     * point 2*i + 1 = live OUT of statement i
-     *
-     * Using only OUT sets is too weak for parameter-slot reuse:
-     * parameters can appear "free" before their final in-statement use,
-     * which causes incorrect merges with locals.
-     */
-    private void mergeLocals(LivenessResult livenessResult, ImFunction func) {
-        if (USE_INTERFERENCE_GRAPH) {
-            mergeLocalsInterferenceGraph(livenessResult.occupancyByVar, func);
-            return;
-        }
-
-        Map<ImVar, BitSet> occupancyByVar = livenessResult.occupancyByVar;
-
-        List<ImVar> params = new ArrayList<>(func.getParameters());
-        if (func.hasFlag(de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG)
-                && !params.isEmpty()) {
-            params.remove(params.size() - 1);
-        }
-
-        class ColorSlot {
-            final ImVar repr;
-            final ImType type;
-            final BitSet occupiedPoints;
-
-            ColorSlot(ImVar repr, BitSet occupiedPoints) {
-                this.repr = repr;
-                this.type = repr.getType();
-                this.occupiedPoints = occupiedPoints;
-            }
-        }
-
-        List<ColorSlot> slots = new ArrayList<>();
-        if (allowMergeIntoParams) {
-            for (ImVar p : params) {
-                BitSet occ = new BitSet();
-                BitSet lp = occupancyByVar.get(p);
-                if (lp != null) {
-                    occ.or(lp);
-                }
-                slots.add(new ColorSlot(p, occ));
-            }
-        }
-
-        List<ImVar> locals = new ArrayList<>(func.getLocals());
-        locals.sort((a, b) -> Integer.compare(
-                occupancyByVar.getOrDefault(b, new BitSet()).cardinality(),
-                occupancyByVar.getOrDefault(a, new BitSet()).cardinality()));
-
-        Map<ImVar, ImVar> merges = new LinkedHashMap<>();
-        for (ImVar v : locals) {
-            BitSet livePoints = occupancyByVar.get(v);
-            if (livePoints == null) {
-                livePoints = new BitSet();
-            }
-
-            ColorSlot target = null;
-            for (ColorSlot s : slots) {
-                if (!canMerge(s.type, v.getType())) {
-                    continue;
-                }
-                if (!s.occupiedPoints.intersects(livePoints)) {
-                    target = s;
-                    break;
-                }
-            }
-
-            if (target != null) {
-                merges.put(v, target.repr);
-                target.occupiedPoints.or(livePoints);
-            } else {
-                slots.add(new ColorSlot(v, (BitSet) livePoints.clone()));
-            }
-        }
-
-        applyMerges(func, merges);
-        int removed = removeUnusedLocals(func);
-        totalLocalsMerged += removed;
-    }
-
-    /**
-     * Upstream-style interference-graph coloring, but built from exact live points
-     * instead of only OUT sets.
-     */
-    private void mergeLocalsInterferenceGraph(Map<ImVar, BitSet> occupancyByVar, ImFunction func) {
-        List<ImVar> params = new ArrayList<>(func.getParameters());
-        if (func.hasFlag(de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG)
-                && !params.isEmpty()) {
-            params.remove(params.size() - 1);
-        }
-
-        List<ImVar> allVars = new ArrayList<>();
-        allVars.addAll(params);
-        allVars.addAll(func.getLocals());
-
-        Map<ImVar, Set<ImVar>> interference = calculateInterferenceGraph(allVars, occupancyByVar);
+    private void mergeLocals(Map<ImStmt, Set<ImVar>> livenessInfo, ImFunction func) {
+        Map<ImVar, Set<ImVar>> interference = calculateInferenceGraph(livenessInfo);
 
         PriorityQueue<ImVar> queue = new PriorityQueue<>(
-                (x, y) -> interference.get(y).size() - interference.get(x).size());
-        queue.addAll(func.getLocals());
+            (x, y) -> interference.get(y).size() - interference.get(x).size()
+        );
+        queue.addAll(interference.keySet());
 
-        List<ImVar> colors = allowMergeIntoParams ? new ArrayList<>(params) : new ArrayList<>();
+        List<ImVar> params = new ArrayList<>(func.getParameters());
+        if (func.hasFlag(de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG) && !params.isEmpty()) {
+            params.remove(params.size() - 1);
+        }
+        queue.removeAll(func.getParameters());
+
+        List<ImVar> colors = new ArrayList<>(params);
         Map<ImVar, ImVar> merges = new LinkedHashMap<>();
 
         while (!queue.isEmpty()) {
             ImVar v = queue.poll();
             boolean merged = false;
+
             for (ImVar color : colors) {
-                if (!canMerge(color.getType(), v.getType())) {
-                    continue;
-                }
+                if (!canMerge(color.getType(), v.getType())) continue;
+
                 boolean conflict = false;
                 for (ImVar neigh : interference.get(v)) {
-                    if (merges.getOrDefault(neigh, neigh) == color) {
-                        conflict = true;
-                        break;
-                    }
+                    if (merges.getOrDefault(neigh, neigh) == color) { conflict = true; break; }
                 }
-                if (!conflict) {
-                    merges.put(v, color);
-                    merged = true;
-                    break;
-                }
+                if (!conflict) { merges.put(v, color); merged = true; break; }
             }
-            if (!merged) {
-                colors.add(v);
-            }
+            if (!merged) colors.add(v);
         }
 
         applyMerges(func, merges);
@@ -225,53 +86,16 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
         totalLocalsMerged += removed;
     }
 
-    private Map<ImVar, Set<ImVar>> calculateInterferenceGraph(Collection<ImVar> vars,
-            Map<ImVar, BitSet> occupancyByVar) {
-        Map<ImVar, Set<ImVar>> g = new LinkedHashMap<>();
-        List<ImVar> all = new ArrayList<>(vars);
-
-        for (ImVar v : all) {
-            g.put(v, HashSet.empty());
-        }
-
-        for (int i = 0; i < all.size(); i++) {
-            ImVar v1 = all.get(i);
-            BitSet b1 = occupancyByVar.getOrDefault(v1, new BitSet());
-
-            for (int j = i + 1; j < all.size(); j++) {
-                ImVar v2 = all.get(j);
-                if (!canMerge(v1.getType(), v2.getType())) {
-                    continue;
-                }
-
-                BitSet b2 = occupancyByVar.getOrDefault(v2, new BitSet());
-                if (b1.intersects(b2)) {
-                    g.put(v1, g.get(v1).add(v2));
-                    g.put(v2, g.get(v2).add(v1));
-                }
-            }
-        }
-
-        return g;
-    }
-
     private static void applyMerges(ImFunction func, Map<ImVar, ImVar> merges) {
-        if (merges.isEmpty()) {
-            return;
-        }
+        if (merges.isEmpty()) return;
 
         func.accept(new ImFunction.DefaultVisitor() {
-            @Override
-            public void visit(ImVarAccess va) {
+            @Override public void visit(ImVarAccess va) {
                 super.visit(va);
                 ImVar m = merges.get(va.getVar());
-                if (m != null) {
-                    va.setVar(m);
-                }
+                if (m != null) va.setVar(m);
             }
-
-            @Override
-            public void visit(ImSet set) {
+            @Override public void visit(ImSet set) {
                 super.visit(set);
                 if (set.getLeft() instanceof ImVarAccess) {
                     ImVar m = merges.get(((ImVarAccess) set.getLeft()).getVar());
@@ -281,14 +105,10 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
                     }
                 }
             }
-
-            @Override
-            public void visit(ImVarargLoop varargLoop) {
+            @Override public void visit(ImVarargLoop varargLoop) {
                 super.visit(varargLoop);
                 ImVar m = merges.get(varargLoop.getLoopVar());
-                if (m != null) {
-                    varargLoop.setLoopVar(m);
-                }
+                if (m != null) varargLoop.setLoopVar(m);
             }
         });
     }
@@ -297,44 +117,34 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
         final java.util.Set<ImVar> used = new java.util.HashSet<>();
         used.addAll(f.getParameters());
         f.getBody().accept(new Element.DefaultVisitor() {
-            @Override
-            public void visit(ImVarAccess va) {
-                super.visit(va);
-                used.add(va.getVar());
-            }
-
-            @Override
-            public void visit(ImMemberAccess ma) {
-                super.visit(ma);
-                used.add(ma.getVar());
-            }
-
-            @Override
-            public void visit(ImVarArrayAccess vaa) {
-                super.visit(vaa);
-                used.add(vaa.getVar());
-            }
+            @Override public void visit(ImVarAccess va) { super.visit(va); used.add(va.getVar()); }
+            @Override public void visit(ImMemberAccess ma) { super.visit(ma); used.add(ma.getVar()); }
+            @Override public void visit(ImVarArrayAccess vaa) { super.visit(vaa); used.add(vaa.getVar()); }
         });
         List<ImVar> locals = new ArrayList<>(f.getLocals());
         int before = locals.size();
         List<ImVar> kept = new ArrayList<>(locals.size());
-        for (ImVar v : locals) {
-            if (used.contains(v)) {
-                kept.add(v);
+        for (ImVar v : locals) if (used.contains(v)) kept.add(v);
+        if (kept.size() != locals.size()) { f.getLocals().clear(); f.getLocals().addAll(kept); }
+        return before - kept.size();
+    }
+
+    private Map<ImVar, Set<ImVar>> calculateInferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
+        Map<ImVar, Set<ImVar>> g = new LinkedHashMap<>();
+        for (Map.Entry<ImStmt, Set<ImVar>> e : livenessInfo.entrySet()) {
+            Set<ImVar> live = e.getValue();
+            for (ImVar v1 : live) {
+                Set<ImVar> set = g.getOrDefault(v1, HashSet.empty());
+                set = set.addAll(live.filter(v2 -> canMerge(v1.getType(), v2.getType())));
+                g.put(v1, set);
             }
         }
-        if (kept.size() != locals.size()) {
-            f.getLocals().clear();
-            f.getLocals().addAll(kept);
-        }
-        return before - kept.size();
+        return g;
     }
 
     private void eliminateDeadCode(Map<ImStmt, Set<ImVar>> livenessInfo) {
         for (ImStmt s : livenessInfo.keySet()) {
-            if (!(s instanceof ImSet)) {
-                continue;
-            }
+            if (!(s instanceof ImSet)) continue;
 
             ImSet set = (ImSet) s;
             ImLExpr lhs = set.getLeft();
@@ -353,16 +163,12 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
                 v = TypesHelper.getSimpleAndPureTupleVar((ImTupleSelection) lhs);
             }
 
-            if (!isTrackableLocal(v)) {
-                continue;
-            }
+            if (!isTrackableLocal(v)) continue;
 
             if (!livenessInfo.get(s).contains(v)) {
                 final List<ImExpr> raw = new ArrayList<>();
                 collectLhsSideEffects(lhs, raw);
-                if (hasSideEffects(set.getRight())) {
-                    raw.add(set.getRight());
-                }
+                if (hasSideEffects(set.getRight())) raw.add(set.getRight());
 
                 if (raw.isEmpty()) {
                     AstEdits.deleteStmt(s);
@@ -379,47 +185,26 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
 
     private static void collectLhsSideEffects(ImLExpr lhs, List<ImExpr> out) {
         if (lhs instanceof ImVarArrayAccess a) {
-            for (ImExpr idx : a.getIndexes()) {
-                if (hasSideEffects(idx)) {
-                    out.add(idx);
-                }
-            }
+            for (ImExpr idx : a.getIndexes()) if (hasSideEffects(idx)) out.add(idx);
         } else if (lhs instanceof ImMemberAccess m) {
-            if (hasSideEffects(m.getReceiver())) {
-                out.add(m.getReceiver());
-            }
-            for (ImExpr idx : m.getIndexes()) {
-                if (hasSideEffects(idx)) {
-                    out.add(idx);
-                }
-            }
+            if (hasSideEffects(m.getReceiver())) out.add(m.getReceiver());
+            for (ImExpr idx : m.getIndexes()) if (hasSideEffects(idx)) out.add(idx);
         } else if (lhs instanceof ImTupleSelection ts) {
             Element t = ts.getTupleExpr();
-            if (hasSideEffects(t)) {
-                out.add((ImExpr) t);
-            }
+            if (hasSideEffects(t)) out.add((ImExpr) t);
         }
     }
 
     private static boolean hasSideEffects(Element e) {
-        if (e instanceof ImFunctionCall || e instanceof ImMethodCall) {
-            return true;
-        }
-        if (e instanceof ImAlloc || e instanceof ImDealloc) {
-            return true;
-        }
-        for (int i = 0; i < e.size(); i++) {
-            if (hasSideEffects(e.get(i))) {
-                return true;
-            }
-        }
+        if (e instanceof ImFunctionCall || e instanceof ImMethodCall) return true;
+        if (e instanceof ImAlloc || e instanceof ImDealloc) return true;
+        for (int i = 0; i < e.size(); i++) if (hasSideEffects(e.get(i))) return true;
         return false;
     }
 
     /**
      * Some temporary vars can be referenced before being attached to the IM tree.
-     * isGlobal() throws for those, so we skip them in local liveness/merge
-     * tracking.
+     * isGlobal() throws for those, so we skip them in local liveness/merge tracking.
      */
     private static boolean isTrackableLocal(ImVar v) {
         return v != null && isAttachedToProg(v) && !v.isGlobal();
@@ -428,9 +213,7 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private static boolean isAttachedToProg(Element e) {
         Element cur = e;
         while (cur != null) {
-            if (cur instanceof ImProg) {
-                return true;
-            }
+            if (cur instanceof ImProg) return true;
             cur = cur.getParent();
         }
         return false;
@@ -441,40 +224,6 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
      * over the strongly connected components of the control flow graph.
      */
     public Map<ImStmt, Set<ImVar>> calculateLiveness(ImFunction func) {
-        return calculateLivenessDetailed(func).livenessInfo;
-    }
-
-    private static final class LivenessResult {
-        final Map<ImStmt, Set<ImVar>> livenessInfo;
-        final Map<ImVar, BitSet> occupancyByVar;
-        final int nodeCount;
-        final int sccCount;
-        final int maxSccSize;
-        final long totalSccIterations;
-        final long maxSccIterations;
-        final boolean abortedSccIterations;
-
-        private LivenessResult(
-                Map<ImStmt, Set<ImVar>> livenessInfo,
-                Map<ImVar, BitSet> occupancyByVar,
-                int nodeCount,
-                int sccCount,
-                int maxSccSize,
-                long totalSccIterations,
-                long maxSccIterations,
-                boolean abortedSccIterations) {
-            this.livenessInfo = livenessInfo;
-            this.occupancyByVar = occupancyByVar;
-            this.nodeCount = nodeCount;
-            this.sccCount = sccCount;
-            this.maxSccSize = maxSccSize;
-            this.totalSccIterations = totalSccIterations;
-            this.maxSccIterations = maxSccIterations;
-            this.abortedSccIterations = abortedSccIterations;
-        }
-    }
-
-    private LivenessResult calculateLivenessDetailed(ImFunction func) {
         // 1. Build Control Flow Graph
         ControlFlowGraph cfg = new ControlFlowGraph(func.getBody());
         final List<Node> nodes = cfg.getNodes();
@@ -483,75 +232,37 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
         // Map nodes to indices for quick array access
         final Object2IntOpenHashMap<Node> idx = new Object2IntOpenHashMap<>(N);
         idx.defaultReturnValue(-1);
-        for (int i = 0; i < N; i++) {
-            idx.put(nodes.get(i), i);
-        }
+        for (int i = 0; i < N; i++) idx.put(nodes.get(i), i);
 
-        // 2. Calculate USE and DEF bitsets for each node
-        final Object2IntOpenHashMap<ImVar> varToId = new Object2IntOpenHashMap<>();
-        varToId.defaultReturnValue(-1);
-        final ArrayList<ImVar> idToVar = new ArrayList<>();
-        final BitSet[] use = new BitSet[N];
-        final BitSet[] def = new BitSet[N];
+        // 2. Calculate USE and DEF sets for each node
+        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] use = new ObjectOpenHashSet[N];
+        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] def = new ObjectOpenHashSet[N];
 
         for (int i = 0; i < N; i++) {
             Node node = nodes.get(i);
-            use[i] = new BitSet();
-            def[i] = new BitSet();
+            use[i] = new ObjectOpenHashSet<>();
+            def[i] = new ObjectOpenHashSet<>();
 
             ImStmt stmt = node.getStmt();
-            if (stmt == null) {
-                continue;
-            }
+            if (stmt == null) continue;
 
             final int ii = i;
             stmt.accept(new ImStmt.DefaultVisitor() {
-                @Override
-                public void visit(ImVarAccess va) {
+                @Override public void visit(ImVarAccess va) {
                     super.visit(va);
                     ImVar v = va.getVar();
-                    if (isTrackableLocal(v)) {
-                        use[ii].set(varId(v, varToId, idToVar));
-                    }
+                    if (isTrackableLocal(v)) use[ii].add(v);
                 }
-
-                @Override
-                public void visit(ImSet set) {
+                @Override public void visit(ImSet set) {
                     set.getRight().accept(this);
                     Element.DefaultVisitor me = this;
                     set.getLeft().match(new ImLExpr.MatcherVoid() {
-                        @Override
-                        public void case_ImTupleSelection(ImTupleSelection e) {
-                            ((ImLExpr) e.getTupleExpr()).match(this);
-                        }
-
-                        @Override
-                        public void case_ImVarAccess(ImVarAccess e) {
-                        }
-
-                        @Override
-                        public void case_ImVarArrayAccess(ImVarArrayAccess e) {
-                            e.getIndexes().accept(me);
-                        }
-
-                        @Override
-                        public void case_ImMemberAccess(ImMemberAccess e) {
-                            e.getReceiver().accept(me);
-                            e.getIndexes().accept(me);
-                        }
-
-                        @Override
-                        public void case_ImStatementExpr(ImStatementExpr e) {
-                            e.getStatements().accept(me);
-                            ((ImLExpr) e.getExpr()).match(this);
-                        }
-
-                        @Override
-                        public void case_ImTupleExpr(ImTupleExpr e) {
-                            for (ImExpr ex : e.getExprs()) {
-                                ((ImLExpr) ex).match(this);
-                            }
-                        }
+                        @Override public void case_ImTupleSelection(ImTupleSelection e) { ((ImLExpr) e.getTupleExpr()).match(this); }
+                        @Override public void case_ImVarAccess(ImVarAccess e) {}
+                        @Override public void case_ImVarArrayAccess(ImVarArrayAccess e) { e.getIndexes().accept(me); }
+                        @Override public void case_ImMemberAccess(ImMemberAccess e) { e.getReceiver().accept(me); e.getIndexes().accept(me); }
+                        @Override public void case_ImStatementExpr(ImStatementExpr e) { e.getStatements().accept(me); ((ImLExpr) e.getExpr()).match(this); }
+                        @Override public void case_ImTupleExpr(ImTupleExpr e) { for (ImExpr ex : e.getExprs()) ((ImLExpr) ex).match(this); }
                     });
                 }
             });
@@ -560,197 +271,78 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
                 ImSet set = (ImSet) stmt;
                 if (set.getLeft() instanceof ImVarAccess) {
                     ImVar v = ((ImVarAccess) set.getLeft()).getVar();
-                    if (isTrackableLocal(v)) {
-                        def[i].set(varId(v, varToId, idToVar));
-                    }
+                    if (isTrackableLocal(v)) def[i].add(v);
                 }
             }
         }
-        final int varCount = idToVar.size();
 
         // 3. Find SCCs on the REVERSED graph for backward analysis
         GraphInterpreter<Node> reverseCfgInterpreter = new GraphInterpreter<>() {
             @Override
             protected Collection<Node> getIncidentNodes(Node t) {
+                // For backward analysis, we traverse predecessors
                 return t.getPredecessors();
             }
         };
-
+        // Use the path-based strong component algorithm on the reversed CFG.
+        // It returns SCCs in reverse topological order of the graph it is given.
         List<List<Node>> sccs = reverseCfgInterpreter.findStronglyConnectedComponents(nodes);
+        // For a backward analysis, we need to process SCCs in reverse topological order of the original CFG.
+        // The algorithm on the reversed graph gives a topological sort of the original graph's SCCs.
+        // Therefore, we reverse the list to get the required processing order.
         Collections.reverse(sccs);
 
-        int maxSccSize = 0;
-        for (List<Node> scc : sccs) {
-            if (scc.size() > maxSccSize) {
-                maxSccSize = scc.size();
-            }
-        }
-
-        boolean hasCycles = false;
-        for (List<Node> scc : sccs) {
-            if (scc.size() > 1) {
-                hasCycles = true;
-                break;
-            }
-            if (scc.size() == 1) {
-                Node n = scc.get(0);
-                if (n.getSuccessors().contains(n)) {
-                    hasCycles = true;
-                    break;
-                }
-            }
-        }
-
-        // 4. Initialize IN and OUT sets
-        final BitSet[] in = new BitSet[N];
-        final BitSet[] out = new BitSet[N];
-        for (int i = 0; i < N; i++) {
-            in[i] = new BitSet(varCount);
-            out[i] = new BitSet(varCount);
-        }
+        // 4. Initialize IN and OUT sets for the data-flow analysis
+        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] in  = new ObjectOpenHashSet[N];
+        @SuppressWarnings("unchecked") final ObjectOpenHashSet<ImVar>[] out = new ObjectOpenHashSet[N];
+        for (int i = 0; i < N; i++) { in[i] = new ObjectOpenHashSet<>(); out[i] = new ObjectOpenHashSet<>(); }
 
         // 5. Iterate over SCCs in reverse topological order
-        long totalSccIterations = 0;
-        long maxSccIterations = 0;
-        boolean abortedSccIterations = false;
-        final BitSet tmpOut = new BitSet(varCount);
-        final BitSet tmpIn = new BitSet(varCount);
-
         for (List<Node> scc : sccs) {
-            if (scc.isEmpty()) {
-                continue;
-            }
+            if (scc.isEmpty()) continue;
 
-            if (!hasCycles) {
-                for (Node uNode : scc) {
-                    int u = idx.getInt(uNode);
-                    computeOutIn(uNode, u, idx, in, out, use, def, tmpOut, tmpIn);
-                }
-                totalSccIterations += 1;
-                if (maxSccIterations < 1) {
-                    maxSccIterations = 1;
-                }
-                continue;
-            }
+            // Iterate within this SCC until a fixed point is reached for all its nodes.
+            boolean changedInScc = true;
+            while (changedInScc) {
+                changedInScc = false;
+                for (Node u_node : scc) {
+                    int u_idx = idx.getInt(u_node);
 
-            int sccIterations = 0;
-            java.util.Set<Node> sccSet = new java.util.HashSet<>(scc);
-            java.util.ArrayDeque<Node> worklist = new java.util.ArrayDeque<>(scc);
-            java.util.HashSet<Node> enqueued = new java.util.HashSet<>(scc);
-
-            while (!worklist.isEmpty()) {
-                Node uNode = worklist.pollFirst();
-                enqueued.remove(uNode);
-                sccIterations++;
-                if (sccIterations > MAX_SCC_ITER) {
-                    abortedSccIterations = true;
-                    de.peeeq.wurstscript.WLogger
-                            .warning("[LocalMerger] aborting SCC worklist for function '" + func.getName()
-                                    + "' after iterations=" + sccIterations + " sccSize=" + scc.size() + " nodes=" + N);
-                    break;
-                }
-                int u = idx.getInt(uNode);
-                boolean changed = computeOutIn(uNode, u, idx, in, out, use, def, tmpOut, tmpIn);
-                if (changed) {
-                    for (Node pred : uNode.getPredecessors()) {
-                        if (sccSet.contains(pred) && enqueued.add(pred)) {
-                            worklist.addLast(pred);
+                    // Recalculate OUT[u] from the IN sets of its successors.
+                    // Any successor not in the current SCC has already been processed and its IN set is stable.
+                    final ObjectOpenHashSet<ImVar> newOut = new ObjectOpenHashSet<>();
+                    for (Node succ : u_node.getSuccessors()) {
+                        int v_idx = idx.getInt(succ);
+                        if (v_idx != -1) {
+                            newOut.addAll(in[v_idx]);
                         }
+                    }
+                    out[u_idx] = newOut;
+
+                    // Recalculate IN[u] using the data-flow equation: in[u] = use[u] U (out[u] - def[u])
+                    final ObjectOpenHashSet<ImVar> oldIn = in[u_idx];
+                    final ObjectOpenHashSet<ImVar> newIn = new ObjectOpenHashSet<>();
+                    newIn.addAll(newOut);
+                    newIn.removeAll(def[u_idx]);
+                    newIn.addAll(use[u_idx]);
+
+                    // If IN[u] changed, update it and flag that we need another iteration for this SCC.
+                    if (!newIn.equals(oldIn)) {
+                        in[u_idx] = newIn;
+                        changedInScc = true;
                     }
                 }
             }
-
-            totalSccIterations += sccIterations;
-            if (sccIterations > maxSccIterations) {
-                maxSccIterations = sccIterations;
-            }
         }
 
-        // 6. Collect results:
-        // - livenessInfo uses OUT sets per statement (used by dead-code elimination)
-        // - occupancyByVar uses both IN and OUT live points (used by local merging)
+        // 6. Collect results into the final map format
         final java.util.LinkedHashMap<ImStmt, Set<ImVar>> result = new java.util.LinkedHashMap<>();
-        final java.util.LinkedHashMap<ImVar, BitSet> occupancyByVar = new java.util.LinkedHashMap<>();
-
-        int stmtPos = 0;
         for (int i = 0; i < N; i++) {
             ImStmt stmt = nodes.get(i).getStmt();
-            if (stmt == null) {
-                continue;
-            }
-
-            ObjectOpenHashSet<ImVar> liveOut = new ObjectOpenHashSet<>();
-            for (int bit = out[i].nextSetBit(0); bit >= 0; bit = out[i].nextSetBit(bit + 1)) {
-                ImVar v = idToVar.get(bit);
-                liveOut.add(v);
-                occupancyByVar.computeIfAbsent(v, __ -> new BitSet()).set(stmtPos * 2 + 1);
-            }
-
-            for (int bit = in[i].nextSetBit(0); bit >= 0; bit = in[i].nextSetBit(bit + 1)) {
-                ImVar v = idToVar.get(bit);
-                occupancyByVar.computeIfAbsent(v, __ -> new BitSet()).set(stmtPos * 2);
-            }
-
-            result.put(stmt, HashSet.ofAll(liveOut));
-            stmtPos++;
-        }
-
-        return new LivenessResult(
-                result,
-                occupancyByVar,
-                N,
-                sccs.size(),
-                maxSccSize,
-                totalSccIterations,
-                maxSccIterations,
-                abortedSccIterations);
-    }
-
-    private static int varId(ImVar v, Object2IntOpenHashMap<ImVar> varToId, ArrayList<ImVar> idToVar) {
-        int id = varToId.getInt(v);
-        if (id >= 0) {
-            return id;
-        }
-        int newId = idToVar.size();
-        varToId.put(v, newId);
-        idToVar.add(v);
-        return newId;
-    }
-
-    private static boolean computeOutIn(
-            Node uNode,
-            int u,
-            Object2IntOpenHashMap<Node> idx,
-            BitSet[] in,
-            BitSet[] out,
-            BitSet[] use,
-            BitSet[] def,
-            BitSet tmpOut,
-            BitSet tmpIn) {
-        tmpOut.clear();
-        for (Node succ : uNode.getSuccessors()) {
-            int v = idx.getInt(succ);
-            if (v != -1) {
-                tmpOut.or(in[v]);
+            if (stmt != null) {
+                result.put(stmt, io.vavr.collection.HashSet.ofAll(out[i]));
             }
         }
-
-        boolean changed = false;
-        if (!out[u].equals(tmpOut)) {
-            out[u].clear();
-            out[u].or(tmpOut);
-            changed = true;
-        }
-
-        tmpIn.clear();
-        tmpIn.or(tmpOut);
-        tmpIn.andNot(def[u]);
-        tmpIn.or(use[u]);
-        if (!in[u].equals(tmpIn)) {
-            in[u].clear();
-            in[u].or(tmpIn);
-            changed = true;
-        }
-        return changed;
+        return result;
     }
 }
