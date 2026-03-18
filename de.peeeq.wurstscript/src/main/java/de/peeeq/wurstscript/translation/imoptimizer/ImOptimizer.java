@@ -208,6 +208,10 @@ public class ImOptimizer {
         }
         try {
             PassRunResult result = timeTaker.measure(passName, () -> runLocalPass(pass, activeLocalFunctions));
+            if (result.count > 0) {
+                // Mutating passes can invalidate cached read/write attributes.
+                trans.getImProg().clearAttributes();
+            }
             long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
             if (pass instanceof LocalOptimizerPass) {
                 logLocalOpt("round=" + round + " END pass='" + passName + "' count=" + result.count

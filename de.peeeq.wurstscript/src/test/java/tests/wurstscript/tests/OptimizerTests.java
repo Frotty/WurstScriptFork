@@ -10,6 +10,7 @@ import de.peeeq.wurstscript.ast.WurstModel;
 import de.peeeq.wurstscript.intermediatelang.optimizer.FunctionSplitter;
 import de.peeeq.wurstscript.intermediatelang.optimizer.LocalMerger;
 import de.peeeq.wurstscript.intermediatelang.optimizer.SideEffectAnalyzer;
+import de.peeeq.wurstscript.intermediatelang.optimizer.SimpleRewrites;
 import de.peeeq.wurstscript.jassIm.*;
 import de.peeeq.wurstscript.translation.imoptimizer.ImOptimizer;
 import de.peeeq.wurstscript.translation.imtranslation.ImTranslator;
@@ -2029,6 +2030,61 @@ public class OptimizerTests extends WurstScriptTest {
     }
 
     @Test
+    public void simpleRewrites_setThenCall_worksAfterAttributeCacheRefresh() {
+        WurstModel model = Ast.WurstModel();
+        ImTranslator tr = new ImTranslator(model, false, new RunArgs());
+        ImProg prog = tr.getImProg();
+        Element trace = Ast.NoExpr();
+
+        ImVar p = JassIm.ImVar(trace, TypesHelper.imInt(), "p", false);
+        ImVar p2 = JassIm.ImVar(trace, TypesHelper.imInt(), "p2", false);
+        ImFunction foo = JassIm.ImFunction(
+            trace, "foo", JassIm.ImTypeVars(), JassIm.ImVars(p), JassIm.ImVoid(),
+            JassIm.ImVars(), JassIm.ImStmts(), Collections.emptyList());
+        ImFunction bar = JassIm.ImFunction(
+            trace, "bar", JassIm.ImTypeVars(), JassIm.ImVars(p2), JassIm.ImVoid(),
+            JassIm.ImVars(), JassIm.ImStmts(), Collections.emptyList());
+        prog.getFunctions().add(foo);
+        prog.getFunctions().add(bar);
+
+        ImVar v = JassIm.ImVar(trace, TypesHelper.imInt(), "v", false);
+        ImSet setV = JassIm.ImSet(trace, JassIm.ImVarAccess(v), JassIm.ImIntVal(7));
+        ImFunctionCall callFoo = JassIm.ImFunctionCall(
+            trace, foo, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImVarAccess(v)),
+            false, de.peeeq.wurstscript.translation.imtranslation.CallType.NORMAL);
+        ImFunction f = JassIm.ImFunction(
+            trace, "f", JassIm.ImTypeVars(), JassIm.ImVars(), JassIm.ImVoid(),
+            JassIm.ImVars(v), JassIm.ImStmts(setV, callFoo), Collections.emptyList());
+        prog.getFunctions().add(f);
+
+        // Cache attrReads while there is only one read of v.
+        assertEquals(v.attrReads().size(), 1);
+
+        // Mutate AST afterwards: now v is read twice.
+        f.getBody().add(JassIm.ImFunctionCall(
+            trace, bar, JassIm.ImTypeArguments(), JassIm.ImExprs(JassIm.ImVarAccess(v)),
+            false, de.peeeq.wurstscript.translation.imtranslation.CallType.NORMAL));
+        // Optimizer refresh path invalidates synthesized caches after mutations.
+        prog.clearAttributes();
+        assertEquals(2, v.attrReads().size());
+
+        SimpleRewrites sr = new SimpleRewrites();
+        sr.beginRound(tr);
+        try {
+            sr.optimizeFunction(f, tr);
+        } finally {
+            sr.endRound(tr);
+        }
+
+        boolean hasSetToV = f.getBody().stream().anyMatch(s ->
+            s instanceof ImSet
+                && ((ImSet) s).getLeft() instanceof ImVarAccess
+                && ((ImVarAccess) ((ImSet) s).getLeft()).getVar() == v);
+        assertTrue(hasSetToV,
+            "set v = 7 must not be removed when v has more than one read");
+    }
+
+    @Test
     public void repeatedIfNotOnUnchangedLocalBool_isMerged() throws IOException {
         test().lines(
             "package test",
@@ -2239,6 +2295,75 @@ public class OptimizerTests extends WurstScriptTest {
             "arr should not be live-out of x=arr[0]");
     }
 
+    @Test
+    public void localMergerKeepsAssignmentLiveWhenUsedInNextCallArg() {
+        WurstModel model = Ast.WurstModel();
+        ImTranslator tr = new ImTranslator(model, false, new RunArgs());
+        ImProg prog = tr.getImProg();
+        Element trace = Ast.NoExpr();
+
+        ImFunction allocFn = JassIm.ImFunction(
+            trace,
+            "allocFn",
+            JassIm.ImTypeVars(),
+            JassIm.ImVars(),
+            TypesHelper.imInt(),
+            JassIm.ImVars(),
+            JassIm.ImStmts(),
+            Collections.emptyList());
+        prog.getFunctions().add(allocFn);
+
+        ImVar useParam = JassIm.ImVar(trace, TypesHelper.imInt(), "x", false);
+        ImFunction useFn = JassIm.ImFunction(
+            trace,
+            "useFn",
+            JassIm.ImTypeVars(),
+            JassIm.ImVars(useParam),
+            JassIm.ImVoid(),
+            JassIm.ImVars(),
+            JassIm.ImStmts(),
+            Collections.emptyList());
+        prog.getFunctions().add(useFn);
+
+        ImVar x = JassIm.ImVar(trace, TypesHelper.imInt(), "xLocal", false);
+        ImSet stmt1 = JassIm.ImSet(
+            trace,
+            JassIm.ImVarAccess(x),
+            JassIm.ImFunctionCall(
+                trace,
+                allocFn,
+                JassIm.ImTypeArguments(),
+                JassIm.ImExprs(),
+                false,
+                de.peeeq.wurstscript.translation.imtranslation.CallType.NORMAL));
+        ImFunctionCall stmt2 = JassIm.ImFunctionCall(
+            trace,
+            useFn,
+            JassIm.ImTypeArguments(),
+            JassIm.ImExprs(JassIm.ImVarAccess(x)),
+            false,
+            de.peeeq.wurstscript.translation.imtranslation.CallType.NORMAL);
+
+        ImFunction func = JassIm.ImFunction(
+            trace,
+            "f",
+            JassIm.ImTypeVars(),
+            JassIm.ImVars(),
+            JassIm.ImVoid(),
+            JassIm.ImVars(x),
+            JassIm.ImStmts(stmt1, stmt2),
+            Collections.emptyList());
+        prog.getFunctions().add(func);
+
+        Map<ImStmt, Set<ImVar>> liveness = new LocalMerger().calculateLiveness(func);
+        assertTrue(liveness.get(stmt1).contains(x),
+            "xLocal must be live-out of set xLocal=allocFn() because next statement uses it as call argument");
+
+        new LocalMerger().optimizeFunction(func, tr);
+        assertTrue(func.getBody().contains(stmt1),
+            "LocalMerger must not drop set xLocal=allocFn() when xLocal is used in the next call");
+    }
+
     /**
      * Two local arrays whose live ranges overlap must not be merged.
      * Before the fix, missing USE tracking gave both arrays zero occupancy,
@@ -2353,5 +2478,5 @@ public class OptimizerTests extends WurstScriptTest {
         }
         return count;
     }
-}
 
+}
