@@ -1260,7 +1260,6 @@ public class ImTranslator {
     }
 
 
-
     public void calculateCallRelationsAndUsedVariables() {
         calculateCallRelationsAndVariables(true);
     }
