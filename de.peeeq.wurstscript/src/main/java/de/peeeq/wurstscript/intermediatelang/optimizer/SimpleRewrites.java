@@ -33,6 +33,10 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
     public static boolean hideEvents = false;
     public static boolean removeWurstErrors = false;
     private int totalRewrites = 0;
+
+    private static final boolean ENABLE_CONSECUTIVE_IF = Boolean.parseBoolean(System.getProperty("wurst.simpleRewrites.consecutiveIf", "true"));
+    private static final boolean ENABLE_CONSECUTIVE_SET = Boolean.parseBoolean(System.getProperty("wurst.simpleRewrites.consecutiveSet", "true"));
+    private static final boolean ENABLE_SET_THEN_CALL = Boolean.parseBoolean(System.getProperty("wurst.simpleRewrites.setThenCall", "true"));
     private boolean showRewrites = false;
     private ImProg prog;
     private ImFunction stringHashFunc;
@@ -226,15 +230,15 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
                         if (stmts.get(i) instanceof ImExitwhen && lookback instanceof ImExitwhen) {
                             optimizeConsecutiveExitWhen((ImExitwhen) lookback, (ImExitwhen) stmts.get(i));
                         }
-                        if (stmts.get(i) instanceof ImSet && lookback instanceof ImSet) {
+                        if (ENABLE_CONSECUTIVE_SET && stmts.get(i) instanceof ImSet && lookback instanceof ImSet) {
                             optimizeConsecutiveSet((ImSet) lookback, (ImSet) stmts.get(i));
                         }
-                        if (stmts.get(i) instanceof ImIf && lookback instanceof ImIf) {
+                        if (ENABLE_CONSECUTIVE_IF && stmts.get(i) instanceof ImIf && lookback instanceof ImIf) {
                             optimizeConsecutiveIf((ImIf) lookback, (ImIf) stmts.get(i));
                         }
                     }
                 }
-                if (stmts.get(i) instanceof ImFunctionCall) {
+                if (ENABLE_SET_THEN_CALL && stmts.get(i) instanceof ImFunctionCall) {
                     optimizePrecedingSetChainForCall(stmts, i, (ImFunctionCall) stmts.get(i));
                 }
             }

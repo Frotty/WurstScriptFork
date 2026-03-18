@@ -20,6 +20,8 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private static final boolean PROFILE = Boolean.parseBoolean(System.getProperty("wurst.localmerger.profile", "true"));
     private static final long SLOW_FUNC_MS = Long.getLong("wurst.localmerger.slowFuncMs", 1000L);
     private static final int MAX_SCC_ITER = Integer.getInteger("wurst.localmerger.maxSccIter", 1_000_000);
+    /** Set -Dwurst.localmerger.useInterferenceGraph=true to use the upstream interference-graph coloring instead of BitSet interval coloring. */
+    private static final boolean USE_INTERFERENCE_GRAPH = Boolean.parseBoolean(System.getProperty("wurst.localmerger.useInterferenceGraph", "false"));
 
     @Override
     public int optimize(ImTranslator trans) {
@@ -67,6 +69,10 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private boolean canMerge(ImType a, ImType b) { return a.equalsType(b); }
 
     private void mergeLocals(Map<ImStmt, Set<ImVar>> livenessInfo, ImFunction func) {
+        if (USE_INTERFERENCE_GRAPH) {
+            mergeLocalsInterferenceGraph(livenessInfo, func);
+            return;
+        }
         Map<ImVar, BitSet> liveByVar = buildLiveByVar(livenessInfo);
         List<ImVar> params = new ArrayList<>(func.getParameters());
         if (func.hasFlag(de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG) && !params.isEmpty()) {
@@ -129,6 +135,56 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
         applyMerges(func, merges);
         int removed = removeUnusedLocals(func);
         totalLocalsMerged += removed;
+    }
+
+    /** Upstream interference-graph based coloring (used when USE_INTERFERENCE_GRAPH=true). */
+    private void mergeLocalsInterferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo, ImFunction func) {
+        Map<ImVar, Set<ImVar>> interference = calculateInterferenceGraph(livenessInfo);
+
+        PriorityQueue<ImVar> queue = new PriorityQueue<>(
+            (x, y) -> interference.get(y).size() - interference.get(x).size()
+        );
+        queue.addAll(interference.keySet());
+
+        List<ImVar> params = new ArrayList<>(func.getParameters());
+        if (func.hasFlag(de.peeeq.wurstscript.translation.imtranslation.FunctionFlagEnum.IS_VARARG) && !params.isEmpty()) {
+            params.remove(params.size() - 1);
+        }
+        queue.removeAll(func.getParameters());
+
+        List<ImVar> colors = new ArrayList<>(params);
+        Map<ImVar, ImVar> merges = new LinkedHashMap<>();
+
+        while (!queue.isEmpty()) {
+            ImVar v = queue.poll();
+            boolean merged = false;
+            for (ImVar color : colors) {
+                if (!canMerge(color.getType(), v.getType())) continue;
+                boolean conflict = false;
+                for (ImVar neigh : interference.get(v)) {
+                    if (merges.getOrDefault(neigh, neigh) == color) { conflict = true; break; }
+                }
+                if (!conflict) { merges.put(v, color); merged = true; break; }
+            }
+            if (!merged) colors.add(v);
+        }
+
+        applyMerges(func, merges);
+        int removed = removeUnusedLocals(func);
+        totalLocalsMerged += removed;
+    }
+
+    private Map<ImVar, Set<ImVar>> calculateInterferenceGraph(Map<ImStmt, Set<ImVar>> livenessInfo) {
+        Map<ImVar, Set<ImVar>> g = new LinkedHashMap<>();
+        for (Map.Entry<ImStmt, Set<ImVar>> e : livenessInfo.entrySet()) {
+            Set<ImVar> live = e.getValue();
+            for (ImVar v1 : live) {
+                Set<ImVar> set = g.getOrDefault(v1, HashSet.empty());
+                set = set.addAll(live.filter(v2 -> canMerge(v1.getType(), v2.getType())));
+                g.put(v1, set);
+            }
+        }
+        return g;
     }
 
     private static void applyMerges(ImFunction func, Map<ImVar, ImVar> merges) {
