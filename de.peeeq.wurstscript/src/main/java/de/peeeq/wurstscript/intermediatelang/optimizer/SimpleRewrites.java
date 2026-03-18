@@ -34,9 +34,9 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
     public static boolean removeWurstErrors = false;
     private int totalRewrites = 0;
 
-    private static final boolean ENABLE_CONSECUTIVE_IF = Boolean.parseBoolean(System.getProperty("wurst.simpleRewrites.consecutiveIf", "true"));
-    private static final boolean ENABLE_CONSECUTIVE_SET = Boolean.parseBoolean(System.getProperty("wurst.simpleRewrites.consecutiveSet", "true"));
-    private static final boolean ENABLE_SET_THEN_CALL = Boolean.parseBoolean(System.getProperty("wurst.simpleRewrites.setThenCall", "true"));
+    public static boolean ENABLE_CONSECUTIVE_IF = true;
+    public static boolean ENABLE_CONSECUTIVE_SET = true;
+    public static boolean ENABLE_SET_THEN_CALL = true;
     private boolean showRewrites = false;
     private ImProg prog;
     private ImFunction stringHashFunc;

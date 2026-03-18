@@ -30,14 +30,12 @@ public class ImOptimizer {
     private static final ArrayList<OptimizerPass> localPasses = new ArrayList<>();
     private static final ArrayList<OptimizerPass> preInlinePasses = new ArrayList<>();
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
-    private static final boolean RUN_LOCALMERGER_AFTER_INLINING =
-        Boolean.parseBoolean(System.getProperty("wurst.localmerger.afterInlining", "true"));
-    private static final boolean RUN_PREINLINE_LOCAL_OPTS =
-        Boolean.parseBoolean(System.getProperty("wurst.preInlineLocalOpts", "true"));
-    private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 0L);
-    private static final int STRICT_INLINE_MAX_SIZE = Integer.getInteger("wurst.strictInline.maxSize", 8);
-    private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "false"));
-    private static final boolean ALLOW_MULTI_RETURN_INLINING = Boolean.parseBoolean(System.getProperty("wurst.inline.multiReturn", "true"));
+    public static boolean RUN_LOCALMERGER_AFTER_INLINING = true;
+    public static boolean RUN_PREINLINE_LOCAL_OPTS = true;
+    public static long LOCAL_PASS_HEARTBEAT_MS = 0L;
+    public static int STRICT_INLINE_MAX_SIZE = 8;
+    public static boolean STRICT_INLINE_PROFILE = false;
+    public static boolean ALLOW_MULTI_RETURN_INLINING = true;
 
     private static void logLocalOpt(String msg) {
         // Keep detailed pass-level logging disabled by default.
@@ -53,9 +51,7 @@ public class ImOptimizer {
         preInlinePasses.add(new BranchMerger());
 
         localPasses.add(new SimpleRewrites());
-        if (RUN_LOCALMERGER_AFTER_INLINING) {
-            localPasses.add(new LocalMerger());
-        }
+        localPasses.add(new LocalMerger()); // conditionally skipped at runtime via RUN_LOCALMERGER_AFTER_INLINING
         localPasses.add(new BranchMerger());
         localPasses.add(new ConstantAndCopyPropagation());
         localPasses.add(new UselessFunctionCallsRemover());
@@ -233,6 +229,9 @@ public class ImOptimizer {
     }
 
     private PassRunResult runLocalPass(OptimizerPass pass, Set<ImFunction> activeLocalFunctions) {
+        if (pass instanceof LocalMerger && !RUN_LOCALMERGER_AFTER_INLINING) {
+            return new PassRunResult(0, Collections.emptySet(), 0, false);
+        }
         if (!(pass instanceof LocalOptimizerPass)) {
             int count = pass.optimize(trans);
             return new PassRunResult(count, Collections.emptySet(), 0, count > 0);

@@ -20,8 +20,8 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
     private static final boolean PROFILE = Boolean.parseBoolean(System.getProperty("wurst.localmerger.profile", "true"));
     private static final long SLOW_FUNC_MS = Long.getLong("wurst.localmerger.slowFuncMs", 1000L);
     private static final int MAX_SCC_ITER = Integer.getInteger("wurst.localmerger.maxSccIter", 1_000_000);
-    /** Set -Dwurst.localmerger.useInterferenceGraph=true to use the upstream interference-graph coloring instead of BitSet interval coloring. */
-    private static final boolean USE_INTERFERENCE_GRAPH = Boolean.parseBoolean(System.getProperty("wurst.localmerger.useInterferenceGraph", "false"));
+    /** Set to true to use upstream interference-graph coloring instead of BitSet interval coloring. */
+    public static boolean USE_INTERFERENCE_GRAPH = false;
 
     @Override
     public int optimize(ImTranslator trans) {
