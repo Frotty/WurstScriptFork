@@ -37,6 +37,7 @@ public class ImOptimizer {
     private static final long LOCAL_PASS_HEARTBEAT_MS = Long.getLong("wurst.localopt.heartbeat.ms", 0L);
     private static final int STRICT_INLINE_MAX_SIZE = Integer.getInteger("wurst.strictInline.maxSize", 8);
     private static final boolean STRICT_INLINE_PROFILE = Boolean.parseBoolean(System.getProperty("wurst.strictInline.profile", "false"));
+    private static final boolean ALLOW_MULTI_RETURN_INLINING = Boolean.parseBoolean(System.getProperty("wurst.inline.multiReturn", "true"));
 
     private static void logLocalOpt(String msg) {
         // Keep detailed pass-level logging disabled by default.
@@ -97,6 +98,7 @@ public class ImOptimizer {
         GlobalsInliner globalsInliner = new GlobalsInliner();
         globalsInliner.optimize(trans);
         ImInliner inliner = new ImInliner(trans);
+        inliner.setAllowMultiReturnInlining(ALLOW_MULTI_RETURN_INLINING);
         inliner.doInlining();
         trans.assertProperties();
         // remove garbage, because inlined functions can be removed
