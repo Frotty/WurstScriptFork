@@ -1027,8 +1027,13 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
             return;
         }
 
+        ImFunction f = nearestFunction(callStmt);
+        int attrReads = targetVar.attrReads().size();
+        int freshReads = countVarReadsInFunction(f, targetVar);
+        int readsForDecision = freshReads >= 0 ? freshReads : attrReads;
+
         // Only fold when this local is read exactly once in total.
-        if (targetVar.attrReads().size() != 1) {
+        if (readsForDecision != 1) {
             return;
         }
 
@@ -1041,6 +1046,34 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
         callStmt.getArguments().get(matchIndex).replaceBy(replacement);
         setStmt.replaceBy(ImHelper.nullExpr());
         totalRewrites++;
+    }
+
+    private static int countVarReadsInFunction(ImFunction f, ImVar var) {
+        if (f == null || var == null) {
+            return -1;
+        }
+        final int[] reads = {0};
+        f.accept(new ImFunction.DefaultVisitor() {
+            @Override
+            public void visit(ImVarAccess va) {
+                super.visit(va);
+                if (va.getVar() == var) {
+                    reads[0]++;
+                }
+            }
+        });
+        return reads[0];
+    }
+
+    private static ImFunction nearestFunction(Element e) {
+        Element cur = e;
+        while (cur != null) {
+            if (cur instanceof ImFunction) {
+                return (ImFunction) cur;
+            }
+            cur = cur.getParent();
+        }
+        return null;
     }
 
     private static boolean isAttachedToProg(Element e) {
@@ -1196,5 +1229,4 @@ public class SimpleRewrites implements OptimizerPass, LocalOptimizerPass {
     }
 
 }
-
 
