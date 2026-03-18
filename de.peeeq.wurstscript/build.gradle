@@ -240,8 +240,12 @@ tasks.named('compileJava') { it.dependsOn('gen') }
 test {
     useTestNG()
 
+    // Fork a new JVM for each test class so stdlib-heavy tests don't accumulate
+    // heap from previous classes and cause spurious OutOfMemoryError failures.
+    forkEvery = 1
+
     jvmArgs(
-            '-Xmx2g',                         // local: give it room to finish and dump
+            '-Xmx2g',
             '-XX:MaxMetaspaceSize=256m',
             '-XX:+HeapDumpOnOutOfMemoryError',
     )

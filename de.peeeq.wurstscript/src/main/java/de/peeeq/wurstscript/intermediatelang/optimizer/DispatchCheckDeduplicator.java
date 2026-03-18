@@ -203,10 +203,15 @@ public class DispatchCheckDeduplicator implements OptimizerPass, LocalOptimizerP
     }
 
     private boolean mayWriteTypeIdUsingAnalysis(ImFunction f, ImVar typeIdVar) {
-        Set<ImFunction> reachable = new HashSet<>();
-        reachable.add(f);
-        reachable.addAll(sideEffectAnalyzer.calledFunctions(f.getBody()));
-        for (ImFunction g : reachable) {
+        // Full transitive closure via worklist to catch indirect writes through call chains.
+        Set<ImFunction> visited = new HashSet<>();
+        java.util.ArrayDeque<ImFunction> worklist = new java.util.ArrayDeque<>();
+        worklist.add(f);
+        while (!worklist.isEmpty()) {
+            ImFunction g = worklist.poll();
+            if (!visited.add(g)) {
+                continue;
+            }
             if (g == null) {
                 return true;
             }
@@ -221,6 +226,11 @@ public class DispatchCheckDeduplicator implements OptimizerPass, LocalOptimizerP
             }
             if (sideEffectAnalyzer.directlySetVariables(g.getBody()).contains(typeIdVar)) {
                 return true;
+            }
+            for (ImFunction callee : sideEffectAnalyzer.calledFunctions(g.getBody())) {
+                if (!visited.contains(callee)) {
+                    worklist.add(callee);
+                }
             }
         }
         return false;

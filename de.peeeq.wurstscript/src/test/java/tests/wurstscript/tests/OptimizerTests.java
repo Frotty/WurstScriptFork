@@ -2063,6 +2063,143 @@ public class OptimizerTests extends WurstScriptTest {
             "Expected second branch call to remain.");
     }
 
+    /**
+     * Regression test for the double-globals-removal bug:
+     * removeGarbage() previously called both removeIf (which respected TO_KEEP) and
+     * retainAll (which did NOT respect TO_KEEP), so a global in TO_KEEP that was not
+     * referenced by any Wurst code would be removed by retainAll despite being protected.
+     *
+     * In jass-only / w3protect scenarios this matters because the game engine may read
+     * globals that Wurst code never reads internally.
+     */
+    @Test
+    public void removeGarbagePreservesToKeepGlobalNotReadByCode() {
+        de.peeeq.wurstscript.ast.Element trace = de.peeeq.wurstscript.ast.Ast.NoExpr();
+        de.peeeq.wurstscript.translation.imtranslation.ImTranslator translator =
+            new de.peeeq.wurstscript.translation.imtranslation.ImTranslator(
+                de.peeeq.wurstscript.ast.Ast.WurstModel(), true, new de.peeeq.wurstscript.RunArgs());
+        ImProg prog = translator.getImProg();
+
+        // Create a global that is never read by any function but is in TO_KEEP
+        ImVar protectedGlobal = JassIm.ImVar(trace,
+            de.peeeq.wurstscript.types.TypesHelper.imInt(), "wurst_protected_global", false);
+        prog.getGlobals().add(protectedGlobal);
+
+        // Create an unprotected global that IS never read — should be removed
+        ImVar unprotectedGlobal = JassIm.ImVar(trace,
+            de.peeeq.wurstscript.types.TypesHelper.imInt(), "dead_global", false);
+        prog.getGlobals().add(unprotectedGlobal);
+
+        // Add a main function so calculateCallRelations has an entry point
+        ImFunction mainFunc = JassIm.ImFunction(trace, "main",
+            JassIm.ImTypeVars(), JassIm.ImVars(), JassIm.ImVoid(),
+            JassIm.ImVars(), JassIm.ImStmts(), java.util.Collections.emptyList());
+        prog.getFunctions().add(mainFunc);
+
+        de.peeeq.wurstscript.validation.TRVEHelper.TO_KEEP.add("wurst_protected_global");
+        try {
+            ImOptimizer optimizer = new ImOptimizer(new de.peeeq.wurstio.TimeTaker.Default(), translator);
+            optimizer.removeGarbage();
+
+            boolean hasProtected = prog.getGlobals().stream()
+                .anyMatch(g -> g.getName().equals("wurst_protected_global"));
+            boolean hasDead = prog.getGlobals().stream()
+                .anyMatch(g -> g.getName().equals("dead_global"));
+
+            assertTrue(hasProtected,
+                "TO_KEEP global must not be removed by removeGarbage even when unreferenced by code");
+            assertFalse(hasDead,
+                "Unreferenced global not in TO_KEEP should be removed by removeGarbage");
+        } finally {
+            de.peeeq.wurstscript.validation.TRVEHelper.TO_KEEP.remove("wurst_protected_global");
+        }
+    }
+
+    /**
+     * Verifies that removeGarbage correctly removes a global that IS read by code
+     * and is also in TO_KEEP — the TO_KEEP protection should not accidentally block
+     * the write-side-effect preservation path (write-only globals are still removed).
+     */
+    @Test
+    public void removeGarbageRemovesUnreadGlobalNotInToKeep() {
+        de.peeeq.wurstscript.ast.Element trace = de.peeeq.wurstscript.ast.Ast.NoExpr();
+        de.peeeq.wurstscript.translation.imtranslation.ImTranslator translator =
+            new de.peeeq.wurstscript.translation.imtranslation.ImTranslator(
+                de.peeeq.wurstscript.ast.Ast.WurstModel(), true, new de.peeeq.wurstscript.RunArgs());
+        ImProg prog = translator.getImProg();
+
+        ImVar deadGlobal = JassIm.ImVar(trace,
+            de.peeeq.wurstscript.types.TypesHelper.imInt(), "completely_dead", false);
+        prog.getGlobals().add(deadGlobal);
+
+        ImFunction mainFunc = JassIm.ImFunction(trace, "main",
+            JassIm.ImTypeVars(), JassIm.ImVars(), JassIm.ImVoid(),
+            JassIm.ImVars(), JassIm.ImStmts(), java.util.Collections.emptyList());
+        prog.getFunctions().add(mainFunc);
+
+        ImOptimizer optimizer = new ImOptimizer(new de.peeeq.wurstio.TimeTaker.Default(), translator);
+        optimizer.removeGarbage();
+
+        boolean hasDead = prog.getGlobals().stream()
+            .anyMatch(g -> g.getName().equals("completely_dead"));
+        assertFalse(hasDead, "Unreferenced global not in TO_KEEP must be removed");
+    }
+
+    /**
+     * CCP bug: if condVar is written inside the first if's branch, the second if
+     * sees a different value for the condition, so propagation must be suppressed.
+     *
+     * Pattern:
+     *   if b then x = 5; b = false endif
+     *   if b then use(x) endif
+     *
+     * x=5 must NOT be propagated into use(x) because b was clobbered inside the first block.
+     */
+    @Test
+    public void ccpDoesNotPropagateWhenCondVarWrittenInFirstBranch() {
+        testAssertOkLines(true,
+            "package test",
+            "native testSuccess()",
+            "native testFail(string s)",
+            "@extern native I2S(int i) returns string",
+            "init",
+            "    var b = true",
+            "    var x = 0",
+            "    if b",
+            "        x = 5",
+            "        b = false",
+            "    if b",
+            "        // b is false here, so this block never runs",
+            "        testFail(I2S(x))",
+            "    else",
+            "        testSuccess()"
+        );
+    }
+
+    /**
+     * LocalMerger bug: ImDealloc on the RHS of a dead assignment must not be
+     * eliminated — deallocation is a side effect (it modifies the allocator state).
+     *
+     * Without the fix, hasSideEffects() returned false for ImDealloc, causing the
+     * assignment to be deleted entirely instead of keeping the dealloc call.
+     */
+    @Test
+    public void localMergerPreservesDeallocSideEffect() {
+        testAssertOkLines(true,
+            "package test",
+            "native testSuccess()",
+            "class Foo",
+            "    int v = 0",
+            "function makeAndFree() returns int",
+            "    let f = new Foo()",
+            "    destroy f",
+            "    return 1",
+            "init",
+            "    if makeAndFree() == 1",
+            "        testSuccess()"
+        );
+    }
+
     private static int countOccurrences(String text, String needle) {
         int count = 0;
         int index = 0;

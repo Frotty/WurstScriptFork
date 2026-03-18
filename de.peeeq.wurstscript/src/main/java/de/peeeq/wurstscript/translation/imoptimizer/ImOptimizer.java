@@ -26,7 +26,7 @@ public class ImOptimizer {
     private int totalFunctionsRemoved = 0;
     private int totalGlobalsRemoved = 0;
 
-    public static int localOptRounds = 1;
+    public static int localOptRounds = 10;
     private static final ArrayList<OptimizerPass> localPasses = new ArrayList<>();
     private static final ArrayList<OptimizerPass> preInlinePasses = new ArrayList<>();
     private static final HashMap<String, Integer> totalCount = new HashMap<>();
@@ -354,11 +354,12 @@ public class ImOptimizer {
             // keep only used variables
             int globalsBefore = prog.getGlobals().size();
 
-            int globalsCount = prog.getGlobals().size();
-            prog.getGlobals().removeIf(g ->
+            // Use removeIf so that TO_KEEP globals are never discarded even when not in readVars.
+            // The old retainAll(readVars) did not check TO_KEEP and could incorrectly remove
+            // externally-visible globals (e.g. game-engine-read vars set by the user script).
+            changes = prog.getGlobals().removeIf(g ->
                 !readVars.contains(g) && !TO_KEEP.contains(g.getName())
             );
-            changes = prog.getGlobals().retainAll(readVars);
             int globalsAfter = prog.getGlobals().size();
             int globalsRemoved = globalsBefore - globalsAfter;
             totalGlobalsRemoved += globalsRemoved;

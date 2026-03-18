@@ -260,6 +260,12 @@ public class ConstantAndCopyPropagation implements OptimizerPass, LocalOptimizer
             return;
         }
 
+        // If either branch of the first if writes condVar, the second if sees a
+        // different value for the condition — propagation is no longer valid.
+        if (writesVar(first.getThenBlock(), condVar) || writesVar(first.getElseBlock(), condVar)) {
+            return;
+        }
+
         for (Tuple2<ImVar, Value> tv : collectConditionalAssignments(first.getThenBlock())) {
             ImVar target = tv._1;
             Value value = tv._2;

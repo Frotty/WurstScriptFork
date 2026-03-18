@@ -93,7 +93,8 @@ public class BranchMerger  implements OptimizerPass, LocalOptimizerPass {
                             int elseLast = ifStmt.getElseBlock().size() - 1;
                             ImStmt lastStmtThen = ifStmt.getThenBlock().get(thenLast);
                             ImStmt lastStmtElse = ifStmt.getElseBlock().get(elseLast);
-                            if (lastStmtThen.structuralEquals(lastStmtElse)) {
+                            if (lastStmtThen.structuralEquals(lastStmtElse)
+                                    && !sideEffectAnalyzer.mightAffect(lastStmtThen, ifStmt.getCondition())) {
                                 ifStmt.getThenBlock().remove(thenLast);
                                 ifStmt.getElseBlock().remove(elseLast);
                                 mergedTail.addFirst(lastStmtThen);

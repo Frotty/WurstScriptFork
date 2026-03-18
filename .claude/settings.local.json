@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew test:*)",
+      "Bash(find c:UsersFrottyDocumentsGitHubWurstScriptForkde.peeeq.wurstscriptbuildreportsteststest -name *.xml)",
+      "Bash(xargs grep:*)",
+      "Bash(find c:UsersFrottyDocumentsGitHubWurstScriptForkde.peeeq.wurstscriptbuildreportsteststestclasses -name *.html)",
+      "Bash(find c:UsersFrottyDocumentsGitHubWurstScriptForkde.peeeq.wurstscriptbuildtest-results -name *.xml)",
+      "Bash(find c:UsersFrottyDocumentsGitHubWurstScriptForkde.peeeq.wurstscriptbuild -name TEST-*.xml)"
+    ]
+  }
+}

@@ -243,6 +243,7 @@ public class LocalMerger implements OptimizerPass, LocalOptimizerPass {
 
     private static boolean hasSideEffects(Element e) {
         if (e instanceof ImFunctionCall || e instanceof ImMethodCall) return true;
+        if (e instanceof ImAlloc || e instanceof ImDealloc) return true;
         for (int i = 0; i < e.size(); i++) if (hasSideEffects(e.get(i))) return true;
         return false;
     }

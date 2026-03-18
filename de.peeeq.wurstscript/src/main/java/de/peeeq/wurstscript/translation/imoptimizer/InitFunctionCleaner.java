@@ -42,10 +42,12 @@ public class InitFunctionCleaner {
                                             ImExpr next = ((ImFunctionCall) arg).getArguments().iterator().next();
                                             if ((next instanceof ImVarAccess) && ((ImVarAccess) next).getVar().structuralEquals(var)) {
                                                 imStmt.replaceBy(ImHelper.nullExpr());
-                                                if (body.get(finalI - 1) instanceof ImFunctionCall) {
+                                                if (finalI - 1 >= 0 && body.get(finalI - 1) instanceof ImFunctionCall) {
                                                     body.get(finalI - 1).replaceBy(ImHelper.nullExpr());
                                                 }
-                                                body.get(finalI + 1).replaceBy(ImHelper.nullExpr());
+                                                if (finalI + 1 < body.size()) {
+                                                    body.get(finalI + 1).replaceBy(ImHelper.nullExpr());
+                                                }
                                             }
                                         }
                                     });

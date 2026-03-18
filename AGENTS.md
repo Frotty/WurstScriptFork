@@ -2,6 +2,10 @@
 
 This document defines how automated coding assistants (“agents”) should interact with this repository.
 
+## 0. Fork Info
+
+This fork has some extra obfuscation/optimization features built in for usage in w3p.
+
 ## 1. Repository Overview
 
 This repository contains the **WurstScript compiler**. Its main code lives in:
